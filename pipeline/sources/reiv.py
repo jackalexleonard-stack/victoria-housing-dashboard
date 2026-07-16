@@ -38,7 +38,7 @@ def fetch_reiv() -> str:
     errors = []
     for url in REIV_URLS:
         try:
-            resp = common.fetch(url, headers={"User-Agent": BROWSER_UA}, timeout=30)
+            resp = common.fetch(url, headers={"User-Agent": BROWSER_UA}, timeout=30, retries=1)
             if resp.status_code == 200 and resp.text:
                 return resp.text
             errors.append(f"{url} -> HTTP {resp.status_code}")

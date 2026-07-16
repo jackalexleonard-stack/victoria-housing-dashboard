@@ -25,6 +25,10 @@ SOURCE_MODULES = [
     "pipeline.sources.udp",
     "pipeline.sources.homes_vic",
     "pipeline.sources.worldbank",
+    "pipeline.sources.cotality",
+    "pipeline.sources.sqm",
+    "pipeline.sources.auctions",
+    "pipeline.sources.reiv",
 ]
 
 log = logging.getLogger("pipeline")

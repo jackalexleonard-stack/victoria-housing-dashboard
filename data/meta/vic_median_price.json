@@ -1,0 +1,9 @@
+{
+  "series_id": "vic_median_price",
+  "source_name": "REIV median house & unit prices",
+  "source_url": "https://reiv.com.au/property-data/median-prices",
+  "frequency": "quarterly",
+  "status": "failed",
+  "last_fetched": "2026-07-16T06:45:28Z",
+  "error": "ValueError: no REIV median-price table found on the page"
+}
