@@ -25,7 +25,7 @@ st.set_page_config(page_title="Victorian Housing Dashboard", page_icon="🏘️"
 
 # Normal cadence (days) per frequency; the badge warns past ~1.5x this gap.
 NORMAL_CADENCE = {
-    "daily": 3, "monthly": 31, "quarterly": 92, "annual": 366, "per_decision": 92,
+    "daily": 3, "weekly": 8, "monthly": 31, "quarterly": 92, "annual": 366, "per_decision": 92,
 }
 
 METRIC_LABELS = {
@@ -65,6 +65,11 @@ METRIC_LABELS = {
     "vhr_register_of_interest": "Register of Interest",
     # Phase 2 — commodities (World Bank)
     "iron_ore": "Iron ore", "copper": "Copper", "sawnwood": "Sawnwood",
+    # Phase 3 — Cotality HVI / vacancy / auctions / medians
+    "hvi_index": "Dwelling values index", "hvi_change_mom": "Monthly change",
+    "hvi_change_yoy": "Annual change", "vacancy_rate": "Vacancy rate",
+    "clearance_rate": "Clearance rate", "auctions_reported": "Auctions reported",
+    "median_house_price": "Median house", "median_unit_price": "Median unit",
 }
 
 
@@ -129,9 +134,19 @@ def badge(series_id: str) -> None:
     if status == "failed":
         dot = "🔴"
         note = f" · last fetch failed: {meta.get('error', '')[:80]}"
+    nxt = _next_release(last_data, freq)
     url = meta.get("source_url", "")
     src = f" · [{meta.get('source_name', 'source')}]({url})" if url else ""
-    st.caption(f"{dot} {data_to} · fetched {_ago(meta.get('last_fetched'))}{note}{src}")
+    st.caption(f"{dot} {data_to} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}")
+
+
+def _next_release(last_data: str | None, freq: str) -> str:
+    """Estimate the next expected update from the last data point + cadence."""
+    if not last_data:
+        return ""
+    cad = NORMAL_CADENCE.get(freq, 31)
+    nxt = pd.Timestamp(last_data) + pd.Timedelta(days=cad)
+    return f" · next update ~{_fmt_period(nxt, freq)}"
 
 
 def relabel(df: pd.DataFrame) -> pd.DataFrame:
@@ -245,23 +260,29 @@ st.caption(
     "each chart shows how current its underlying series is."
 )
 
-h = st.columns(4)
+h = st.columns(5)
 with h[0]:
     v, p, _ = latest_value("au_cash_rate", "cash_rate")
     st.metric("RBA cash rate", f"{v:.2f}%" if v is not None else "—",
               f"{v - p:+.2f} pp" if v is not None and p is not None else None,
               delta_color="inverse")
 with h[1]:
+    # Cotality Home Value Index — Melbourne dwelling values, monthly change.
+    mom, _, _ = latest_value("vic_hvi", "hvi_change_mom", region="melbourne")
+    yoy, _, _ = latest_value("vic_hvi", "hvi_change_yoy", region="melbourne")
+    st.metric("Melb dwelling values (MoM)", f"{mom:+.1f}%" if mom is not None else "—",
+              f"{yoy:+.1f}% yr" if yoy is not None else None)
+with h[2]:
     # ABS Total Value of Dwellings gives a MEAN price; a true median needs REIV /
-    # Cotality (Phase 3). Labelled "mean" so the figure is not misrepresented.
+    # Cotality medians (unavailable free). Labelled "mean" so it isn't misrepresented.
     v, p, _ = latest_value("au_dwelling_stock", "mean_price", region="vic")
     st.metric("Vic mean dwelling price", f"${v/1000:,.0f}k" if v is not None else "—",
               f"{(v/p - 1)*100:+.1f}% qtr" if v and p else None)
-with h[2]:
+with h[3]:
     v, p, _ = latest_value("vic_approvals", "approvals_dwellings_total", region="vic")
     st.metric("Vic dwelling approvals (mth)", f"{v:,.0f}" if v is not None else "—",
               f"{v - p:+,.0f}" if v is not None and p is not None else None)
-with h[3]:
+with h[4]:
     act, _, _ = latest_value("au_accord", "accord_quarterly_actual")
     tgt, _, _ = latest_value("au_accord", "accord_quarterly_target")
     st.metric("Accord run-rate (qtr)", f"{act:,.0f}" if act is not None else "—",
@@ -297,6 +318,28 @@ with tab_vic:
         "Note: dwelling approvals and rents split Metro vs Regional; building "
         "activity, mean price and input costs are Victoria/Melbourne-wide."
     )
+
+    st.subheader(f"Dwelling values, rental vacancy & auctions — {region_label}")
+    c1, c2 = st.columns(2)
+    with c1:
+        if region == "melbourne":
+            line_block("vic_hvi", region="melbourne", metrics=["hvi_index"],
+                       title="Dwelling values index — Melbourne (Cotality)", y_title="index")
+        else:
+            st.markdown("##### Dwelling values index — Melbourne (Cotality)")
+            st.info("Cotality's free daily index covers capital cities only — "
+                    "no Regional Victoria series is published.")
+            badge("vic_hvi")
+        line_block("vic_vacancy", region=region, metrics=["vacancy_rate"],
+                   since="2005-01-01", title=f"Rental vacancy rate — {region_label}",
+                   y_title="%", percent=True)
+    with c2:
+        # Best-effort scrapers — usually unavailable; they degrade to a warning + badge.
+        line_block("vic_auctions", region="melbourne", metrics=["clearance_rate"],
+                   title="Auction clearance rate — Melbourne", y_title="%", percent=True)
+        bar_latest_block("vic_median_price", region=region,
+                         metrics=["median_house_price", "median_unit_price"],
+                         title=f"Median house & unit price — {region_label} (REIV)", x_title="A$")
 
     st.subheader(f"Rents & affordability — {region_label}")
     c1, c2 = st.columns(2)
@@ -353,6 +396,9 @@ with tab_nat:
                    y_title="A$m/qtr")
         line_block("au_dwelling_stock", region="australia", metrics=["mean_price"],
                    since="2011-01-01", title="Mean dwelling price — Australia", y_title="A$")
+        line_block("au_hvi", region="australia", metrics=["hvi_index"],
+                   title="Dwelling values index — 5-capital aggregate (Cotality)",
+                   y_title="index")
     with c2:
         line_block("au_credit",
                    metrics=["credit_housing_yoy", "credit_owner_occupier_yoy",
