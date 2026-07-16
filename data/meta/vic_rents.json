@@ -1,0 +1,11 @@
+{
+  "series_id": "vic_rents",
+  "source_name": "DFFH / Homes Victoria Rental Report",
+  "source_url": "https://www.dffh.vic.gov.au/publications/rental-report",
+  "frequency": "quarterly",
+  "status": "ok",
+  "last_fetched": "2026-07-16T05:51:23Z",
+  "error": null,
+  "last_data_date": "2025-09-30",
+  "last_changed": "2026-07-16T05:25:19Z"
+}

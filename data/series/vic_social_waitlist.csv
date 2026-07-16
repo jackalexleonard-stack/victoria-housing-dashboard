@@ -1,0 +1,16 @@
+date,region,metric,value,unit
+2025-03-31,vic,vhr_priority,30209.0,applications
+2025-06-30,vic,vhr_priority,30899.0,applications
+2025-09-30,vic,vhr_priority,31353.0,applications
+2025-12-31,vic,vhr_priority,31872.0,applications
+2026-03-31,vic,vhr_priority,32591.0,applications
+2025-03-31,vic,vhr_register_of_interest,25344.0,applications
+2025-06-30,vic,vhr_register_of_interest,25335.0,applications
+2025-09-30,vic,vhr_register_of_interest,25179.0,applications
+2025-12-31,vic,vhr_register_of_interest,24548.0,applications
+2026-03-31,vic,vhr_register_of_interest,24781.0,applications
+2025-03-31,vic,vhr_total,55553.0,applications
+2025-06-30,vic,vhr_total,56234.0,applications
+2025-09-30,vic,vhr_total,56532.0,applications
+2025-12-31,vic,vhr_total,56420.0,applications
+2026-03-31,vic,vhr_total,57372.0,applications

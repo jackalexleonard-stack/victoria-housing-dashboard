@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Synthetic Housing Wire</title>
+    <link>https://example-news.test/</link>
+    <description>Synthetic feed for offline tests (no real article text).</description>
+    <item>
+      <title>Melbourne house prices rise 2 per cent in the June quarter</title>
+      <link>https://example-news.test/property/melbourne-house-prices-june?utm_source=rss&amp;utm_medium=feed&amp;id=101#top</link>
+      <guid>https://example-news.test/property/melbourne-house-prices-june</guid>
+      <pubDate>Tue, 14 Jul 2026 09:00:00 +1000</pubDate>
+      <description>Synthetic summary used only for keyword tagging in tests.</description>
+    </item>
+    <item>
+      <title>Rental vacancy tightens as weekly rent climbs across regional Victoria</title>
+      <link>https://example-news.test/property/rental-vacancy-tightens</link>
+      <pubDate>Mon, 13 Jul 2026 07:30:00 +1000</pubDate>
+      <description>Placeholder summary.</description>
+    </item>
+    <item>
+      <title>Construction costs ease as building materials prices stabilise</title>
+      <link>https://example-news.test/build/construction-costs-ease</link>
+      <pubDate>Sat, 11 Jul 2026 12:00:00 +1000</pubDate>
+      <description>Placeholder summary.</description>
+    </item>
+    <item>
+      <title>Premier announces social housing planning reform for growth areas</title>
+      <link>https://example-news.test/policy/social-housing-reform</link>
+      <pubDate>Fri, 10 Jul 2026 18:00:00 +1000</pubDate>
+      <description>Placeholder summary.</description>
+    </item>
+    <item>
+      <title>Local footy grand final draws a record crowd on the weekend</title>
+      <link>https://example-news.test/sport/grand-final</link>
+      <pubDate>Thu, 09 Jul 2026 21:00:00 +1000</pubDate>
+      <description>Not housing related; should be filtered out.</description>
+    </item>
+    <item>
+      <title>Undated note about the Big Housing Build program</title>
+      <link>https://example-news.test/policy/big-housing-build-note</link>
+      <description>Item without a pubDate to exercise the date fallback.</description>
+    </item>
+  </channel>
+</rss>
