@@ -1,0 +1,4 @@
+date,region,metric,value,unit
+2024-12-31,melbourne,greenfield_lot_supply,334019.0,lots
+2024-12-31,melbourne,greenfield_lots_titled,18543.0,lots
+2024-12-31,melbourne,greenfield_years_of_supply,18.0,years

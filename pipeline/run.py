@@ -14,12 +14,17 @@ import logging
 import sys
 
 from pipeline import common
+from pipeline.sources import news
 
 SOURCE_MODULES = [
     "pipeline.sources.abs",
     "pipeline.sources.rba",
     "pipeline.sources.fred",
     "pipeline.sources.accord",
+    "pipeline.sources.dffh",
+    "pipeline.sources.udp",
+    "pipeline.sources.homes_vic",
+    "pipeline.sources.worldbank",
 ]
 
 log = logging.getLogger("pipeline")
@@ -53,14 +58,28 @@ def main() -> int:
             log.error("FAIL %-18s %s", s.id, r.error)
         results.append(r)
 
+    # News layer: not a tidy series, so it runs on its own (still isolated).
+    try:
+        nr = news.run_news()
+        news_ok = nr["status"] == "ok"
+        log.info(
+            "%-4s %-18s feeds=%d/%d items=%d",
+            "OK" if news_ok else "WARN", "news",
+            nr["feeds_ok"], nr["feeds_ok"] + nr["feeds_failed"], nr["items"],
+        )
+    except Exception as exc:  # isolation: news must never stop the series run
+        news_ok = False
+        log.error("FAIL %-18s %s", "news", exc)
+
     ok = [r for r in results if r.status == "ok"]
     failed = [r for r in results if r.status == "failed"]
     changed = [r for r in ok if r.changed]
     log.info(
-        "done: %d ok, %d failed, %d changed", len(ok), len(failed), len(changed)
+        "done: %d ok, %d failed, %d changed; news=%s",
+        len(ok), len(failed), len(changed), "ok" if news_ok else "failed",
     )
 
-    if not ok:
+    if not ok and not news_ok:
         log.error("every source failed — exiting non-zero")
         return 1
     return 0
