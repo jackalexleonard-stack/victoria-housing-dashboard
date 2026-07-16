@@ -10,11 +10,12 @@ repo, and a Streamlit app renders them — no servers, no databases, no paid API
 **Stack:** Python 3.11+ · GitHub Actions (scheduler) · CSVs committed to the repo
 (storage) · Streamlit (front-end).
 
-> **Status: Phase 2 complete** — the API-backed sources (ABS, RBA, FRED) and the
-> derived Housing Accord series (Phase 1), plus the file-based sources (DFFH rents,
-> UDP greenfield land, Homes Victoria waitlist, World Bank commodities) and the
-> tagged, deduped news layer (Phase 2). The scrapers (Cotality, REIV, SQM, auction
-> clearances) and the optional daily news digest arrive in Phase 3.
+> **Status: Phase 3 complete (all phases done).** Phase 1 (ABS/RBA/FRED + Accord),
+> Phase 2 (DFFH rents, UDP land, Homes Victoria waitlist, World Bank commodities +
+> news layer), and Phase 3: the Cotality Home Value Index (`vic_hvi`/`au_hvi`, via
+> the public ASX JSON feed), rental vacancy (`vic_vacancy`), best-effort auction and
+> REIV-median scrapers (usually blocked → failure-isolated + graceful degradation),
+> an optional Claude daily news digest, and a next-release note on every series.
 
 ## The data (16 series + news)
 
@@ -49,6 +50,26 @@ Cotality and the Premier of Victoria via Google News, and two Google News catch-
 Keyword-tagged (prices / rents / supply_construction / policy / construction_costs /
 international), deduped by canonical URL then headline, rolling ~90 days. Only the
 headline, link, date, source and tags are stored — never article text (copyright).
+An optional Claude daily digest (`data/news/digest.md`) is generated from the day's
+headlines when `ANTHROPIC_API_KEY` is set, and degrades silently otherwise.
+
+**Phase 3 — indices & scrapers**
+
+| Series | What | Source · cadence |
+|---|---|---|
+| `vic_hvi` | Melbourne dwelling-values index + monthly/yearly change | Cotality Home Value Index (ASX JSON feed) · daily |
+| `au_hvi` | 5-capital-city aggregate dwelling-values index + change | Cotality HVI (same feed) · daily |
+| `vic_vacancy` | Rental vacancy rate — Metro vs Regional | SQM Research (via the DFFH Rental Report) · monthly |
+| `vic_auctions` | Melbourne weekly auction clearance rate | Cotality/Domain · weekly · **best-effort** (usually blocked) |
+| `vic_median_price` | Median house & unit price — Metro vs Regional | REIV · quarterly · **best-effort** (members-gated) |
+
+The two best-effort scrapers are behind bot-protection / member gates that a
+$0/simple-HTTP pipeline can't reach, so they usually fail — by design: each runs
+failure-isolated and the dashboard renders those series as "no data (source
+unavailable)" with a warning rather than crashing. Their parsers are written and
+tested against the expected page shape, so they capture data if a public figure
+becomes reachable. Every chart also shows a next-expected-update note derived from
+the series' cadence and last data point.
 
 Each source lives in its own module under `pipeline/sources/`, was verified
 against the live source before its parser was written, and has a saved response
@@ -147,6 +168,10 @@ something changed. GitHub emails you if a run fails.
 - **Phase 1** ✅ — API-backed sources (ABS, RBA, FRED) + derived Housing Accord.
 - **Phase 2** ✅ — DFFH rents, UDP greenfield land, Homes Victoria waitlist, World
   Bank commodities, and the housing-news layer (tagged, deduped RSS + News tab).
-- **Phase 3** — Cotality/REIV/SQM/auction scrapers (each failure-isolated), an
-  optional Claude-generated daily news digest (`data/news/digest.md`, shown on the
-  News tab when present), and a next-release calendar note per series.
+- **Phase 3** ✅ — Cotality Home Value Index (`vic_hvi`/`au_hvi`) and rental vacancy
+  (`vic_vacancy`); best-effort auction + REIV-median scrapers (each failure-isolated,
+  degrading gracefully); an optional Claude daily news digest (`data/news/digest.md`,
+  shown on the News tab when present); and a next-release note on every series.
+
+All three phases are complete. Future data would come from paid/members feeds
+(REIV medians, Cotality auction clearances) if those budgets are ever available.

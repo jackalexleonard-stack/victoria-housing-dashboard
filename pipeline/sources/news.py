@@ -19,6 +19,7 @@ are word-boundary matched and housing-anchored so unrelated general-feed items
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -26,12 +27,19 @@ from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
+import requests
 
 from pipeline import common
 
 NEWS_FILE = common.NEWS_DIR / "items.jsonl"
 NEWS_META = common.META_DIR / "news.json"
+DIGEST_FILE = common.NEWS_DIR / "digest.md"
 ROLLING_DAYS = 90
+
+# Optional Claude digest (Phase 3) — only runs when ANTHROPIC_API_KEY is present.
+DIGEST_MODEL = "claude-haiku-4-5-20251001"
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+DIGEST_HEADLINES = 30
 
 
 @dataclass(frozen=True)
@@ -226,6 +234,48 @@ def _write_meta(status: str, feeds_ok: int, feeds_failed: int, n_items: int,
 
 
 # --------------------------------------------------------------------------
+# Optional Claude daily digest (Phase 3) — headlines only, never article text
+# --------------------------------------------------------------------------
+def build_digest_prompt(items: list[dict], *, today: date) -> str:
+    """A prompt built only from headlines/sources/tags (no article text)."""
+    lines = [f"- {it['title']} ({it['source']}; {', '.join(it['tags'])})"
+             for it in items[:DIGEST_HEADLINES]]
+    return (
+        f"You are writing a brief daily digest ({today}) for a Victorian (Melbourne) "
+        "housing dashboard. Using ONLY the headlines below, write 2-3 neutral, factual "
+        "sentences summarising the day's key housing themes for Victoria and Australia. "
+        "Do not invent specifics that are not in the headlines.\n\nHeadlines:\n"
+        + "\n".join(lines)
+    )
+
+
+def maybe_write_digest(items: list[dict], *, today: Optional[date] = None) -> Optional[str]:
+    """Generate data/news/digest.md via Claude iff ANTHROPIC_API_KEY is set.
+    Returns the digest text, or None (silent degrade to tags-only)."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key or not items:
+        return None
+    today = today or date.today()
+    resp = requests.post(
+        ANTHROPIC_URL,
+        headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                 "content-type": "application/json"},
+        json={"model": DIGEST_MODEL, "max_tokens": 320,
+              "messages": [{"role": "user", "content": build_digest_prompt(items, today=today)}]},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    text = "".join(b.get("text", "") for b in resp.json().get("content", [])).strip()
+    if not text:
+        return None
+    common.NEWS_DIR.mkdir(parents=True, exist_ok=True)
+    DIGEST_FILE.write_text(
+        f"_Auto-generated {today} from {len(items)} tagged headlines "
+        f"(no article text stored)._\n\n{text}\n", encoding="utf-8")
+    return text
+
+
+# --------------------------------------------------------------------------
 # Orchestrator entry point (own isolation; one bad feed never blocks the rest)
 # --------------------------------------------------------------------------
 def run_news(*, today: Optional[date] = None) -> dict:
@@ -246,5 +296,14 @@ def run_news(*, today: Optional[date] = None) -> dict:
     write_items(merged)
     latest = merged[0]["published"] if merged else None
     status = "ok" if ok else "failed"
+
+    # Optional Claude digest — isolated; never affects the news run's status.
+    digest = False
+    try:
+        digest = maybe_write_digest(merged, today=today) is not None
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"digest: {type(exc).__name__}")
+
     _write_meta(status, ok, failed, len(merged), latest, "; ".join(errors) or None)
-    return {"status": status, "feeds_ok": ok, "feeds_failed": failed, "items": len(merged)}
+    return {"status": status, "feeds_ok": ok, "feeds_failed": failed,
+            "items": len(merged), "digest": digest}

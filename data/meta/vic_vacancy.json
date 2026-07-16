@@ -1,0 +1,11 @@
+{
+  "series_id": "vic_vacancy",
+  "source_name": "Rental vacancy rate \u2014 SQM Research (via DFFH Rental Report)",
+  "source_url": "https://www.dffh.vic.gov.au/publications/rental-report",
+  "frequency": "monthly",
+  "status": "ok",
+  "last_fetched": "2026-07-16T06:45:09Z",
+  "error": null,
+  "last_data_date": "2025-09-30",
+  "last_changed": "2026-07-16T06:36:49Z"
+}

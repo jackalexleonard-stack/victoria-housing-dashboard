@@ -64,6 +64,26 @@ def test_merge_dedup_across_feeds():
     assert merged == sorted(merged, key=lambda d: d["published"], reverse=True)
 
 
+def test_digest_prompt_is_headlines_only():
+    items = [
+        {"title": "Melbourne house prices fall", "url": "https://x.test/a", "source": "The Age",
+         "published": "2026-07-15", "tags": ["prices"]},
+        {"title": "Rents keep rising", "url": "https://x.test/b", "source": "Cotality",
+         "published": "2026-07-14", "tags": ["rents"]},
+    ]
+    prompt = news.build_digest_prompt(items, today=date(2026, 7, 16))
+    assert "Melbourne house prices fall" in prompt
+    assert "The Age" in prompt and "prices" in prompt
+    # URLs are not needed in the prompt (headlines/source/tags only).
+    assert "https://x.test" not in prompt
+
+
+def test_digest_silent_without_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    items = [{"title": "t", "url": "u", "source": "s", "published": "2026-07-16", "tags": ["prices"]}]
+    assert news.maybe_write_digest(items, today=date(2026, 7, 16)) is None
+
+
 def test_merge_drops_items_older_than_window():
     old = {"title": "Old housing story", "url": "https://x.test/old", "source": "s",
            "published": "2026-01-01", "tags": ["prices"]}
