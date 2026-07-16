@@ -55,3 +55,18 @@ def test_parse_activity_offline():
 
     # quarterly period-end dates only
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
+
+
+def test_parse_input_costs_offline():
+    raw = (FIX / "abs_ppi_house_inputs.csv").read_text(encoding="utf-8")
+    df = absrc.parse_input_costs(raw)
+
+    common.validate_tidy(df)
+    assert set(df.region) == {"melbourne"}
+    assert set(df.metric) == {"input_all_groups", "input_timber", "input_steel", "input_cement"}
+    assert (df.unit == "index").all()
+
+    latest = df[df.date == "2026-03-31"].set_index("metric")["value"]
+    assert latest["input_all_groups"] == 166.6
+    assert latest["input_timber"] == 171.0
+    assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()

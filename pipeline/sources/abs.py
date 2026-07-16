@@ -30,13 +30,16 @@ def abs_csv(flow: str, key: str, *, start: str | None = None) -> str:
     return resp.text
 
 
-def _tidy(df: pd.DataFrame, *, region_col, region_map, metric_col, metric_map, unit) -> pd.DataFrame:
-    """Shared ABS SDMX-CSV -> tidy long transform."""
+def _tidy(df: pd.DataFrame, *, metric_col, metric_map, unit,
+          region_col=None, region_map=None, region_const=None) -> pd.DataFrame:
+    """Shared ABS SDMX-CSV -> tidy long transform. Region comes either from a
+    column (``region_col`` + ``region_map``) or is a constant (``region_const``)."""
     df = df[df["OBS_VALUE"].notna()]
+    region = region_const if region_const is not None else df[region_col].astype(str).map(region_map)
     out = pd.DataFrame(
         {
             "date": df["TIME_PERIOD"].map(common.period_end),
-            "region": df[region_col].astype(str).map(region_map),
+            "region": region,
             "metric": df[metric_col].astype(str).map(metric_map),
             "value": pd.to_numeric(df["OBS_VALUE"]),
             "unit": unit,
@@ -103,6 +106,36 @@ def parse_activity(raw: str) -> pd.DataFrame:
     )
 
 
+# ---------------------------------------------------------------------------
+# vic_input_costs — Producer Price Indexes (PPI), inputs to house construction
+# key order: MEASURE.INDEX.TYPE.FREQ
+# GET .../PPI/1.8102576+8104602+8104643+8104620.INPUT.Q
+#   MEASURE 1 Index Number · INDEX (Melbourne series): 8102576 All groups /
+#   8104602 Timber, board & joinery / 8104643 Steel products / 8104620 Cement
+#   products · TYPE INPUT · Quarterly.  (Region is encoded in the INDEX code.)
+# ---------------------------------------------------------------------------
+_INPUT_KEY = "1.8102576+8104602+8104643+8104620.INPUT.Q"
+_INPUT_METRIC = {
+    "8102576": "input_all_groups",
+    "8104602": "input_timber",
+    "8104643": "input_steel",
+    "8104620": "input_cement",
+}
+
+
+def fetch_input_costs() -> str:
+    return abs_csv("PPI", _INPUT_KEY)
+
+
+def parse_input_costs(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_const="melbourne",
+        metric_col="INDEX", metric_map=_INPUT_METRIC,
+        unit="index",
+    )
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -119,5 +152,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_activity,
         parse=parse_activity,
+    ),
+    common.Series(
+        id="vic_input_costs",
+        source_name="ABS Producer Price Indexes — House construction inputs (PPI)",
+        source_url=f"{ABS_BASE}/PPI/{_INPUT_KEY}",
+        frequency="quarterly",
+        fetch=fetch_input_costs,
+        parse=parse_input_costs,
     ),
 ]
