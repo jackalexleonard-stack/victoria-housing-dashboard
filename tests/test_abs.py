@@ -127,3 +127,23 @@ def test_parse_population_offline():
     # ERP is a large positive level; quarterly period-ends.
     assert (df[df.metric == "population_erp"].value > 1e6).all()
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
+
+
+def test_parse_dwelling_stock_offline():
+    raw = (FIX / "abs_res_dwell_st.csv").read_text(encoding="utf-8")
+    df = absrc.parse_dwelling_stock(raw)
+
+    common.validate_tidy(df)
+    assert set(df.region) == {"vic", "australia"}
+    assert set(df.metric) == {"dwelling_count", "mean_price"}
+    assert set(df.unit) == {"dwellings", "aud"}
+
+    latest = df[df.date == "2026-03-31"].set_index(["region", "metric"])["value"]
+    assert latest[("australia", "dwelling_count")] == 11495200
+    assert latest[("australia", "mean_price")] == 1111100
+    assert latest[("vic", "mean_price")] == 947100
+
+    # units attach per metric; quarterly period-ends
+    assert (df[df.metric == "mean_price"].unit == "aud").all()
+    assert (df[df.metric == "dwelling_count"].unit == "dwellings").all()
+    assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()

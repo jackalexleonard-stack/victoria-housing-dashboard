@@ -216,6 +216,40 @@ def parse_population(raw: str) -> pd.DataFrame:
     return pd.concat([base, growth], ignore_index=True).reset_index(drop=True)
 
 
+# ---------------------------------------------------------------------------
+# au_dwelling_stock — Residential Dwellings: Values, Mean Price and Number by
+# State (RES_DWELL_ST) — the ABS "Total Value of Dwellings" data.
+# key order: MEASURE.REGION.FREQ · GET .../RES_DWELL_ST/4+5.2+AUS.Q
+#   MEASURE 4 Number of residential dwellings / 5 Mean price of residential
+#   dwellings · REGION 2 Victoria + AUS · Quarterly.  Both UNIT_MULT=3; scale
+#   by 10^UNIT_MULT to base units (dwellings / dollars).
+# ---------------------------------------------------------------------------
+_DWELL_KEY = "4+5.2+AUS.Q"
+_DWELL_METRIC = {"4": "dwelling_count", "5": "mean_price"}
+_DWELL_UNIT = {"dwelling_count": "dwellings", "mean_price": "aud"}
+
+
+def fetch_dwelling_stock() -> str:
+    return abs_csv("RES_DWELL_ST", _DWELL_KEY)
+
+
+def parse_dwelling_stock(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[df["OBS_VALUE"].notna()]
+    mult = pd.to_numeric(df["UNIT_MULT"], errors="coerce").fillna(0)
+    metric = df["MEASURE"].astype(str).map(_DWELL_METRIC)
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": df["REGION"].astype(str).map(_REGION_STATE),
+            "metric": metric,
+            "value": (pd.to_numeric(df["OBS_VALUE"]) * (10.0 ** mult)).round(),
+            "unit": metric.map(_DWELL_UNIT),
+        }
+    )
+    return out.dropna(subset=["region", "metric", "unit"]).reset_index(drop=True)
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -256,5 +290,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_population,
         parse=parse_population,
+    ),
+    common.Series(
+        id="au_dwelling_stock",
+        source_name="ABS Total Value of Dwellings (RES_DWELL_ST)",
+        source_url=f"{ABS_BASE}/RES_DWELL_ST/{_DWELL_KEY}",
+        frequency="quarterly",
+        fetch=fetch_dwelling_stock,
+        parse=parse_dwelling_stock,
     ),
 ]
