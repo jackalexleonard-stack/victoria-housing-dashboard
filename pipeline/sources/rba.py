@@ -72,6 +72,30 @@ def parse_cash_rate(raw: str) -> pd.DataFrame:
     return _tidy(raw, {"FIRMMCRT": "cash_rate"}, region="australia", unit="percent")
 
 
+# ---------------------------------------------------------------------------
+# au_mortgage_rates — Housing lending rates (table F6, owner-occupied, monthly)
+# GET https://www.rba.gov.au/statistics/tables/csv/f6-data.csv
+#   Outstanding vs New loans, all-loans (blended) / variable / fixed (<=3yr),
+#   all institutions where available. Series IDs verified live against F6.
+# ---------------------------------------------------------------------------
+_MORTGAGE_IDS = {
+    "FLRHOOTA": "mortgage_outstanding",
+    "FLRHOOVA": "mortgage_outstanding_variable",
+    "FLRHOOFA": "mortgage_outstanding_fixed",
+    "FLRHOFTA": "mortgage_new",
+    "FLRHOFVA": "mortgage_new_variable",
+    "FLRHOFFA": "mortgage_new_fixed",
+}
+
+
+def fetch_mortgage_rates() -> str:
+    return fetch_table("f6")
+
+
+def parse_mortgage_rates(raw: str) -> pd.DataFrame:
+    return _tidy(raw, _MORTGAGE_IDS, region="australia", unit="percent")
+
+
 SERIES = [
     common.Series(
         id="au_cash_rate",
@@ -80,5 +104,13 @@ SERIES = [
         frequency="monthly",
         fetch=fetch_cash_rate,
         parse=parse_cash_rate,
+    ),
+    common.Series(
+        id="au_mortgage_rates",
+        source_name="RBA Housing Lending Rates (F6)",
+        source_url="https://www.rba.gov.au/statistics/tables/csv/f6-data.csv",
+        frequency="monthly",
+        fetch=fetch_mortgage_rates,
+        parse=parse_mortgage_rates,
     ),
 ]
