@@ -1,0 +1,5 @@
+# Normalize line endings: store and check out LF everywhere so data CSVs
+# written by CI (Linux) don't churn against locally written ones (Windows).
+* text=auto eol=lf
+*.csv text eol=lf
+*.json text eol=lf
