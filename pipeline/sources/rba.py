@@ -96,6 +96,30 @@ def parse_mortgage_rates(raw: str) -> pd.DataFrame:
     return _tidy(raw, _MORTGAGE_IDS, region="australia", unit="percent")
 
 
+# ---------------------------------------------------------------------------
+# au_credit — Housing credit growth (table D1, monthly)
+# GET https://www.rba.gov.au/statistics/tables/csv/d1-data.csv
+#   Monthly and 12-month-ended growth for total / owner-occupier / investor
+#   housing credit. Series IDs verified live against D1. Values are per cent.
+# ---------------------------------------------------------------------------
+_CREDIT_IDS = {
+    "DGFACHM": "credit_housing_mom",
+    "DGFACH12": "credit_housing_yoy",
+    "DGFACOHM": "credit_owner_occupier_mom",
+    "DGFACOH12": "credit_owner_occupier_yoy",
+    "DGFACIHM": "credit_investor_mom",
+    "DGFACIH12": "credit_investor_yoy",
+}
+
+
+def fetch_credit() -> str:
+    return fetch_table("d1")
+
+
+def parse_credit(raw: str) -> pd.DataFrame:
+    return _tidy(raw, _CREDIT_IDS, region="australia", unit="percent")
+
+
 SERIES = [
     common.Series(
         id="au_cash_rate",
@@ -112,5 +136,13 @@ SERIES = [
         frequency="monthly",
         fetch=fetch_mortgage_rates,
         parse=parse_mortgage_rates,
+    ),
+    common.Series(
+        id="au_credit",
+        source_name="RBA Growth in Financial Aggregates — Housing credit (D1)",
+        source_url="https://www.rba.gov.au/statistics/tables/csv/d1-data.csv",
+        frequency="monthly",
+        fetch=fetch_credit,
+        parse=parse_credit,
     ),
 ]
