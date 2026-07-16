@@ -171,7 +171,7 @@ def write_series(series_id: str, df: pd.DataFrame) -> bool:
     else:
         old = pd.DataFrame(columns=TIDY_COLUMNS)
 
-    combined = pd.concat([old, df], ignore_index=True)
+    combined = df.copy() if old.empty else pd.concat([old, df], ignore_index=True)
     combined = combined.drop_duplicates(subset=_KEY, keep="last")
     combined = combined.sort_values(["region", "metric", "date"]).reset_index(drop=True)
 

@@ -1,0 +1,11 @@
+{
+  "series_id": "au_accord",
+  "source_name": "Housing Accord progress (derived from ABS Building Activity)",
+  "source_url": "https://data.api.abs.gov.au/rest/data/BUILDING_ACTIVITY/M6+M7+M8.2+AUS.CUR.1.9.100.10.Q",
+  "frequency": "quarterly",
+  "status": "ok",
+  "last_fetched": "2026-07-16T03:46:39Z",
+  "error": null,
+  "last_data_date": "2026-03-31",
+  "last_changed": "2026-07-16T03:46:04Z"
+}

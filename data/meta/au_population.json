@@ -1,0 +1,11 @@
+{
+  "series_id": "au_population",
+  "source_name": "ABS Population & components of change (ERP_COMP_Q)",
+  "source_url": "https://data.api.abs.gov.au/rest/data/ERP_COMP_Q/3+9+10.2+AUS.Q",
+  "frequency": "quarterly",
+  "status": "ok",
+  "last_fetched": "2026-07-16T03:46:34Z",
+  "error": null,
+  "last_data_date": "2025-12-31",
+  "last_changed": "2026-07-16T03:45:59Z"
+}
