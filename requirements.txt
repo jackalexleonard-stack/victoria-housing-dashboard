@@ -1,8 +1,9 @@
-# Victorian Housing Dashboard — pinned dependencies (Phase 1)
+# Victorian Housing Dashboard — pinned dependencies
 # Pipeline
 requests==2.32.3
 pandas==2.2.3
-openpyxl==3.1.5        # read RBA .xlsx statistical tables
+openpyxl==3.1.5        # read RBA / DFFH / World Bank .xlsx tables
+feedparser==6.0.11     # RSS parsing for the news layer (Phase 2)
 # Dashboard
 streamlit==1.40.1
 plotly==5.24.1
