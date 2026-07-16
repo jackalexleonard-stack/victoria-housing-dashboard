@@ -97,3 +97,33 @@ def test_parse_lending_offline():
     assert (add.abs() < 1.0).all()
     fhb = au[["lending_first_home_buyer", "lending_owner_occupier"]].dropna()
     assert (fhb["lending_first_home_buyer"] <= fhb["lending_owner_occupier"]).all()
+
+
+def test_parse_population_offline():
+    raw = (FIX / "abs_erp_comp_q.csv").read_text(encoding="utf-8")
+    df = absrc.parse_population(raw)
+
+    common.validate_tidy(df)
+    assert set(df.region) == {"vic", "australia"}
+    assert set(df.metric) == {
+        "population_erp",
+        "net_overseas_migration",
+        "natural_increase",
+        "population_growth_qtr",
+    }
+    assert (df.unit == "persons").all()
+
+    latest = df[df.date == "2025-12-31"].set_index(["region", "metric"])["value"]
+    assert latest[("australia", "population_erp")] == 27801000
+    assert latest[("australia", "net_overseas_migration")] == 56600
+    assert latest[("vic", "population_erp")] == 7121900
+
+    # National identity: growth == natural increase + NOM (net internal ~0 nationally).
+    assert latest[("australia", "population_growth_qtr")] == (
+        latest[("australia", "natural_increase")]
+        + latest[("australia", "net_overseas_migration")]
+    )
+
+    # ERP is a large positive level; quarterly period-ends.
+    assert (df[df.metric == "population_erp"].value > 1e6).all()
+    assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()

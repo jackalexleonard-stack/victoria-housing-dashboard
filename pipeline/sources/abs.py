@@ -170,6 +170,52 @@ def parse_lending(raw: str) -> pd.DataFrame:
     )
 
 
+# ---------------------------------------------------------------------------
+# au_population — Population & components of change (ERP_COMP_Q), quarterly
+# key order: MEASURE.REGION.FREQ · GET .../ERP_COMP_Q/3+9+10.2+AUS.Q
+#   MEASURE 10 Estimated Resident Population / 9 Net Overseas Migration /
+#   3 Natural Increase · REGION 2 Victoria + AUS.  These three measures are
+#   consistently UNIT_MULT=3 (thousands); we scale by 10^UNIT_MULT to persons.
+#   Quarterly population growth is DERIVED from the ERP level's QoQ change
+#   (the dataflow's own "change over previous quarter" measure has an
+#   inconsistent multiplier, so we compute it ourselves).
+# ---------------------------------------------------------------------------
+_POP_KEY = "3+9+10.2+AUS.Q"
+_POP_METRIC = {
+    "10": "population_erp",
+    "9": "net_overseas_migration",
+    "3": "natural_increase",
+}
+
+
+def fetch_population() -> str:
+    return abs_csv("ERP_COMP_Q", _POP_KEY)
+
+
+def parse_population(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[df["OBS_VALUE"].notna()]
+    mult = pd.to_numeric(df["UNIT_MULT"], errors="coerce").fillna(0)
+    base = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": df["REGION"].astype(str).map(_REGION_STATE),
+            "metric": df["MEASURE"].astype(str).map(_POP_METRIC),
+            "value": (pd.to_numeric(df["OBS_VALUE"]) * (10.0 ** mult)).round(),
+            "unit": "persons",
+        }
+    ).dropna(subset=["region", "metric"])
+
+    # Derive quarter-on-quarter population growth from the ERP level.
+    erp = base[base.metric == "population_erp"].sort_values(["region", "date"])
+    growth = erp.copy()
+    growth["value"] = erp.groupby("region")["value"].diff()
+    growth["metric"] = "population_growth_qtr"
+    growth = growth.dropna(subset=["value"])
+
+    return pd.concat([base, growth], ignore_index=True).reset_index(drop=True)
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -202,5 +248,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_lending,
         parse=parse_lending,
+    ),
+    common.Series(
+        id="au_population",
+        source_name="ABS Population & components of change (ERP_COMP_Q)",
+        source_url=f"{ABS_BASE}/ERP_COMP_Q/{_POP_KEY}",
+        frequency="quarterly",
+        fetch=fetch_population,
+        parse=parse_population,
     ),
 ]
