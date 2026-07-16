@@ -70,3 +70,30 @@ def test_parse_input_costs_offline():
     assert latest["input_all_groups"] == 166.6
     assert latest["input_timber"] == 171.0
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
+
+
+def test_parse_lending_offline():
+    raw = (FIX / "abs_lending_housing.csv").read_text(encoding="utf-8")
+    df = absrc.parse_lending(raw)
+
+    common.validate_tidy(df)
+    assert set(df.region) == {"vic", "australia"}
+    assert set(df.metric) == {
+        "lending_owner_occupier",
+        "lending_investor",
+        "lending_first_home_buyer",
+        "lending_total",
+    }
+    assert (df.unit == "aud_million").all()
+
+    latest = df[df.date == "2026-03-31"].set_index(["region", "metric"])["value"]
+    assert latest[("australia", "lending_owner_occupier")] == 61421.6
+    assert latest[("australia", "lending_total")] == 102959.2
+    assert latest[("vic", "lending_first_home_buyer")] == 5502.5
+
+    # OO + investor == total (national), and FHB is a subset of OO.
+    au = df[df.region == "australia"].pivot_table(index="date", columns="metric", values="value")
+    add = (au["lending_owner_occupier"] + au["lending_investor"] - au["lending_total"]).dropna()
+    assert (add.abs() < 1.0).all()
+    fhb = au[["lending_first_home_buyer", "lending_owner_occupier"]].dropna()
+    assert (fhb["lending_first_home_buyer"] <= fhb["lending_owner_occupier"]).all()

@@ -136,6 +136,40 @@ def parse_input_costs(raw: str) -> pd.DataFrame:
     )
 
 
+# ---------------------------------------------------------------------------
+# au_lending — Lending Indicators, Housing Finance (LEND_HOUSING), quarterly
+# key: MEASURE.DATA_ITEM.LOAN_TYPE.LOAN_PURPOSE.LENDER_TYPE.HOUSING_PURPOSE.TSEST.REGION.FREQ
+# GET .../LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT.DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q
+#   Value of new loan commitments ($m), total fixed-term+revolving, Total lender,
+#   Seasonally Adjusted, Victoria + Australia.  Borrower split is HOUSING_PURPOSE:
+#   OO / Investor / Total sit under LOAN_PURPOSE=TOTDWELL, First-home-buyer under
+#   TOTHOUS — each borrower type has a unique HOUSING_PURPOSE, so we map on that.
+# ---------------------------------------------------------------------------
+_LENDING_KEY = (
+    "FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT."
+    "DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q"
+)
+_LENDING_METRIC = {
+    "DV5167": "lending_owner_occupier",
+    "DV5168": "lending_investor",
+    "DV5167_FHB": "lending_first_home_buyer",
+    "TOT": "lending_total",
+}
+
+
+def fetch_lending() -> str:
+    return abs_csv("LEND_HOUSING", _LENDING_KEY)
+
+
+def parse_lending(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_col="REGION", region_map=_REGION_STATE,
+        metric_col="HOUSING_PURPOSE", metric_map=_LENDING_METRIC,
+        unit="aud_million",
+    )
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -160,5 +194,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_input_costs,
         parse=parse_input_costs,
+    ),
+    common.Series(
+        id="au_lending",
+        source_name="ABS Lending Indicators — Housing Finance (LEND_HOUSING)",
+        source_url=f"{ABS_BASE}/LEND_HOUSING/{_LENDING_KEY}",
+        frequency="quarterly",
+        fetch=fetch_lending,
+        parse=parse_lending,
     ),
 ]
