@@ -10,12 +10,15 @@ repo, and a Streamlit app renders them — no servers, no databases, no paid API
 **Stack:** Python 3.11+ · GitHub Actions (scheduler) · CSVs committed to the repo
 (storage) · Streamlit (front-end).
 
-> **Status: Phase 1 complete** — the API-backed sources (ABS, RBA, FRED) and the
-> derived Housing Accord series, with the live-updating dashboard. Scrapers
-> (Cotality, REIV, SQM), file-based sources (DFFH rents, UDP land, World Bank),
-> and the news layer arrive in Phases 2–3.
+> **Status: Phase 2 complete** — the API-backed sources (ABS, RBA, FRED) and the
+> derived Housing Accord series (Phase 1), plus the file-based sources (DFFH rents,
+> UDP greenfield land, Homes Victoria waitlist, World Bank commodities) and the
+> tagged, deduped news layer (Phase 2). The scrapers (Cotality, REIV, SQM, auction
+> clearances) and the optional daily news digest arrive in Phase 3.
 
-## The data (Phase 1 — 12 series)
+## The data (16 series + news)
+
+**Phase 1 — API-backed**
 
 | Series | What | Source · cadence |
 |---|---|---|
@@ -31,9 +34,30 @@ repo, and a Streamlit app renders them — no servers, no databases, no paid API
 | `intl_fred` | Brent crude, US 10-year Treasury, AUD/USD | FRED API · daily |
 | `au_accord` | Cumulative national completions vs the Housing Accord target | Derived from Building Activity · quarterly |
 
+**Phase 2 — file-based downloads**
+
+| Series | What | Source · cadence |
+|---|---|---|
+| `vic_rents` | Rent-index annual growth, affordable-lettings share, median rents by dwelling type — Metro vs Regional | DFFH / Homes Victoria Rental Report (XLSX) · quarterly |
+| `vic_land` | Greenfield lots titled, remaining lot supply, years of supply — Melbourne growth corridors | UDP greenfield layer on data.vic.gov.au (WFS) · annual |
+| `vic_social_waitlist` | Victorian Housing Register applications — Priority Access / Register of Interest / Total | Homes Victoria (VHR page) · quarterly |
+| `intl_commodities` | Iron ore, copper, sawnwood | World Bank "Pink Sheet" (XLSX) · monthly |
+
+**Phase 2 — news** (`data/news/items.jsonl`): housing-relevant headlines from The
+Age, ABC, Guardian Australia, The Conversation, the RBA, plus The Urban Developer,
+Cotality and the Premier of Victoria via Google News, and two Google News catch-alls.
+Keyword-tagged (prices / rents / supply_construction / policy / construction_costs /
+international), deduped by canonical URL then headline, rolling ~90 days. Only the
+headline, link, date, source and tags are stored — never article text (copyright).
+
 Each source lives in its own module under `pipeline/sources/`, was verified
 against the live source before its parser was written, and has a saved response
 fixture plus an offline parser test.
+
+> **A note on user-agents.** A few Victorian-government sites
+> (`dffh.vic.gov.au`, `homes.vic.gov.au`) block non-browser User-Agents, so those
+> two sources send a standard browser UA. Every source is otherwise polite: one
+> scheduled run per day, `robots.txt` respected, timeouts + modest retries.
 
 ## Repo layout
 
@@ -120,8 +144,9 @@ something changed. GitHub emails you if a run fails.
 
 ## Roadmap
 
-- **Phase 2** — DFFH rents, UDP greenfield land, Homes Victoria waitlist, World
+- **Phase 1** ✅ — API-backed sources (ABS, RBA, FRED) + derived Housing Accord.
+- **Phase 2** ✅ — DFFH rents, UDP greenfield land, Homes Victoria waitlist, World
   Bank commodities, and the housing-news layer (tagged, deduped RSS + News tab).
 - **Phase 3** — Cotality/REIV/SQM/auction scrapers (each failure-isolated), an
-  optional Claude-generated daily news digest, and a next-release calendar note
-  per series.
+  optional Claude-generated daily news digest (`data/news/digest.md`, shown on the
+  News tab when present), and a next-release calendar note per series.
