@@ -33,3 +33,25 @@ def test_parse_approvals_offline():
         - piv["approvals_dwellings_total"]
     ).dropna()
     assert (diff.abs() < 1e-6).all()
+
+
+def test_parse_activity_offline():
+    raw = (FIX / "abs_building_activity.csv").read_text(encoding="utf-8")
+    df = absrc.parse_activity(raw)
+
+    common.validate_tidy(df)
+    assert set(df.region) == {"vic", "australia"}
+    assert set(df.metric) == {
+        "dwellings_commenced",
+        "dwellings_completed",
+        "dwellings_under_construction",
+    }
+    assert (df.unit == "dwellings").all()
+
+    latest = df[df.date == "2026-03-31"].set_index(["region", "metric"])["value"]
+    assert latest[("vic", "dwellings_completed")] == 12214
+    assert latest[("australia", "dwellings_completed")] == 38182
+    assert latest[("vic", "dwellings_under_construction")] == 61356
+
+    # quarterly period-end dates only
+    assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()

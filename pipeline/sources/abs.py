@@ -4,9 +4,6 @@ All dataflow IDs and dimension keys below were discovered and verified live
 against the ABS Data API / Data Explorer (working rule: never invent them).
 Request format is SDMX-CSV (``Accept: application/vnd.sdmx.data+csv``); the
 flow reference omits the version so the API serves the latest.
-
-Dimension order for BA_GCCSA (verified via the datastructure endpoint):
-``MEASURE.VALUE.SECTOR.WORK_TYPE.BUILDING_TYPE.TSEST.REGION.FREQ``
 """
 from __future__ import annotations
 
@@ -18,8 +15,9 @@ from pipeline import common
 
 ABS_BASE = "https://data.api.abs.gov.au/rest/data"
 
-# Shared GCCSA region codes -> tidy region labels.
-_REGION_VIC = {"2": "vic", "2GMEL": "melbourne", "2RVIC": "regional_vic"}
+# Shared region-code -> tidy label maps.
+_REGION_GCCSA_VIC = {"2": "vic", "2GMEL": "melbourne", "2RVIC": "regional_vic"}
+_REGION_STATE = {"2": "vic", "AUS": "australia"}
 
 
 def abs_csv(flow: str, key: str, *, start: str | None = None) -> str:
@@ -32,13 +30,28 @@ def abs_csv(flow: str, key: str, *, start: str | None = None) -> str:
     return resp.text
 
 
+def _tidy(df: pd.DataFrame, *, region_col, region_map, metric_col, metric_map, unit) -> pd.DataFrame:
+    """Shared ABS SDMX-CSV -> tidy long transform."""
+    df = df[df["OBS_VALUE"].notna()]
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": df[region_col].astype(str).map(region_map),
+            "metric": df[metric_col].astype(str).map(metric_map),
+            "value": pd.to_numeric(df["OBS_VALUE"]),
+            "unit": unit,
+        }
+    )
+    return out.dropna(subset=["region", "metric"]).reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
-# vic_approvals — Building Approvals (BA_GCCSA), Number of new dwelling units
-# GET https://data.api.abs.gov.au/rest/data/BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M
-#   MEASURE=1 Number of dwelling units · VALUE=1 Total · SECTOR=9 Total Sectors
-#   WORK_TYPE=1 New · BUILDING_TYPE 110 Houses / 150 Total Other Residential /
-#   100 Total Residential · TSEST=10 Original (only estimate at GCCSA level)
-#   REGION 2 Victoria / 2GMEL Greater Melbourne / 2RVIC Rest of Vic · FREQ=M
+# vic_approvals — Building Approvals (BA_GCCSA), number of new dwelling units
+# key order: MEASURE.VALUE.SECTOR.WORK_TYPE.BUILDING_TYPE.TSEST.REGION.FREQ
+# GET .../BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M
+#   1 Number of dwelling units · 1 Total value-range · 9 Total Sectors ·
+#   WORK_TYPE 1 New · BUILDING_TYPE 110 Houses / 150 Total Other Residential /
+#   100 Total Residential · TSEST 10 Original · REGION Vic/GtrMelb/RestOfVic · M
 # ---------------------------------------------------------------------------
 _APPROVALS_KEY = "1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M"
 _APPROVALS_METRIC = {
@@ -53,18 +66,41 @@ def fetch_approvals() -> str:
 
 
 def parse_approvals(raw: str) -> pd.DataFrame:
-    df = pd.read_csv(io.StringIO(raw))
-    df = df[df["OBS_VALUE"].notna()]
-    out = pd.DataFrame(
-        {
-            "date": df["TIME_PERIOD"].map(common.period_end),
-            "region": df["REGION"].astype(str).map(_REGION_VIC),
-            "metric": df["BUILDING_TYPE"].astype(str).map(_APPROVALS_METRIC),
-            "value": pd.to_numeric(df["OBS_VALUE"]),
-            "unit": "dwellings",
-        }
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_col="REGION", region_map=_REGION_GCCSA_VIC,
+        metric_col="BUILDING_TYPE", metric_map=_APPROVALS_METRIC,
+        unit="dwellings",
     )
-    return out.dropna(subset=["region", "metric"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# vic_activity — Building Activity (BUILDING_ACTIVITY), dwelling unit counts
+# key order: MEASURE.REGION.PRICE_ADJ.BLD_WORK_TYPE.SECTOR_OWN.TYPE_BLDG.TSEST.FREQ
+# GET .../BUILDING_ACTIVITY/M6+M7+M8.2+AUS.CUR.1.9.100.10.Q
+#   M6 commenced / M7 completed / M8 under construction · REGION 2 Vic + AUS
+#   (national completions feed the Housing Accord) · CUR · New · Total Sectors ·
+#   TYPE_BLDG 100 Total Residential · TSEST 10 Original · Quarterly
+# ---------------------------------------------------------------------------
+_ACTIVITY_KEY = "M6+M7+M8.2+AUS.CUR.1.9.100.10.Q"
+_ACTIVITY_METRIC = {
+    "M6": "dwellings_commenced",
+    "M7": "dwellings_completed",
+    "M8": "dwellings_under_construction",
+}
+
+
+def fetch_activity() -> str:
+    return abs_csv("BUILDING_ACTIVITY", _ACTIVITY_KEY)
+
+
+def parse_activity(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_col="REGION", region_map=_REGION_STATE,
+        metric_col="MEASURE", metric_map=_ACTIVITY_METRIC,
+        unit="dwellings",
+    )
 
 
 SERIES = [
@@ -75,5 +111,13 @@ SERIES = [
         frequency="monthly",
         fetch=fetch_approvals,
         parse=parse_approvals,
+    ),
+    common.Series(
+        id="vic_activity",
+        source_name="ABS Building Activity (BUILDING_ACTIVITY)",
+        source_url=f"{ABS_BASE}/BUILDING_ACTIVITY/{_ACTIVITY_KEY}",
+        frequency="quarterly",
+        fetch=fetch_activity,
+        parse=parse_activity,
     ),
 ]
