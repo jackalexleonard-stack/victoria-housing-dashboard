@@ -141,8 +141,13 @@ def relabel(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="",
-               since=None, percent=False) -> None:
-    """Render a titled line chart for a series subset, with a staleness badge."""
+               since=None, percent=False, markers=False) -> None:
+    """Render a titled line chart for a series subset, with a staleness badge.
+
+    ``markers=True`` also draws point markers so a series with only one
+    observation (e.g. a snapshot table that accumulates one point per release)
+    is still visible rather than an empty line.
+    """
     st.markdown(f"##### {title}")
     df = load_series(series_id)
     meta = load_meta(series_id)
@@ -161,7 +166,9 @@ def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="
         badge(series_id)
         return
     df = relabel(df)
-    fig = px.line(df, x="date", y="value", color="series",
+    # Auto-enable markers when any line would have a single point (else it's blank).
+    single_point = df.groupby("series").size().max() < 2
+    fig = px.line(df, x="date", y="value", color="series", markers=markers or single_point,
                   labels={"date": "", "value": y_title, "series": ""})
     fig.update_layout(height=320, margin=dict(l=0, r=0, t=6, b=0),
                       legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
@@ -238,14 +245,15 @@ st.caption(
     "each chart shows how current its underlying series is."
 )
 
-h = st.columns(5)
+h = st.columns(4)
 with h[0]:
     v, p, _ = latest_value("au_cash_rate", "cash_rate")
     st.metric("RBA cash rate", f"{v:.2f}%" if v is not None else "—",
               f"{v - p:+.2f} pp" if v is not None and p is not None else None,
               delta_color="inverse")
 with h[1]:
-    # Phase 1 stand-in for Cotality dwelling-values (arrives Phase 3): ABS Vic mean price.
+    # ABS Total Value of Dwellings gives a MEAN price; a true median needs REIV /
+    # Cotality (Phase 3). Labelled "mean" so the figure is not misrepresented.
     v, p, _ = latest_value("au_dwelling_stock", "mean_price", region="vic")
     st.metric("Vic mean dwelling price", f"${v/1000:,.0f}k" if v is not None else "—",
               f"{(v/p - 1)*100:+.1f}% qtr" if v and p else None)
@@ -258,10 +266,6 @@ with h[3]:
     tgt, _, _ = latest_value("au_accord", "accord_quarterly_target")
     st.metric("Accord run-rate (qtr)", f"{act:,.0f}" if act is not None else "—",
               f"{act - tgt:+,.0f} vs 60k target" if act is not None and tgt is not None else None)
-with h[4]:
-    v, p, _ = latest_value("intl_fred", "brent_crude")
-    st.metric("Brent crude", f"${v:,.1f}" if v is not None else "—",
-              f"{v - p:+.1f}" if v is not None and p is not None else None)
 
 st.divider()
 
