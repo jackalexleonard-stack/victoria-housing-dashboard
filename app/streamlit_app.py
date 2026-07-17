@@ -12,11 +12,17 @@ tagged, deduped News tab backed by data/news/items.jsonl.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+try:  # pytest imports the package; `streamlit run` has app/ on sys.path
+    from app import scoring
+except ImportError:  # pragma: no cover
+    import scoring
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -24,9 +30,8 @@ DATA = ROOT / "data"
 st.set_page_config(page_title="Victorian Housing Dashboard", page_icon="🏘️", layout="wide")
 
 # Normal cadence (days) per frequency; the badge warns past ~1.5x this gap.
-NORMAL_CADENCE = {
-    "daily": 3, "weekly": 8, "monthly": 31, "quarterly": 92, "annual": 366, "per_decision": 92,
-}
+# Single source of truth lives in scoring.py (the stale gate uses it too).
+NORMAL_CADENCE = scoring.NORMAL_CADENCE
 
 METRIC_LABELS = {
     "approvals_dwellings_total": "Total dwellings",
@@ -260,33 +265,24 @@ st.caption(
     "each chart shows how current its underlying series is."
 )
 
-h = st.columns(5)
-with h[0]:
-    v, p, _ = latest_value("au_cash_rate", "cash_rate")
-    st.metric("RBA cash rate", f"{v:.2f}%" if v is not None else "—",
-              f"{v - p:+.2f} pp" if v is not None and p is not None else None,
-              delta_color="inverse")
-with h[1]:
-    # Cotality Home Value Index — Melbourne dwelling values, monthly change.
-    mom, _, _ = latest_value("vic_hvi", "hvi_change_mom", region="melbourne")
-    yoy, _, _ = latest_value("vic_hvi", "hvi_change_yoy", region="melbourne")
-    st.metric("Melb dwelling values (MoM)", f"{mom:+.1f}%" if mom is not None else "—",
-              f"{yoy:+.1f}% yr" if yoy is not None else None)
-with h[2]:
-    # ABS Total Value of Dwellings gives a MEAN price; a true median needs REIV /
-    # Cotality medians (unavailable free). Labelled "mean" so it isn't misrepresented.
-    v, p, _ = latest_value("au_dwelling_stock", "mean_price", region="vic")
-    st.metric("Vic mean dwelling price", f"${v/1000:,.0f}k" if v is not None else "—",
-              f"{(v/p - 1)*100:+.1f}% qtr" if v and p else None)
-with h[3]:
-    v, p, _ = latest_value("vic_approvals", "approvals_dwellings_total", region="vic")
-    st.metric("Vic dwelling approvals (mth)", f"{v:,.0f}" if v is not None else "—",
-              f"{v - p:+,.0f}" if v is not None and p is not None else None)
-with h[4]:
-    act, _, _ = latest_value("au_accord", "accord_quarterly_actual")
-    tgt, _, _ = latest_value("au_accord", "accord_quarterly_target")
-    st.metric("Accord run-rate (qtr)", f"{act:,.0f}" if act is not None else "—",
-              f"{act - tgt:+,.0f} vs 60k target" if act is not None and tgt is not None else None)
+@st.cache_data
+def hero_tiles(today_iso: str) -> list[dict]:
+    """One hero selection per day — reruns within the day are stable; the strip
+    changes only when the data or the date changes."""
+    return scoring.pick_hero(load_series, load_meta, date.fromisoformat(today_iso))
+
+
+def render_hero(tiles: list[dict]) -> None:
+    cols = st.columns(len(tiles))
+    for col, t in zip(cols, tiles):
+        with col:
+            st.metric(t["label"], t["value"], t["delta"],
+                      delta_color=t["delta_color"], help=t["help"])
+    st.caption("Tiles auto-selected daily by trend-change score · "
+               "pinned: RBA cash rate, Melb dwelling values")
+
+
+render_hero(hero_tiles(date.today().isoformat()))
 
 st.divider()
 
