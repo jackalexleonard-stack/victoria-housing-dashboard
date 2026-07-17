@@ -202,7 +202,7 @@ def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="
                       showlegend=df["series"].nunique() > 1)
     if percent:
         fig.update_yaxes(ticksuffix="%")
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-{title}",
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{series_id}-{title}",
                     config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
@@ -245,7 +245,7 @@ def bar_latest_block(series_id, *, metrics=None, region=None, title="", x_title=
                  labels={"value": x_title, "series": ""})
     fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
     fig.update_layout(height=300, showlegend=False, bargap=0.35)
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-bar-{title}",
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{series_id}-bar-{title}",
                     config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
