@@ -25,14 +25,17 @@ import plotly.express as px
 import streamlit as st
 
 try:  # pytest imports the package; `streamlit run` has app/ on sys.path
-    from app import scoring
+    from app import scoring, theme
 except ImportError:  # pragma: no cover
     import scoring
+    import theme
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 
 st.set_page_config(page_title="Victorian Housing Dashboard", page_icon="🏘️", layout="wide")
+theme.register_template()
+st.markdown(theme.CSS, unsafe_allow_html=True)
 
 # Normal cadence (days) per frequency; the badge warns past ~1.5x this gap.
 # Single source of truth lives in scoring.py (the stale gate uses it too).
@@ -195,12 +198,12 @@ def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="
     single_point = df.groupby("series").size().max() < 2
     fig = px.line(df, x="date", y="value", color="series", markers=markers or single_point,
                   labels={"date": "", "value": y_title, "series": ""})
-    fig.update_layout(height=320, margin=dict(l=0, r=0, t=6, b=0),
-                      legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
-                      hovermode="x unified")
+    fig.update_layout(height=320, hovermode="x unified",
+                      showlegend=df["series"].nunique() > 1)
     if percent:
         fig.update_yaxes(ticksuffix="%")
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-{title}")
+    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-{title}",
+                    config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
 
@@ -241,8 +244,9 @@ def bar_latest_block(series_id, *, metrics=None, region=None, title="", x_title=
     fig = px.bar(d, x="value", y="series", orientation="h", text="value",
                  labels={"value": x_title, "series": ""})
     fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
-    fig.update_layout(height=300, margin=dict(l=0, r=0, t=6, b=0))
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-bar-{title}")
+    fig.update_layout(height=300, showlegend=False, bargap=0.35)
+    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-bar-{title}",
+                    config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
 
