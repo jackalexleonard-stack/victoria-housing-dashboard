@@ -1,3 +1,5 @@
+import plotly.io as pio
+
 from app import theme
 from pipeline.sources import news
 
@@ -38,3 +40,27 @@ def test_chip_builds_tinted_pill():
 
 def test_plotly_config_hides_modebar():
     assert theme.PLOTLY_CONFIG == {"displayModeBar": False}
+
+
+def test_register_template_wires_scandi_cream():
+    theme.register_template()
+    assert "scandi_cream" in pio.templates
+    assert pio.templates.default == "simple_white+scandi_cream"
+    lay = pio.templates["scandi_cream"].layout
+    assert list(lay.colorway) == theme.COLORWAY
+    assert lay.paper_bgcolor == "rgba(0,0,0,0)" and lay.plot_bgcolor == "rgba(0,0,0,0)"
+    assert lay.yaxis.gridcolor == "#E6E4D9" and lay.yaxis.showline is False
+    assert lay.xaxis.showgrid is False and lay.xaxis.linecolor == "#1C1B1A"
+    assert lay.font.family == theme.FONT_STACK and lay.font.size == 13
+    assert lay.hoverlabel.bgcolor == "#FFFEFA"
+
+
+def test_css_carries_the_load_bearing_rules():
+    css = theme.CSS
+    assert css.startswith("<style>") and css.endswith("</style>")
+    assert "fonts.googleapis.com/css2?family=Inter" in css
+    assert "Material+Symbols+Rounded" in css
+    assert "'tnum'" in css                                # tabular numerals on KPIs
+    assert "uppercase" in css and "0.06em" in css         # eyebrow metric labels
+    assert "#FFFEFA" in css and "#E6E4D9" in css          # card surface + hairline
+    assert "box-shadow:none" in css.replace(" ", "")
