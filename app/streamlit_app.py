@@ -124,33 +124,41 @@ def _ago(iso_ts: str | None) -> str:
 
 
 def badge(series_id: str) -> None:
-    """Render a staleness badge + source link caption for a series."""
+    """Staleness caption: plain text when fresh; a tint chip when ageing,
+    stale, or failed (spec: encode status with quiet chips, not dots)."""
     meta = load_meta(series_id)
     if not meta:
-        st.caption("⚪ no metadata")
+        st.caption("no metadata")
         return
     freq = meta.get("frequency", "monthly")
     status = meta.get("status", "ok")
     last_data = meta.get("last_data_date")
-    dot, note = "🟢", ""
+    lead, note = "", ""
     if last_data:
         gap = (pd.Timestamp.utcnow().tz_localize(None) - pd.Timestamp(last_data)).days
         cad = NORMAL_CADENCE.get(freq, 31)
-        if gap > 2.5 * cad:
-            dot, note = "🔴", " · stale"
-        elif gap > 1.5 * cad:
-            dot, note = "🟡", " · ageing"
         period = _fmt_period(pd.Timestamp(last_data), freq)
-        data_to = f"Data to {period}"
+        if status == "failed":
+            lead = theme.chip(f"Data to {period} · source unavailable", "bad")
+        elif gap > 2.5 * cad:
+            lead = theme.chip(f"Data to {period} · stale", "bad")
+        elif gap > 1.5 * cad:
+            lead = theme.chip(f"Data to {period} · ageing", "warn")
+        else:
+            lead = f"Data to {period}"
     else:
-        dot, data_to = "⚪", "no data"
-    if status == "failed":
-        dot = "🔴"
-        note = f" · last fetch failed: {meta.get('error', '')[:80]}"
+        lead = theme.chip("no data · source unavailable", "bad") if status == "failed" \
+            else "no data"
+    if status == "failed" and meta.get("error"):
+        note = f" · {meta.get('error', '')[:60]}"
     nxt = _next_release(last_data, freq)
     url = meta.get("source_url", "")
-    src = f" · [{meta.get('source_name', 'source')}]({url})" if url else ""
-    st.caption(f"{dot} {data_to} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}")
+    src = f" · <a href='{url}'>{meta.get('source_name', 'source')}</a>" if url else ""
+    st.markdown(
+        f"<div style='font-size:12px;color:{theme.PALETTE['faint']};margin:-6px 0 4px'>"
+        f"{lead} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _next_release(last_data: str | None, freq: str) -> str:
@@ -272,9 +280,6 @@ WHATS_NEW_DAYS = 7       # window for "What's new in the data"
 WHATS_NEW_MAX = 8        # card cap (2 rows of 4)
 COLD_START_MIN = 10      # >= this many changed series => initial-load mode
 
-TAG_EMOJI = {"prices": "💰", "rents": "🔑", "supply_construction": "🏗️",
-             "policy": "🏛️", "construction_costs": "🧱", "international": "🌏"}
-
 
 def _short_tag(t: str) -> str:
     return t.replace("supply_construction", "supply").replace("_", " ")
@@ -297,11 +302,13 @@ def news_card(item: dict) -> None:
             except TypeError:  # Streamlit API drift fallback
                 st.image(img, use_column_width=True)
         else:
-            tag = (item.get("tags") or ["news"])[0]  # tags stored sorted -> deterministic
+            tag = (item.get("tags") or ["international"])[0]  # sorted -> deterministic
+            icon = theme.TAG_ICON.get(tag, "newspaper")
             st.markdown(
-                "<div style='text-align:center;font-size:44px;line-height:110px;"
-                "height:110px;background:rgba(128,128,128,.08);border-radius:8px'>"
-                f"{TAG_EMOJI.get(tag, '📰')}</div>",
+                "<div style='text-align:center;height:110px;line-height:110px;"
+                f"background:{theme.PALETTE['bg2']};border-radius:8px'>"
+                f"<span class='material-symbols-rounded' style='font-size:44px;"
+                f"line-height:110px'>{icon}</span></div>",
                 unsafe_allow_html=True,
             )
         title = item["title"]
@@ -354,7 +361,7 @@ def whats_new_cards(tile_keys: list[str]) -> None:
 # ---------------------------------------------------------------------------
 # Header + hero strip
 # ---------------------------------------------------------------------------
-st.title("🏘️ Victorian Housing Dashboard")
+st.title(":material/home_work: Victorian Housing Dashboard")
 st.caption(
     "Metro Melbourne vs Regional Victoria housing metrics, national context, and "
     "international leading indicators. Data auto-refreshed daily via GitHub Actions; "
@@ -383,7 +390,8 @@ render_hero(hero_tiles(date.today().isoformat()))
 st.divider()
 
 tab_today, tab_vic, tab_nat, tab_intl, tab_news = st.tabs(
-    ["📌 Today", "🏙️ Victoria", "🇦🇺 National", "🌏 International", "📰 News"]
+    [f":material/{theme.TAB_ICONS[n]}: {n}"
+     for n in ("Today", "Victoria", "National", "International", "News")]
 )
 
 # ---------------------------------------------------------------------------
@@ -396,7 +404,7 @@ with tab_today:
         st.markdown(digest_path.read_text(encoding="utf-8"))
         st.divider()
 
-    st.markdown("#### 📊 What's new in the data")
+    st.markdown("#### What's new in the data")
     new_keys, cold_start = whats_new()
     if not new_keys:
         st.caption("No data updates in the past 7 days. Each chart's badge shows "
@@ -411,7 +419,7 @@ with tab_today:
         if overflow > 0 and not cold_start:
             st.caption(f"+ {overflow} more series updated this week — see their tabs.")
 
-    st.markdown("#### 📰 Top stories")
+    st.markdown("#### Top stories")
     today_items = load_news()
     if not today_items:
         st.info("No news items yet — run `python -m pipeline.run` to populate "
@@ -620,7 +628,7 @@ with tab_news:
         feeds_note = f" · {ok}/{(ok or 0) + (failed or 0)} feeds ok" if ok is not None else ""
         hero_note = f" · {len(hero)} shown above" if hero else ""
         st.caption(
-            f"🟢 {len(filtered)} of {len(items)} items · newest "
+            f"{len(filtered)} of {len(items)} items · newest "
             f"{news_meta.get('last_item_date', '—')} · fetched "
             f"{_ago(news_meta.get('last_fetched'))}{feeds_note}{hero_note} · "
             "headlines link out to the original source (no article text stored)."
