@@ -15,6 +15,13 @@ one housing topic (prices · rents · supply_construction · policy ·
 construction_costs · international); the matched topics become its tags. Keywords
 are word-boundary matched and housing-anchored so unrelated general-feed items
 (e.g. "Foxtel ups prices") are not swept in.
+
+Two optional per-item fields (both key-omitted when absent, so older rows stay
+schema-identical):
+* ``image`` — a thumbnail URL extracted from the feed entry (https-only; the URL
+  string only — image bytes are never downloaded or stored);
+* ``dup_sources`` — sorted list of other outlets whose duplicate of the story was
+  dropped at merge time; cross-outlet coverage feeds the story-importance score.
 """
 from __future__ import annotations
 
@@ -134,6 +141,60 @@ def norm_title(title: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+_IMG_SRC_RE = re.compile(r"""<img[^>]+?src=["']([^"'>]+)["']""", re.I)
+_MAX_IMAGE_URL_LEN = 500
+
+
+def _valid_image_url(url: Optional[str]) -> Optional[str]:
+    """Canonicalise a candidate thumbnail URL; accept https-only, sane length.
+
+    https-only matters because the dashboard is served over https (Streamlit
+    Cloud) — an http image would be blocked as mixed content."""
+    if not url:
+        return None
+    url = canonical_url(url)  # strips tracking params + fragment, lowers host
+    p = urlsplit(url)
+    if p.scheme != "https" or not p.netloc or len(url) > _MAX_IMAGE_URL_LEN:
+        return None
+    return url
+
+
+def _entry_image(entry) -> Optional[str]:
+    """First usable thumbnail URL for a feed entry, in strict priority order.
+
+    String extraction only — no image is ever fetched or stored, just its URL.
+    Priority matches what each feed actually publishes (verified live):
+    media:thumbnail (ABC) -> media:content (Guardian; multi-width, often
+    untyped, widest wins) -> enclosure typed image/* (The Age) -> first
+    <img src> in the entry summary (The Conversation)."""
+    for t in entry.get("media_thumbnail") or []:
+        u = _valid_image_url(t.get("url"))
+        if u:
+            return u
+    candidates = []
+    for c in entry.get("media_content") or []:
+        medium, ctype = c.get("medium", ""), c.get("type", "")
+        if medium == "image" or ctype.startswith("image/") or (not medium and not ctype):
+            u = _valid_image_url(c.get("url"))
+            if u:
+                try:
+                    w = int(c.get("width") or 0)
+                except (TypeError, ValueError):
+                    w = 0
+                candidates.append((-w, len(candidates), u))
+    if candidates:
+        return min(candidates)[2]
+    for enc in entry.get("enclosures") or []:
+        if (enc.get("type") or "").startswith("image/"):
+            u = _valid_image_url(enc.get("href") or enc.get("url"))
+            if u:
+                return u
+    m = _IMG_SRC_RE.search(entry.get("summary") or "")
+    if m:
+        return _valid_image_url(m.group(1))
+    return None
+
+
 def _entry_date(entry) -> Optional[str]:
     for key in ("published_parsed", "updated_parsed"):
         tt = entry.get(key)
@@ -159,13 +220,17 @@ def parse_feed(source: str, raw: bytes, *, today: Optional[date] = None) -> list
         tags = tag_text(f"{title} {e.get('summary', '')}")
         if not tags:
             continue
-        out.append({
+        item = {
             "title": title,
             "url": canonical_url(link),
             "source": source,
             "published": _entry_date(e) or today.strftime("%Y-%m-%d"),
             "tags": tags,
-        })
+        }
+        img = _entry_image(e)
+        if img:
+            item["image"] = img  # key omitted (not null) when absent
+        out.append(item)
     return out
 
 
@@ -174,23 +239,43 @@ def parse_feed(source: str, raw: bytes, *, today: Optional[date] = None) -> list
 # --------------------------------------------------------------------------
 def merge_items(existing: list[dict], fresh: list[dict], *, today: Optional[date] = None) -> list[dict]:
     """Combine, dedupe (canonical URL then normalised title), keep ~90 days, sort
-    newest first."""
+    newest first.
+
+    A dropped duplicate is not wasted: it donates its ``image`` to the kept item
+    (if the kept item has none), and its ``source`` — when different — is recorded
+    in the kept item's sorted ``dup_sources`` list. Cross-outlet coverage is an
+    importance signal the dashboard's story ranking uses; the capture is
+    idempotent across daily runs (re-seeing the same duplicate adds nothing)."""
     today = today or date.today()
     cutoff = (today - timedelta(days=ROLLING_DAYS)).strftime("%Y-%m-%d")
 
     merged: list[dict] = []
-    seen_urls: set[str] = set()
-    seen_titles: set[str] = set()
+    by_url: dict[str, int] = {}
+    by_title: dict[str, int] = {}
     # Existing first so previously-stored items win ties (stable history).
     for item in existing + fresh:
-        url = item.get("url", "")
-        nt = norm_title(item.get("title", ""))
-        if url in seen_urls or nt in seen_titles:
-            continue
         if item.get("published", "") < cutoff:
             continue
-        seen_urls.add(url)
-        seen_titles.add(nt)
+        url = item.get("url", "")
+        nt = norm_title(item.get("title", ""))
+        idx = by_url.get(url)
+        if idx is None:
+            idx = by_title.get(nt)
+        if idx is not None:
+            kept = merged[idx]
+            if not kept.get("image") and item.get("image"):
+                kept["image"] = item["image"]  # enrich, never overwrite
+            src = item.get("source", "")
+            if src and src != kept.get("source"):
+                dups = kept.setdefault("dup_sources", [])
+                if src not in dups:
+                    dups.append(src)
+                    dups.sort()
+            continue
+        item = dict(item)  # never mutate the caller's objects...
+        if "dup_sources" in item:
+            item["dup_sources"] = list(item["dup_sources"])  # ...nor their lists
+        by_url[url] = by_title[nt] = len(merged)
         merged.append(item)
     merged.sort(key=lambda d: d.get("published", ""), reverse=True)
     return merged

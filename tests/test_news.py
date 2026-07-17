@@ -5,7 +5,8 @@ from pipeline.sources import news
 
 FIX = Path(__file__).parent / "fixtures"
 TODAY = date(2026, 7, 16)
-ALLOWED_KEYS = {"title", "url", "source", "published", "tags"}
+BASE_KEYS = {"title", "url", "source", "published", "tags"}
+OPTIONAL_KEYS = {"image"}  # parse_feed output; merge may also add dup_sources
 
 
 def test_tag_text_is_housing_anchored():
@@ -30,18 +31,30 @@ def test_parse_rss_offline():
     items = news.parse_feed("Synthetic RSS", (FIX / "news_rss_sample.xml").read_bytes(), today=TODAY)
     # 6 items in feed; the non-housing "grand final" one is filtered out.
     assert len(items) == 5
-    assert all(set(it) == ALLOWED_KEYS for it in items)           # no article text stored
+    # No article text stored — only the base keys plus an optional image URL.
+    assert all(BASE_KEYS <= set(it) <= BASE_KEYS | OPTIONAL_KEYS for it in items)
     assert all(it["tags"] for it in items)                        # every kept item is tagged
     assert not any("grand final" in it["title"].lower() for it in items)
 
-    by_title = {it["title"]: it for it in items}
     prices = next(it for it in items if it["tags"] == ["prices"])
     assert "utm" not in prices["url"] and "#" not in prices["url"]
     assert prices["url"].endswith("melbourne-house-prices-june?id=101")
+    # Image via enclosure; its utm tracking param is stripped too.
+    assert prices["image"] == "https://img.example-news.test/prices.jpg"
+
+    rents = next(it for it in items if "vacancy tightens" in it["title"])
+    assert rents["image"] == "https://img.example-news.test/rents-thumb.jpg"  # media:thumbnail
+
+    costs = next(it for it in items if "Construction costs" in it["title"])
+    assert costs["image"].endswith("costs-460.jpg")               # widest media:content wins
+
+    policy = next(it for it in items if "Premier announces" in it["title"])
+    assert "image" not in policy                                  # http:// image rejected
 
     undated = next(it for it in items if "Undated" in it["title"])
     assert undated["published"] == "2026-07-16"                   # date fallback -> today
     assert undated["tags"] == ["policy"]
+    assert "image" not in undated
 
 
 def test_parse_atom_offline():
@@ -50,6 +63,9 @@ def test_parse_atom_offline():
     tags = {it["title"][:20]: it["tags"] for it in items}
     assert any("international" in t for t in tags.values())
     assert any("supply_construction" in t for t in tags.values())
+
+    supply = next(it for it in items if "Housing supply lags" in it["title"])
+    assert supply["image"] == "https://images.example-atom.test/supply.png"  # <img> in summary
 
 
 def test_merge_dedup_across_feeds():
@@ -93,3 +109,55 @@ def test_merge_drops_items_older_than_window():
     urls = {it["url"] for it in merged}
     assert "https://x.test/new" in urls
     assert "https://x.test/old" not in urls
+
+
+def _item(title, url, source, image=None, **extra):
+    it = {"title": title, "url": url, "source": source,
+          "published": "2026-07-14", "tags": ["prices"], **extra}
+    if image:
+        it["image"] = image
+    return it
+
+
+def test_merge_backfills_image_from_duplicate():
+    existing = [_item("Melbourne house prices fall", "https://x.test/a", "Google News")]
+    fresh = [_item("Melbourne house prices fall - The Age", "https://x.test/b", "The Age",
+                   image="https://img.x.test/a.jpg")]
+    merged = news.merge_items(existing, fresh, today=TODAY)
+    assert len(merged) == 1
+    assert merged[0]["url"] == "https://x.test/a"              # existing item still wins
+    assert merged[0]["image"] == "https://img.x.test/a.jpg"    # image donated by the dup
+
+
+def test_merge_never_overwrites_existing_image():
+    existing = [_item("Story", "https://x.test/a", "s", image="https://img.x.test/keep.jpg")]
+    fresh = [_item("Story", "https://x.test/a", "s2", image="https://img.x.test/other.jpg")]
+    merged = news.merge_items(existing, fresh, today=TODAY)
+    assert merged[0]["image"] == "https://img.x.test/keep.jpg"
+
+
+def test_merge_records_cross_source_duplicates():
+    existing = [_item("Rates on hold", "https://x.test/a", "Google News")]
+    fresh = [_item("Rates on hold - The Age", "https://x.test/b", "The Age"),
+             _item("Rates on hold", "https://x.test/c", "ABC News")]
+    merged = news.merge_items(existing, fresh, today=TODAY)
+    assert len(merged) == 1
+    assert merged[0]["dup_sources"] == ["ABC News", "The Age"]  # sorted, distinct
+
+
+def test_merge_same_source_duplicate_not_recorded():
+    a = _item("Rates on hold", "https://x.test/a", "The Age")
+    b = _item("Rates on hold", "https://x.test/b", "The Age")   # same outlet, two feeds
+    merged = news.merge_items([a], [b], today=TODAY)
+    assert "dup_sources" not in merged[0]
+
+
+def test_merge_dup_capture_is_idempotent_and_extends():
+    kept = _item("Rates on hold", "https://x.test/a", "Google News",
+                 dup_sources=["The Age"])
+    again = _item("Rates on hold - The Age", "https://x.test/b", "The Age")
+    guardian = _item("Rates on hold", "https://x.test/d", "Guardian Australia")
+    merged = news.merge_items([kept], [again, guardian], today=TODAY)
+    assert merged[0]["dup_sources"] == ["Guardian Australia", "The Age"]
+    # Callers' objects are never mutated.
+    assert kept["dup_sources"] == ["The Age"]

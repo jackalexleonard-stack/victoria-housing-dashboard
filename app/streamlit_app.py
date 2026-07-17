@@ -8,15 +8,26 @@ series degrades to its last good data with a warning rather than crashing.
 Phase 2 adds the rents/affordability, greenfield-land and social-housing-waitlist
 charts to the Victoria tab, World Bank commodities to the International tab, and a
 tagged, deduped News tab backed by data/news/items.jsonl.
+
+The "Today" landing tab leads with what's new: series whose data changed in the
+last week (headline-metric cards) and the day's top stories (importance-scored,
+with thumbnails). The hero strip above the tabs rotates daily — two pinned tiles
+plus the three metrics with the most notable recent trend changes (app/scoring.py).
 """
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+try:  # pytest imports the package; `streamlit run` has app/ on sys.path
+    from app import scoring
+except ImportError:  # pragma: no cover
+    import scoring
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -24,9 +35,8 @@ DATA = ROOT / "data"
 st.set_page_config(page_title="Victorian Housing Dashboard", page_icon="🏘️", layout="wide")
 
 # Normal cadence (days) per frequency; the badge warns past ~1.5x this gap.
-NORMAL_CADENCE = {
-    "daily": 3, "weekly": 8, "monthly": 31, "quarterly": 92, "annual": 366, "per_decision": 92,
-}
+# Single source of truth lives in scoring.py (the stale gate uses it too).
+NORMAL_CADENCE = scoring.NORMAL_CADENCE
 
 METRIC_LABELS = {
     "approvals_dwellings_total": "Total dwellings",
@@ -251,6 +261,93 @@ def load_news() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# News cards (Top stories) + What's-new cards
+# ---------------------------------------------------------------------------
+TOP_STORIES_N = 4        # featured stories on Today and atop the News tab
+WHATS_NEW_DAYS = 7       # window for "What's new in the data"
+WHATS_NEW_MAX = 8        # card cap (2 rows of 4)
+COLD_START_MIN = 10      # >= this many changed series => initial-load mode
+
+TAG_EMOJI = {"prices": "💰", "rents": "🔑", "supply_construction": "🏗️",
+             "policy": "🏛️", "construction_costs": "🧱", "international": "🌏"}
+
+
+def _short_tag(t: str) -> str:
+    return t.replace("supply_construction", "supply").replace("_", " ")
+
+
+@st.cache_data
+def top_news(today_iso: str, n: int) -> list[dict]:
+    """Score-ranked top stories; cache rolls over with the calendar date."""
+    return scoring.top_stories(load_news(), date.fromisoformat(today_iso), n=n)
+
+
+def news_card(item: dict) -> None:
+    """One bordered story card: thumbnail (or tag-emoji placeholder), linked
+    headline, source · date · tags caption."""
+    with st.container(border=True):
+        img = item.get("image")  # optional field; older rows lack it
+        if img:
+            try:
+                st.image(img, use_container_width=True)
+            except TypeError:  # Streamlit API drift fallback
+                st.image(img, use_column_width=True)
+        else:
+            tag = (item.get("tags") or ["news"])[0]  # tags stored sorted -> deterministic
+            st.markdown(
+                "<div style='text-align:center;font-size:44px;line-height:110px;"
+                "height:110px;background:rgba(128,128,128,.08);border-radius:8px'>"
+                f"{TAG_EMOJI.get(tag, '📰')}</div>",
+                unsafe_allow_html=True,
+            )
+        title = item["title"]
+        if len(title) > 90:
+            title = title[:87] + "…"
+        st.markdown(f"**[{title}]({item['url']})**")
+        tags = " · ".join(_short_tag(t) for t in item.get("tags", [])[:2])
+        caption = f"{item['source']} · {item['published']} · {tags}"
+        n_outlets = 1 + len(item.get("dup_sources", []))
+        if n_outlets > 1:
+            caption += f" · covered by {n_outlets} outlets"
+        st.caption(caption)
+
+
+def whats_new(window_days: int = WHATS_NEW_DAYS) -> tuple[list[str], bool]:
+    """Registry tile keys whose series changed within the window, newest first.
+    Returns (tile_keys, cold_start)."""
+    changed = []
+    for sid, key in scoring.WHATS_NEW_TILE.items():
+        meta = load_meta(sid)
+        lc = meta.get("last_changed")
+        if not lc:
+            continue
+        try:
+            age = (pd.Timestamp.utcnow().tz_localize(None)
+                   - pd.Timestamp(lc).tz_localize(None)).total_seconds() / 86400
+        except (ValueError, TypeError):
+            continue
+        if 0 <= age <= window_days:
+            changed.append((age, sid, key))
+    changed.sort(key=lambda t: (t[0], t[1]))  # newest first, series_id tiebreak
+    return [key for _, _, key in changed], len(changed) >= COLD_START_MIN
+
+
+def whats_new_cards(tile_keys: list[str]) -> None:
+    for row_start in range(0, len(tile_keys), 4):
+        cols = st.columns(4)  # fixed 4 keeps card widths equal on partial rows
+        for col, key in zip(cols, tile_keys[row_start:row_start + 4]):
+            spec = scoring.REGISTRY[key]
+            v, d, _ = scoring.tile_value(key, load_series)
+            meta = load_meta(spec["series_id"])
+            with col, st.container(border=True):
+                st.metric(spec["label"],
+                          spec["value_fmt"](v) if v is not None else "—",
+                          spec["delta_fmt"](d) if d is not None else None,
+                          delta_color=spec["delta_color"] if d is not None else "normal")
+                st.caption(f"Updated {_ago(meta.get('last_changed'))} · {spec['tab']} tab")
+
+
+# ---------------------------------------------------------------------------
 # Header + hero strip
 # ---------------------------------------------------------------------------
 st.title("🏘️ Victorian Housing Dashboard")
@@ -260,39 +357,73 @@ st.caption(
     "each chart shows how current its underlying series is."
 )
 
-h = st.columns(5)
-with h[0]:
-    v, p, _ = latest_value("au_cash_rate", "cash_rate")
-    st.metric("RBA cash rate", f"{v:.2f}%" if v is not None else "—",
-              f"{v - p:+.2f} pp" if v is not None and p is not None else None,
-              delta_color="inverse")
-with h[1]:
-    # Cotality Home Value Index — Melbourne dwelling values, monthly change.
-    mom, _, _ = latest_value("vic_hvi", "hvi_change_mom", region="melbourne")
-    yoy, _, _ = latest_value("vic_hvi", "hvi_change_yoy", region="melbourne")
-    st.metric("Melb dwelling values (MoM)", f"{mom:+.1f}%" if mom is not None else "—",
-              f"{yoy:+.1f}% yr" if yoy is not None else None)
-with h[2]:
-    # ABS Total Value of Dwellings gives a MEAN price; a true median needs REIV /
-    # Cotality medians (unavailable free). Labelled "mean" so it isn't misrepresented.
-    v, p, _ = latest_value("au_dwelling_stock", "mean_price", region="vic")
-    st.metric("Vic mean dwelling price", f"${v/1000:,.0f}k" if v is not None else "—",
-              f"{(v/p - 1)*100:+.1f}% qtr" if v and p else None)
-with h[3]:
-    v, p, _ = latest_value("vic_approvals", "approvals_dwellings_total", region="vic")
-    st.metric("Vic dwelling approvals (mth)", f"{v:,.0f}" if v is not None else "—",
-              f"{v - p:+,.0f}" if v is not None and p is not None else None)
-with h[4]:
-    act, _, _ = latest_value("au_accord", "accord_quarterly_actual")
-    tgt, _, _ = latest_value("au_accord", "accord_quarterly_target")
-    st.metric("Accord run-rate (qtr)", f"{act:,.0f}" if act is not None else "—",
-              f"{act - tgt:+,.0f} vs 60k target" if act is not None and tgt is not None else None)
+@st.cache_data
+def hero_tiles(today_iso: str) -> list[dict]:
+    """One hero selection per day — reruns within the day are stable; the strip
+    changes only when the data or the date changes."""
+    return scoring.pick_hero(load_series, load_meta, date.fromisoformat(today_iso))
+
+
+def render_hero(tiles: list[dict]) -> None:
+    cols = st.columns(len(tiles))
+    for col, t in zip(cols, tiles):
+        with col:
+            st.metric(t["label"], t["value"], t["delta"],
+                      delta_color=t["delta_color"], help=t["help"])
+    st.caption("Tiles auto-selected daily by trend-change score · "
+               "pinned: RBA cash rate, Melb dwelling values")
+
+
+render_hero(hero_tiles(date.today().isoformat()))
 
 st.divider()
 
-tab_vic, tab_nat, tab_intl, tab_news = st.tabs(
-    ["🏙️ Victoria", "🇦🇺 National", "🌏 International", "📰 News"]
+tab_today, tab_vic, tab_nat, tab_intl, tab_news = st.tabs(
+    ["📌 Today", "🏙️ Victoria", "🇦🇺 National", "🌏 International", "📰 News"]
 )
+
+# ---------------------------------------------------------------------------
+# Today — the landing view: what changed, and the day's top stories
+# ---------------------------------------------------------------------------
+with tab_today:
+    # Claude daily digest, when the pipeline produced one (silent otherwise).
+    digest_path = DATA / "news" / "digest.md"
+    if digest_path.exists():
+        st.markdown(digest_path.read_text(encoding="utf-8"))
+        st.divider()
+
+    st.markdown("#### 📊 What's new in the data")
+    new_keys, cold_start = whats_new()
+    if not new_keys:
+        st.caption("No data updates in the past 7 days. Each chart's badge shows "
+                   "its expected next release.")
+    else:
+        if cold_start:
+            st.caption("Most series were populated together in the initial data "
+                       f"load — showing the {min(len(new_keys), WHATS_NEW_MAX)} "
+                       "most recent changes.")
+        overflow = len(new_keys) - WHATS_NEW_MAX
+        whats_new_cards(new_keys[:WHATS_NEW_MAX])
+        if overflow > 0 and not cold_start:
+            st.caption(f"+ {overflow} more series updated this week — see their tabs.")
+
+    st.markdown("#### 📰 Top stories")
+    today_items = load_news()
+    if not today_items:
+        st.info("No news items yet — run `python -m pipeline.run` to populate "
+                "`data/news/items.jsonl`.")
+    else:
+        stories = top_news(date.today().isoformat(), TOP_STORIES_N)
+        if not stories:
+            st.caption("No stories scored highly enough in the past week — "
+                       "see the News tab for the full list.")
+        else:
+            cols = st.columns(TOP_STORIES_N)
+            for col, it in zip(cols, stories):
+                with col:
+                    news_card(it)
+            st.caption(f"Scored from the last 90 days of tagged housing headlines · "
+                       f"{len(today_items)} items on the News tab.")
 
 # ---------------------------------------------------------------------------
 # Victoria
@@ -450,12 +581,6 @@ with tab_news:
     items = load_news()
     news_meta = load_meta("news")
 
-    # Optional Claude-generated digest (Phase 3) — degrade silently if absent.
-    digest_path = DATA / "news" / "digest.md"
-    if digest_path.exists():
-        st.markdown(digest_path.read_text(encoding="utf-8"))
-        st.divider()
-
     if not items:
         st.info("No news items yet — run `python -m pipeline.run` to populate "
                 "`data/news/items.jsonl`.")
@@ -469,6 +594,18 @@ with tab_news:
         )
         chosen_sources = f2.multiselect("Filter by source", all_sources)
 
+        # Top-stories row only when browsing unfiltered — a filtering user is
+        # searching, and unfiltered heroes above filtered results would confuse.
+        hero: list[dict] = []
+        if not chosen_tags and not chosen_sources:
+            st.markdown("#### Top stories")
+            hero = top_news(date.today().isoformat(), TOP_STORIES_N)
+            cols = st.columns(TOP_STORIES_N)
+            for col, it in zip(cols, hero):
+                with col:
+                    news_card(it)
+            st.divider()
+
         filtered = [
             it for it in items
             if (not chosen_tags or set(it["tags"]) & set(chosen_tags))
@@ -477,19 +614,26 @@ with tab_news:
 
         ok, failed = news_meta.get("feeds_ok"), news_meta.get("feeds_failed")
         feeds_note = f" · {ok}/{(ok or 0) + (failed or 0)} feeds ok" if ok is not None else ""
+        hero_note = f" · {len(hero)} shown above" if hero else ""
         st.caption(
             f"🟢 {len(filtered)} of {len(items)} items · newest "
             f"{news_meta.get('last_item_date', '—')} · fetched "
-            f"{_ago(news_meta.get('last_fetched'))}{feeds_note} · "
+            f"{_ago(news_meta.get('last_fetched'))}{feeds_note}{hero_note} · "
             "headlines link out to the original source (no article text stored)."
         )
 
+        hero_urls = {it["url"] for it in hero}
         for it in filtered:
+            if it["url"] in hero_urls:
+                continue  # already featured above
             tags = " ".join(
                 f"`{t.replace('_', ' ')}`" for t in it["tags"]
             )
+            n_outlets = 1 + len(it.get("dup_sources", []))
+            coverage = f" · covered by {n_outlets} outlets" if n_outlets > 1 else ""
             st.markdown(
                 f"**[{it['title']}]({it['url']})**  \n"
-                f"<span style='color:gray'>{it['published']} · {it['source']} · {tags}</span>",
+                f"<span style='color:gray'>{it['published']} · {it['source']} · "
+                f"{tags}{coverage}</span>",
                 unsafe_allow_html=True,
             )
