@@ -16,6 +16,7 @@ plus the three metrics with the most notable recent trend changes (app/scoring.p
 """
 from __future__ import annotations
 
+import html
 import json
 from datetime import date
 from pathlib import Path
@@ -25,14 +26,17 @@ import plotly.express as px
 import streamlit as st
 
 try:  # pytest imports the package; `streamlit run` has app/ on sys.path
-    from app import scoring
+    from app import scoring, theme
 except ImportError:  # pragma: no cover
     import scoring
+    import theme
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 
 st.set_page_config(page_title="Victorian Housing Dashboard", page_icon="🏘️", layout="wide")
+theme.register_template()
+st.markdown(theme.CSS, unsafe_allow_html=True)
 
 # Normal cadence (days) per frequency; the badge warns past ~1.5x this gap.
 # Single source of truth lives in scoring.py (the stale gate uses it too).
@@ -121,33 +125,42 @@ def _ago(iso_ts: str | None) -> str:
 
 
 def badge(series_id: str) -> None:
-    """Render a staleness badge + source link caption for a series."""
+    """Staleness caption: plain text when fresh; a tint chip when ageing,
+    stale, or failed (spec: encode status with quiet chips, not dots)."""
     meta = load_meta(series_id)
     if not meta:
-        st.caption("⚪ no metadata")
+        st.caption("No metadata")
         return
     freq = meta.get("frequency", "monthly")
     status = meta.get("status", "ok")
     last_data = meta.get("last_data_date")
-    dot, note = "🟢", ""
+    lead, note = "", ""
     if last_data:
         gap = (pd.Timestamp.utcnow().tz_localize(None) - pd.Timestamp(last_data)).days
         cad = NORMAL_CADENCE.get(freq, 31)
-        if gap > 2.5 * cad:
-            dot, note = "🔴", " · stale"
-        elif gap > 1.5 * cad:
-            dot, note = "🟡", " · ageing"
         period = _fmt_period(pd.Timestamp(last_data), freq)
-        data_to = f"Data to {period}"
+        if status == "failed":
+            lead = theme.chip(f"Data to {period} · source unavailable", "bad", icon="schedule")
+        elif gap > 2.5 * cad:
+            lead = theme.chip(f"Data to {period} · stale", "bad", icon="schedule")
+        elif gap > 1.5 * cad:
+            lead = theme.chip(f"Data to {period} · ageing", "warn", icon="schedule")
+        else:
+            lead = f"Data to {period}"
     else:
-        dot, data_to = "⚪", "no data"
-    if status == "failed":
-        dot = "🔴"
-        note = f" · last fetch failed: {meta.get('error', '')[:80]}"
+        lead = theme.chip("No data · source unavailable", "bad", icon="schedule") if status == "failed" \
+            else "No data"
+    if status == "failed" and meta.get("error"):
+        note = f" · {html.escape(meta.get('error', '')[:60])}"
     nxt = _next_release(last_data, freq)
     url = meta.get("source_url", "")
-    src = f" · [{meta.get('source_name', 'source')}]({url})" if url else ""
-    st.caption(f"{dot} {data_to} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}")
+    src = (f" · <a href='{html.escape(url, quote=True)}'>"
+           f"{html.escape(meta.get('source_name', 'source'))}</a>") if url else ""
+    st.markdown(
+        f"<div style='font-size:12px;color:{theme.PALETTE['faint']};margin:-6px 0 4px'>"
+        f"{lead} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def _next_release(last_data: str | None, freq: str) -> str:
@@ -174,6 +187,8 @@ def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="
     is still visible rather than an empty line.
     """
     st.markdown(f"##### {title}")
+    if y_title:
+        st.caption(y_title)
     df = load_series(series_id)
     meta = load_meta(series_id)
     if df.empty:
@@ -194,13 +209,14 @@ def line_block(series_id: str, *, metrics=None, region=None, title="", y_title="
     # Auto-enable markers when any line would have a single point (else it's blank).
     single_point = df.groupby("series").size().max() < 2
     fig = px.line(df, x="date", y="value", color="series", markers=markers or single_point,
-                  labels={"date": "", "value": y_title, "series": ""})
-    fig.update_layout(height=320, margin=dict(l=0, r=0, t=6, b=0),
-                      legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
-                      hovermode="x unified")
+                  labels={"date": "", "value": "", "series": ""})
+    fig.update_yaxes(title_text="")
+    fig.update_layout(height=320, hovermode="x unified",
+                      showlegend=df["series"].nunique() > 1)
     if percent:
         fig.update_yaxes(ticksuffix="%")
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-{title}")
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{series_id}-{title}",
+                    config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
 
@@ -241,8 +257,9 @@ def bar_latest_block(series_id, *, metrics=None, region=None, title="", x_title=
     fig = px.bar(d, x="value", y="series", orientation="h", text="value",
                  labels={"value": x_title, "series": ""})
     fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
-    fig.update_layout(height=300, margin=dict(l=0, r=0, t=6, b=0))
-    st.plotly_chart(fig, use_container_width=True, key=f"{series_id}-bar-{title}")
+    fig.update_layout(height=300, showlegend=False, bargap=0.35)
+    st.plotly_chart(fig, use_container_width=True, theme=None, key=f"{series_id}-bar-{title}",
+                    config=theme.PLOTLY_CONFIG)
     badge(series_id)
 
 
@@ -268,9 +285,6 @@ WHATS_NEW_DAYS = 7       # window for "What's new in the data"
 WHATS_NEW_MAX = 8        # card cap (2 rows of 4)
 COLD_START_MIN = 10      # >= this many changed series => initial-load mode
 
-TAG_EMOJI = {"prices": "💰", "rents": "🔑", "supply_construction": "🏗️",
-             "policy": "🏛️", "construction_costs": "🧱", "international": "🌏"}
-
 
 def _short_tag(t: str) -> str:
     return t.replace("supply_construction", "supply").replace("_", " ")
@@ -283,7 +297,7 @@ def top_news(today_iso: str, n: int) -> list[dict]:
 
 
 def news_card(item: dict) -> None:
-    """One bordered story card: thumbnail (or tag-emoji placeholder), linked
+    """One bordered story card: thumbnail (or tag-icon placeholder), linked
     headline, source · date · tags caption."""
     with st.container(border=True):
         img = item.get("image")  # optional field; older rows lack it
@@ -293,11 +307,13 @@ def news_card(item: dict) -> None:
             except TypeError:  # Streamlit API drift fallback
                 st.image(img, use_column_width=True)
         else:
-            tag = (item.get("tags") or ["news"])[0]  # tags stored sorted -> deterministic
+            tag = (item.get("tags") or ["international"])[0]  # sorted -> deterministic
+            icon = theme.TAG_ICON.get(tag, "newspaper")
             st.markdown(
-                "<div style='text-align:center;font-size:44px;line-height:110px;"
-                "height:110px;background:rgba(128,128,128,.08);border-radius:8px'>"
-                f"{TAG_EMOJI.get(tag, '📰')}</div>",
+                "<div style='text-align:center;height:110px;line-height:110px;"
+                f"background:{theme.PALETTE['bg2']};border-radius:8px'>"
+                f"<span class='material-symbols-rounded' style='font-size:44px;"
+                f"line-height:110px'>{icon}</span></div>",
                 unsafe_allow_html=True,
             )
         title = item["title"]
@@ -340,17 +356,17 @@ def whats_new_cards(tile_keys: list[str]) -> None:
             v, d, _ = scoring.tile_value(key, load_series)
             meta = load_meta(spec["series_id"])
             with col, st.container(border=True):
-                st.metric(spec["label"],
-                          spec["value_fmt"](v) if v is not None else "—",
-                          spec["delta_fmt"](d) if d is not None else None,
-                          delta_color=spec["delta_color"] if d is not None else "normal")
+                metric_card(spec["label"],
+                            spec["value_fmt"](v) if v is not None else "—",
+                            spec["delta_fmt"](d) if d is not None else None,
+                            spec["delta_color"])
                 st.caption(f"Updated {_ago(meta.get('last_changed'))} · {spec['tab']} tab")
 
 
 # ---------------------------------------------------------------------------
 # Header + hero strip
 # ---------------------------------------------------------------------------
-st.title("🏘️ Victorian Housing Dashboard")
+st.title(":material/home_work: Victorian Housing Dashboard")
 st.caption(
     "Metro Melbourne vs Regional Victoria housing metrics, national context, and "
     "international leading indicators. Data auto-refreshed daily via GitHub Actions; "
@@ -364,22 +380,48 @@ def hero_tiles(today_iso: str) -> list[dict]:
     return scoring.pick_hero(load_series, load_meta, date.fromisoformat(today_iso))
 
 
+def metric_card(label, value, delta=None, delta_color="normal", help_txt=None) -> None:
+    """st.metric stand-in: Streamlit 1.40 hardcodes delta green/red that fail
+    AA on cream, so deltas render in the spec pair instead. Sign semantics
+    mirror st.metric: leading '-' means down; delta_color normal/inverse/off."""
+    d_html = ""
+    if delta is not None:
+        down = str(delta).lstrip().startswith(("-", "−"))
+        arrow = "↓" if down else "↑"
+        if delta_color == "off":
+            col = theme.PALETTE["muted"]
+        else:
+            good = (not down) if delta_color == "normal" else down
+            col = theme.PALETTE["up"] if good else theme.PALETTE["down"]
+        d_html = (f"<div style='font-size:13px;font-weight:500;color:{col};"
+                  f"font-feature-settings:\"tnum\" 1'>{arrow} {html.escape(str(delta))}</div>")
+    title_attr = f" title='{html.escape(help_txt, quote=True)}'" if help_txt else ""
+    st.markdown(
+        f"<div{title_attr}>"
+        f"<div style='text-transform:uppercase;letter-spacing:0.06em;font-size:12px;"
+        f"font-weight:500;color:{theme.PALETTE['muted']}'>{html.escape(str(label))}</div>"
+        f"<div style='font-size:34px;font-weight:600;letter-spacing:-0.01em;"
+        f"color:{theme.PALETTE['ink']};font-feature-settings:\"tnum\" 1'>{html.escape(str(value))}</div>"
+        f"{d_html}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_hero(tiles: list[dict]) -> None:
     cols = st.columns(len(tiles))
     for col, t in zip(cols, tiles):
         with col:
-            st.metric(t["label"], t["value"], t["delta"],
-                      delta_color=t["delta_color"], help=t["help"])
+            with st.container(border=True):
+                metric_card(t["label"], t["value"], t["delta"], t["delta_color"], t["help"])
     st.caption("Tiles auto-selected daily by trend-change score · "
                "pinned: RBA cash rate, Melb dwelling values")
 
 
 render_hero(hero_tiles(date.today().isoformat()))
 
-st.divider()
-
 tab_today, tab_vic, tab_nat, tab_intl, tab_news = st.tabs(
-    ["📌 Today", "🏙️ Victoria", "🇦🇺 National", "🌏 International", "📰 News"]
+    [f":material/{theme.TAB_ICONS[n]}: {n}"
+     for n in ("Today", "Victoria", "National", "International", "News")]
 )
 
 # ---------------------------------------------------------------------------
@@ -390,9 +432,8 @@ with tab_today:
     digest_path = DATA / "news" / "digest.md"
     if digest_path.exists():
         st.markdown(digest_path.read_text(encoding="utf-8"))
-        st.divider()
 
-    st.markdown("#### 📊 What's new in the data")
+    st.markdown("#### What's new in the data")
     new_keys, cold_start = whats_new()
     if not new_keys:
         st.caption("No data updates in the past 7 days. Each chart's badge shows "
@@ -407,7 +448,7 @@ with tab_today:
         if overflow > 0 and not cold_start:
             st.caption(f"+ {overflow} more series updated this week — see their tabs.")
 
-    st.markdown("#### 📰 Top stories")
+    st.markdown("#### Top stories")
     today_items = load_news()
     if not today_items:
         st.info("No news items yet — run `python -m pipeline.run` to populate "
@@ -604,7 +645,6 @@ with tab_news:
             for col, it in zip(cols, hero):
                 with col:
                     news_card(it)
-            st.divider()
 
         filtered = [
             it for it in items
@@ -616,7 +656,7 @@ with tab_news:
         feeds_note = f" · {ok}/{(ok or 0) + (failed or 0)} feeds ok" if ok is not None else ""
         hero_note = f" · {len(hero)} shown above" if hero else ""
         st.caption(
-            f"🟢 {len(filtered)} of {len(items)} items · newest "
+            f"{len(filtered)} of {len(items)} items · newest "
             f"{news_meta.get('last_item_date', '—')} · fetched "
             f"{_ago(news_meta.get('last_fetched'))}{feeds_note}{hero_note} · "
             "headlines link out to the original source (no article text stored)."
@@ -626,14 +666,14 @@ with tab_news:
         for it in filtered:
             if it["url"] in hero_urls:
                 continue  # already featured above
-            tags = " ".join(
-                f"`{t.replace('_', ' ')}`" for t in it["tags"]
-            )
+            tags = " · ".join(_short_tag(t) for t in it["tags"])
             n_outlets = 1 + len(it.get("dup_sources", []))
             coverage = f" · covered by {n_outlets} outlets" if n_outlets > 1 else ""
             st.markdown(
-                f"**[{it['title']}]({it['url']})**  \n"
-                f"<span style='color:gray'>{it['published']} · {it['source']} · "
-                f"{tags}{coverage}</span>",
+                f"<div style='padding:12px 0;border-bottom:1px solid {theme.PALETTE['line']}'>"
+                f"<a href='{html.escape(it['url'], quote=True)}' "
+                f"style='font-size:14px;font-weight:500'>{html.escape(it['title'])}</a><br>"
+                f"<span style='color:{theme.PALETTE['faint']};font-size:12px'>"
+                f"{it['published']} · {html.escape(it['source'])} · {tags}{coverage}</span></div>",
                 unsafe_allow_html=True,
             )
