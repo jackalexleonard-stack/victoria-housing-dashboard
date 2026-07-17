@@ -156,6 +156,9 @@ rest of the dashboard still updates.
    (Settings → Secrets and variables → Actions).
 3. **Connect the repo to [Streamlit Community Cloud](https://streamlit.io/cloud)**
    (one-time): New app → pick this repo → main file `app/streamlit_app.py`.
+   **Important: in Advanced settings, set the Python version to 3.12** — the
+   pinned dependencies ship pre-built wheels for 3.12; newer defaults (e.g.
+   3.14) force source builds of lxml/pandas that fail on Community Cloud.
    The dashboard redeploys automatically whenever Actions commits new data.
 
 The scheduler (`.github/workflows/update.yml`) then runs daily at 03:00 UTC
