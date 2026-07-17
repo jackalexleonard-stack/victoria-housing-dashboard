@@ -16,6 +16,7 @@ plus the three metrics with the most notable recent trend changes (app/scoring.p
 """
 from __future__ import annotations
 
+import html
 import json
 from datetime import date
 from pathlib import Path
@@ -150,10 +151,11 @@ def badge(series_id: str) -> None:
         lead = theme.chip("no data · source unavailable", "bad") if status == "failed" \
             else "no data"
     if status == "failed" and meta.get("error"):
-        note = f" · {meta.get('error', '')[:60]}"
+        note = f" · {html.escape(meta.get('error', '')[:60])}"
     nxt = _next_release(last_data, freq)
     url = meta.get("source_url", "")
-    src = f" · <a href='{url}'>{meta.get('source_name', 'source')}</a>" if url else ""
+    src = (f" · <a href='{html.escape(url, quote=True)}'>"
+           f"{html.escape(meta.get('source_name', 'source'))}</a>") if url else ""
     st.markdown(
         f"<div style='font-size:12px;color:{theme.PALETTE['faint']};margin:-6px 0 4px'>"
         f"{lead} · fetched {_ago(meta.get('last_fetched'))}{note}{nxt}{src}</div>",
@@ -292,7 +294,7 @@ def top_news(today_iso: str, n: int) -> list[dict]:
 
 
 def news_card(item: dict) -> None:
-    """One bordered story card: thumbnail (or tag-emoji placeholder), linked
+    """One bordered story card: thumbnail (or tag-icon placeholder), linked
     headline, source · date · tags caption."""
     with st.container(border=True):
         img = item.get("image")  # optional field; older rows lack it
