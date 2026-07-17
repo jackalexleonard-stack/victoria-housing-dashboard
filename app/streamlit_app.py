@@ -389,8 +389,6 @@ def render_hero(tiles: list[dict]) -> None:
 
 render_hero(hero_tiles(date.today().isoformat()))
 
-st.divider()
-
 tab_today, tab_vic, tab_nat, tab_intl, tab_news = st.tabs(
     [f":material/{theme.TAB_ICONS[n]}: {n}"
      for n in ("Today", "Victoria", "National", "International", "News")]
@@ -404,7 +402,6 @@ with tab_today:
     digest_path = DATA / "news" / "digest.md"
     if digest_path.exists():
         st.markdown(digest_path.read_text(encoding="utf-8"))
-        st.divider()
 
     st.markdown("#### What's new in the data")
     new_keys, cold_start = whats_new()
@@ -618,7 +615,6 @@ with tab_news:
             for col, it in zip(cols, hero):
                 with col:
                     news_card(it)
-            st.divider()
 
         filtered = [
             it for it in items
