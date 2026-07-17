@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
     <title>Synthetic Housing Wire</title>
     <link>https://example-news.test/</link>
@@ -10,24 +10,29 @@
       <guid>https://example-news.test/property/melbourne-house-prices-june</guid>
       <pubDate>Tue, 14 Jul 2026 09:00:00 +1000</pubDate>
       <description>Synthetic summary used only for keyword tagging in tests.</description>
+      <enclosure url="https://img.example-news.test/prices.jpg?utm_source=rss" type="image/jpeg" length="1"/>
     </item>
     <item>
       <title>Rental vacancy tightens as weekly rent climbs across regional Victoria</title>
       <link>https://example-news.test/property/rental-vacancy-tightens</link>
       <pubDate>Mon, 13 Jul 2026 07:30:00 +1000</pubDate>
       <description>Placeholder summary.</description>
+      <media:thumbnail url="https://img.example-news.test/rents-thumb.jpg"/>
     </item>
     <item>
       <title>Construction costs ease as building materials prices stabilise</title>
       <link>https://example-news.test/build/construction-costs-ease</link>
       <pubDate>Sat, 11 Jul 2026 12:00:00 +1000</pubDate>
       <description>Placeholder summary.</description>
+      <media:content width="140" url="https://img.example-news.test/costs-140.jpg"/>
+      <media:content width="460" url="https://img.example-news.test/costs-460.jpg"/>
     </item>
     <item>
       <title>Premier announces social housing planning reform for growth areas</title>
       <link>https://example-news.test/policy/social-housing-reform</link>
       <pubDate>Fri, 10 Jul 2026 18:00:00 +1000</pubDate>
       <description>Placeholder summary.</description>
+      <enclosure url="http://img.example-news.test/insecure.jpg" type="image/jpeg" length="1"/>
     </item>
     <item>
       <title>Local footy grand final draws a record crowd on the weekend</title>

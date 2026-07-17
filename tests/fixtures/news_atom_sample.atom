@@ -15,7 +15,7 @@
     <link href="https://example-atom.test/economy/housing-supply-lags"/>
     <id>tag:example-atom.test,2026:economy/housing-supply</id>
     <updated>2026-07-12T05:00:00Z</updated>
-    <summary>Placeholder summary for tagging.</summary>
+    <summary type="html">&lt;img src="https://images.example-atom.test/supply.png" /&gt; Placeholder summary for tagging.</summary>
   </entry>
   <entry>
     <title>Melbourne house prices rise 2 per cent in the June quarter - Synthetic Times</title>
