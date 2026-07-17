@@ -40,12 +40,16 @@ _CHIP_STYLES = {
 }
 
 
-def chip(text: str, kind: str) -> str:
+def chip(text: str, kind: str, icon: str | None = None) -> str:
     """A pale-tint status pill (spec: never solid fills, radius 999px)."""
     bg, fg = _CHIP_STYLES[kind]
+    icon_html = (
+        f"<span class=\"material-symbols-rounded\" style=\"font-size:14px;"
+        f"vertical-align:-2px\">{icon}</span> "
+    ) if icon else ""
     return (
         f"<span style=\"background:{bg};color:{fg};border-radius:999px;"
-        f"padding:2px 10px;font-size:12px;font-weight:500\">{text}</span>"
+        f"padding:2px 10px;font-size:12px;font-weight:500\">{icon_html}{text}</span>"
     )
 
 
@@ -67,10 +71,14 @@ def register_template() -> None:
         yaxis=dict(showgrid=True, gridcolor=PALETTE["line"], gridwidth=1,
                    showline=False, ticks="",
                    tickfont=dict(size=12, color=PALETTE["muted"]),
+                   zeroline=True,
                    zerolinecolor=PALETTE["zeroline"], zerolinewidth=1),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
                     font=dict(size=12, color=PALETTE["muted"])),
         margin=dict(t=24, r=8, b=40, l=48),
+    ), data=dict(
+        scatter=[go.Scatter(line=dict(width=2.25))],
+        bar=[go.Bar(marker=dict(line=dict(width=0)))],
     ))
     pio.templates.default = "simple_white+scandi_cream"
 
@@ -94,10 +102,11 @@ button[data-baseweb="tab"] { color:#575653; font-weight:400; }
 button[data-baseweb="tab"][aria-selected="true"] { color:#1C1B1A; font-weight:500; }
 div[data-baseweb="tab-border"] { background-color:#DAD8CE; }
 div[data-baseweb="tab-highlight"] { background-color:#205EA6; height:2px; }
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color:#6F6E69; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color:#6F6E69; font-size:12px; }
 .stMarkdown a { color:#1C1B1A; text-decoration:none; }
 .stMarkdown a:hover { color:#205EA6; }
 [data-testid="stImage"] img { border-radius:8px; }
 header[data-testid="stHeader"] { background:transparent; }
 #MainMenu, footer { visibility:hidden; }
+.js-plotly-plot .plot-container text { font-feature-settings:'tnum' 1; }
 </style>"""

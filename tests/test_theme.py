@@ -36,6 +36,8 @@ def test_chip_builds_tinted_pill():
     assert "border-radius:999px" in html and "Data to Sep qtr 2025" in html
     warn = theme.chip("ageing", "warn")
     assert "#FFEECC" in warn and "#AD8301" in warn
+    iconed = theme.chip("Data to X · stale", "bad", icon="schedule")
+    assert "material-symbols-rounded" in iconed and ">schedule</span>" in iconed
 
 
 def test_plotly_config_hides_modebar():
@@ -58,6 +60,10 @@ def test_register_template_wires_scandi_cream():
     assert lay.legend.orientation == "h" and lay.legend.y == 1.02
     assert lay.legend.font.size == 12 and lay.legend.font.color == "#575653"
     assert (lay.margin.t, lay.margin.r, lay.margin.b, lay.margin.l) == (24, 8, 40, 48)
+    assert lay.yaxis.zeroline is True
+    tpl = pio.templates["scandi_cream"]
+    assert tpl.data.scatter[0].line.width == 2.25
+    assert tpl.data.bar[0].marker.line.width == 0
 
 
 def test_css_carries_the_load_bearing_rules():
