@@ -53,6 +53,11 @@ def test_register_template_wires_scandi_cream():
     assert lay.xaxis.showgrid is False and lay.xaxis.linecolor == "#1C1B1A"
     assert lay.font.family == theme.FONT_STACK and lay.font.size == 13
     assert lay.hoverlabel.bgcolor == "#FFFEFA"
+    assert lay.xaxis.linewidth == 1.25 and lay.xaxis.ticks == "outside"
+    assert lay.yaxis.zerolinecolor == "#B7B5AC" and lay.yaxis.zerolinewidth == 1
+    assert lay.legend.orientation == "h" and lay.legend.y == 1.02
+    assert lay.legend.font.size == 12 and lay.legend.font.color == "#575653"
+    assert (lay.margin.t, lay.margin.r, lay.margin.b, lay.margin.l) == (24, 8, 40, 48)
 
 
 def test_css_carries_the_load_bearing_rules():
