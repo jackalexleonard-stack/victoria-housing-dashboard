@@ -28,7 +28,8 @@ test('failed source renders an honest card, not a blank', () => {
   render(<ChartCard site={site} chart={chart('auctions')}
                     finding="No recent data — source currently unavailable"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getAllByText(/source currently unavailable/i)[0]).toBeInTheDocument()
+  expect(screen.getByText(/source currently unavailable/i, { selector: 'p' })).toBeInTheDocument()
+  expect(screen.queryByRole('img')).not.toBeInTheDocument()
   expect(screen.getByText(/source unavailable/i, { selector: 'span' })).toBeInTheDocument()
 })
 
