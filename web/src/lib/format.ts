@@ -1,5 +1,14 @@
 const n0 = (v: number) => v.toLocaleString('en-AU', { maximumFractionDigits: 0 })
-const sign = (d: number, s: string) => (d > 0 ? '+' : d < 0 ? '-' : '') + s
+const sign = (d: number, s: string) => (d >= 0 ? '+' : '-') + s
+
+// Round half to even, matching Python's "%.0f" (banker's rounding).
+function roundHalfEven(v: number): number {
+  const floor = Math.floor(v)
+  const diff = v - floor
+  if (diff < 0.5) return floor
+  if (diff > 0.5) return floor + 1
+  return floor % 2 === 0 ? floor : floor + 1  // exactly .5 → nearest even
+}
 
 type Fmt = { value: (v: number) => string; delta: (d: number) => string }
 const f = (value: Fmt['value'], delta: Fmt['delta']): Fmt => ({ value, delta })
@@ -27,7 +36,7 @@ export const TILE_FMT: Record<string, Fmt> = {
   melb_rent: f(v => `$${n0(v)}/wk`, d => sign(d, `${n0(Math.abs(d))}/wk`)),
   greenfield_supply: f(v => `${v.toFixed(1)} yrs`, d => sign(d, Math.abs(d).toFixed(1))),
   melb_median_house: f(v => `$${n0(v / 1000)}k`, d => sign(d, `${Math.abs(d).toFixed(1)}% qtr`)),
-  melb_clearance: f(v => `${Math.round(v)}%`, d => sign(d, `${Math.round(Math.abs(d))} pp`)),
+  melb_clearance: f(v => `${roundHalfEven(v)}%`, d => sign(d, `${roundHalfEven(Math.abs(d))} pp`)),
   oo_lending: f(v => `$${n0(v)}m`, d => sign(d, `${Math.abs(d).toFixed(1)}% qtr`)),
 }
 
@@ -45,7 +54,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
 
 export function fmtDate(iso: string): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
 export function fmtPeriod(iso: string, freq: string | null): string {

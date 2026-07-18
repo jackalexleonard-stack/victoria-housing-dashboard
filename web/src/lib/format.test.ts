@@ -1,4 +1,4 @@
-import { TILE_FMT, fmtUnit, fmtPeriod, ago } from './format'
+import { TILE_FMT, fmtUnit, fmtPeriod, fmtDate, ago } from './format'
 
 test('tile formatters port the python lambdas exactly', () => {
   expect(TILE_FMT.cash_rate.value(3.85)).toBe('3.85%')
@@ -35,4 +35,22 @@ test('unit and period formatting', () => {
   expect(fmtPeriod('2026-06-30', 'daily')).toBe('30 Jun 2026')
   expect(ago('2026-07-17T06:00:00Z', new Date('2026-07-18T06:00:00Z'))).toBe('yesterday')
   expect(ago(null, new Date())).toBe('unknown')
+})
+
+test('zero deltas keep the + sign (python :+ parity)', () => {
+  expect(TILE_FMT.cash_rate.delta(0)).toBe('+0.00 pp')
+  expect(TILE_FMT.vic_approvals.delta(0)).toBe('+0')
+  expect(TILE_FMT.melb_dwelling_values.value(0)).toBe('+0.0%')
+  expect(TILE_FMT.melb_rent_growth.delta(0)).toBe('+0.0 pp')
+})
+
+test('clearance uses banker’s rounding like python %.0f', () => {
+  expect(TILE_FMT.melb_clearance.value(64.5)).toBe('64%')  // half-to-even
+  expect(TILE_FMT.melb_clearance.value(65.5)).toBe('66%')
+  expect(TILE_FMT.melb_clearance.value(64.2)).toBe('64%')
+  expect(TILE_FMT.melb_clearance.value(64.8)).toBe('65%')
+})
+
+test('fmtDate zero-pads single-digit days', () => {
+  expect(fmtDate('2026-06-05')).toBe('05 Jun 2026')
 })
