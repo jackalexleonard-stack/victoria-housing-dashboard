@@ -2,7 +2,6 @@
 @import './theme/tokens.css';
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/newsreader/opsz.css';
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap');
 
 @theme {
   --color-bg: var(--bg); --color-bg2: var(--bg2); --color-card: var(--card);
