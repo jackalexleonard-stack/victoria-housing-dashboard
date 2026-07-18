@@ -37,3 +37,20 @@ test('chart surface cedes vertical panning', () => {
     <LineChart lines={lines} percent unit="percent" label="x" />)
   expect((container.querySelector('svg') as SVGElement).style.touchAction).toBe('pan-y')
 })
+
+test('markers on a multi-line chart use their own line’s color', () => {
+  const twoLines = [
+    { name: 'a', pts: [
+      { date: '2026-05-31', region: 'x', metric: 'a', value: 10 },
+      { date: '2026-06-30', region: 'x', metric: 'a', value: 12 },
+    ] },
+    { name: 'b', pts: [
+      { date: '2026-06-30', region: 'x', metric: 'b', value: 99 },
+    ] },
+  ]
+  const { container } = render(
+    <LineChart lines={twoLines} percent={false} unit="index" label="two lines" />)
+  const markers = container.querySelectorAll('circle.pt-marker')
+  expect(markers.length).toBe(1)                        // only line b is single-point
+  expect(markers[0].getAttribute('fill')).toBe('#BC5215')  // line b = colorway[1], not [0]
+})

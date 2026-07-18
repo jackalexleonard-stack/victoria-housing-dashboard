@@ -42,6 +42,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
 
   const b = useMemo(() => buildChart(lines, width, height,
     { colorway: COLORWAY, percent }), [lines, width, height, percent])
+  const colorByName = new Map(b.paths.map(p => [p.name, p.color]))
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!interactive) return
@@ -96,7 +97,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
             b.flat.filter(q => q.name === p.name).length < 2)
           .map((p, i) => (
             <circle key={i} className="pt-marker" cx={b.x(p.t)} cy={b.y(p.value)}
-                    r="3.5" fill={COLORWAY[0]} />
+                    r="3.5" fill={colorByName.get(p.name) ?? COLORWAY[0]} />
         ))}
         {hover && (
           <g>
