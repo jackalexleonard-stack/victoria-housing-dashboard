@@ -108,6 +108,20 @@ def test_validate_rejects_bad_status():
         export.validate_site(site)
 
 
+def test_hero_pads_when_a_selected_tile_cannot_be_built(monkeypatch):
+    ls, lm = _loaders()
+    # pick_hero selects a key, but tile_value yields nothing for it → must not drop below 5
+    monkeypatch.setattr(export.scoring, "pick_hero",
+                        lambda *a, **k: [{"key": "cash_rate"}, {"key": "cash_rate"},
+                                         {"key": "cash_rate"}, {"key": "cash_rate"},
+                                         {"key": "cash_rate"}])
+    monkeypatch.setattr(export, "_machine_tile", lambda *a, **k: None)
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)               # must not raise
+    assert len(site["hero"]) == 5
+    assert all(t["key"] == "empty" for t in site["hero"])
+
+
 def test_end_to_end_against_real_repo_data(tmp_path):
     """Runs the real exporter over the committed data/ directory."""
     site, news = export.export_all(out_dir=tmp_path)

@@ -23,6 +23,8 @@ OUT = Path("web/public/data")
 ACCORD_START = "2024-07-01"
 META_KEYS = ("source_name", "source_url", "frequency", "last_fetched",
              "last_changed", "last_data_date", "error")
+EMPTY_TILE = {"key": "empty", "label": "—", "value": None,
+              "delta": None, "delta_color": "normal", "last_date": None}
 
 Loader = Callable[[str], object]
 
@@ -79,13 +81,8 @@ def _machine_tile(key: str, ls: Loader, changed_at: Optional[str] = None) -> Opt
 def _hero(ls: Loader, lm: Loader, today: date) -> list[dict]:
     tiles = []
     for t in scoring.pick_hero(ls, lm, today):
-        if t["key"] == "empty":
-            tiles.append({"key": "empty", "label": "—", "value": None,
-                          "delta": None, "delta_color": "normal", "last_date": None})
-            continue
-        mt = _machine_tile(t["key"], ls)
-        if mt:
-            tiles.append(mt)
+        mt = None if t["key"] == "empty" else _machine_tile(t["key"], ls)
+        tiles.append(mt if mt is not None else dict(EMPTY_TILE))
     return tiles
 
 
