@@ -6,6 +6,7 @@ You (Claude Code) are building an automated housing dashboard for a user in Melb
 - **Granularity:** Metro Melbourne vs Regional Victoria (no LGA/suburb drill-down).
 - **Cost:** $0 infrastructure. Free data sources only. No paid APIs, no servers, no databases.
 - **Stack:** Python 3.11+ · GitHub Actions (scheduler) · CSVs committed to the repo (storage) · Streamlit (front-end, deployed on Streamlit Community Cloud).
+  *Amended 2026-07-18:* the front-end half of this decision is superseded by Dashboard 2.0 — a React SPA on GitHub Pages, per `docs/superpowers/specs/2026-07-18-dashboard-2.0-design.md`. The Python/Actions/CSV pipeline decisions stand unchanged.
 - **Repo is public** (all data is public anyway; free hosting tiers want this).
 
 ## Working rules for you
