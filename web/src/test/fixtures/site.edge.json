@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-18T04:00:00Z",
+  "sections": [["today","Today"],["prices","Prices"],["rents","Rents & vacancy"],["supply","Supply & construction"],["money","Money & credit"],["people","People"],["social","Social housing"],["world","World"],["news","News"]],
+  "charts": [
+    {"id":"cash_rate","section":"money","title":"RBA cash rate target","series_id":"au_cash_rate","metrics":["cash_rate"],"region_mode":"fixed:australia","percent":true,"markers":false,"annotate":true},
+    {"id":"auctions","section":"prices","title":"Auction clearance — Melbourne","series_id":"vic_auctions","metrics":["clearance_rate"],"region_mode":"fixed:melbourne","percent":true,"markers":false,"annotate":false},
+    {"id":"median_rent","section":"rents","title":"Median weekly rent","series_id":"vic_rents","metrics":["median_rent"],"region_mode":"geo","percent":false,"markers":true,"annotate":false}
+  ],
+  "findings": {
+    "cash_rate": "The cash rate has held at 3.85% since Jan 2026",
+    "auctions": "No recent data — source currently unavailable",
+    "median_rent": "The median rent held at $580/wk in Mar qtr 2026"
+  },
+  "series": {
+    "au_cash_rate": {"status":"ok","meta":{"source_name":"RBA F1.1","source_url":"https://rba.gov.au","frequency":"monthly","last_fetched":"2026-07-17T06:00:00Z","last_changed":"2026-07-15T00:00:00Z","last_data_date":"2026-06-30","error":null,"cadence_days":31},"units":{"cash_rate":"percent"},"points":[{"date":"2026-05-31","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-06-30","region":"australia","metric":"cash_rate","value":3.85}]},
+    "vic_auctions": {"status":"failed","meta":{"source_name":"Domain","source_url":"https://domain.com.au","frequency":"weekly","last_fetched":"2026-07-17T06:00:00Z","last_changed":null,"last_data_date":null,"error":"HTTPError","cadence_days":8},"units":{},"points":[]},
+    "vic_rents": {"status":"failed","meta":{"source_name":"DFFH Rental Report","source_url":"https://dffh.vic.gov.au","frequency":"quarterly","last_fetched":"2026-07-17T06:00:00Z","last_changed":"2026-03-01T00:00:00Z","last_data_date":"2026-03-31","error":"Timeout","cadence_days":92},"units":{"median_rent":"aud"},"points":[{"date":"2026-03-31","region":"melbourne","metric":"median_rent","value":580}]}
+  },
+  "hero": [
+    {"key":"cash_rate","label":"RBA cash rate","value":3.85,"delta":0.0,"delta_color":"inverse","last_date":"2026-06-30"},
+    {"key":"melb_rent","label":"Median rent — Melbourne","value":580,"delta":10,"delta_color":"normal","last_date":"2026-03-31"},
+    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null},
+    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null},
+    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null}
+  ],
+  "whats_new": [],
+  "annotations": {"cash_rate_moves":[{"date":"2026-04-30","delta":-0.25}],"accord_start":"2024-07-01"}
+}
