@@ -1,21 +1,23 @@
-name: Update housing data
+name: Update housing data & deploy
 
 on:
   schedule:
     # 03:00 UTC ~ 1pm AEST / 2pm AEDT — after the ABS 11:30am release window.
     - cron: "0 3 * * *"
   workflow_dispatch: {}
-
-permissions:
-  contents: write
-
-concurrency:
-  group: update-data
-  cancel-in-progress: false
+  push:
+    branches: [main]
 
 jobs:
   update:
+    # Data refresh only on schedule/manual runs — code pushes skip straight to deploy.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: update-data
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -30,9 +32,10 @@ jobs:
       - name: Run pipeline
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m pipeline.run
 
-      - name: Commit updated data (skip if nothing changed)
+      - name: Commit updated data (rebase-safe, skip if unchanged)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -41,5 +44,57 @@ jobs:
             echo "No data changes — skipping commit."
           else
             git commit -m "data: automated update $(date -u +'%Y-%m-%d')"
+            git pull --rebase origin main
             git push
           fi
+
+  deploy:
+    needs: update
+    if: always() && (needs.update.result == 'success' || needs.update.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main   # NOT github.sha — must include the data commit the update job just pushed
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Export site data (validates — a bad bundle fails the job)
+        run: python -m pipeline.export
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build site
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
