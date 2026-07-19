@@ -35,3 +35,9 @@ test('source filter narrows the list', async () => {
   expect(screen.getByText('Rents piece')).toBeInTheDocument()
   expect(screen.queryByText('Hero story')).not.toBeInTheDocument()
 })
+
+test('published dates render human-formatted, not raw ISO', () => {
+  render(<NewsSection news={news} />)
+  expect(screen.getByText(/16 Jul 2026/)).toBeInTheDocument()
+  expect(screen.queryByText(/2026-07-16/)).not.toBeInTheDocument()
+})

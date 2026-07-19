@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { fmtDate } from '../lib/format'
 import type { NewsData } from '../lib/types'
 
 export function NewsSection({ news }: { news: NewsData }) {
@@ -40,7 +41,7 @@ export function NewsSection({ news }: { news: NewsData }) {
             <a href={i.url} target="_blank" rel="noreferrer"
                className="text-sm font-medium leading-snug hover:text-blue">{i.title}</a>
             <p className="text-xs text-faint mt-0.5">
-              {i.source} · {i.published}{i.tags.length > 0 && ` · ${i.tags.join(', ')}`}
+              {i.source} · {fmtDate(i.published)}{i.tags.length > 0 && ` · ${i.tags.join(', ')}`}
             </p>
           </li>
         ))}
