@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { TILE_FMT } from '../lib/format'
+import { TILE_FMT, fmtDate } from '../lib/format'
 import { PALETTE } from '../theme/tokens'
 import type { HeroTile } from '../lib/types'
 
-/** Counts a number up once when the element first enters the viewport.
-    Reduced motion (or no IntersectionObserver) => final value immediately. */
+/** Counts a number up once on mount, easing from 0 to the target value.
+    Reduced motion => final value is rendered immediately, no animation. */
 export function useCountUp(target: number | null, ms = 300): number | null {
   const [shown, setShown] = useState<number | null>(
     matchMedia('(prefers-reduced-motion: reduce)').matches ? target : target == null ? null : 0)
@@ -50,7 +50,7 @@ export const TILE_CHART: Record<string, string> = {
 }
 
 function deltaColor(t: HeroTile): string {
-  if (t.delta == null || t.delta_color === 'off') return PALETTE.muted
+  if (t.delta == null || t.delta === 0 || t.delta_color === 'off') return PALETTE.muted
   const up = t.delta > 0
   const good = t.delta_color === 'inverse' ? !up : up
   return good ? PALETTE.up : PALETTE.down
@@ -72,7 +72,7 @@ export function HeroTiles({ tiles, onOpen }: {
               <div className="num text-sm font-medium" style={{ color: deltaColor(t) }}>
                 {fmt.delta(t.delta)}</div>)}
             {t.last_date && (
-              <div className="text-xs text-faint">Data to {t.last_date}</div>)}
+              <div className="text-xs text-faint">Data to {fmtDate(t.last_date)}</div>)}
           </>
         )
         return chartId && t.value != null ? (

@@ -29,3 +29,17 @@ test('empty whats_new hides the strip entirely', () => {
   render(<TodaySection site={site} news={news} onOpen={() => {}} />)
   expect(screen.queryByText(/changed this week/i)).not.toBeInTheDocument()
 })
+
+test('dates render human-formatted, not raw ISO', () => {
+  render(<TodaySection site={site} news={news} onOpen={() => {}} />)
+  expect(screen.getByText(/30 Jun 2026/)).toBeInTheDocument()   // hero tile "Data to …"
+  expect(screen.queryByText(/2026-06-30/)).not.toBeInTheDocument()
+  expect(screen.getByText(/17 Jul 2026/)).toBeInTheDocument()   // top story published
+})
+
+test('a flat delta is not coloured as a move', () => {
+  render(<TodaySection site={site} news={news} onOpen={() => {}} />)
+  // edge fixture: cash_rate tile has delta 0 with delta_color 'inverse'
+  const flat = screen.getByText('+0.00 pp')
+  expect(flat).toHaveStyle({ color: '#575653' })   // PALETTE.muted, not up-green
+})

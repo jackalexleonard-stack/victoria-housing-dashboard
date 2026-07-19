@@ -1,5 +1,5 @@
 import { HeroTiles, TILE_CHART } from './HeroTiles'
-import { TILE_FMT } from '../lib/format'
+import { TILE_FMT, fmtDate } from '../lib/format'
 import type { NewsData, SiteData } from '../lib/types'
 
 export function TodaySection({ site, news, onOpen }: {
@@ -45,7 +45,7 @@ export function TodaySection({ site, news, onOpen }: {
                      className="font-medium text-sm leading-snug hover:text-blue">
                     {item.title}</a>
                   <p className="text-xs text-faint mt-1">
-                    {item.source} · {item.published}
+                    {item.source} · {fmtDate(item.published)}
                     {item.dup_sources.length > 0 &&
                       ` · covered by ${item.dup_sources.length + 1} outlets`}
                   </p>
