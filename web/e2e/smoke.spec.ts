@@ -65,7 +65,16 @@ test('keyboard: tab reaches the filter bar radios', async ({ page }) => {
 
 test('keyboard: modal traps focus and escape closes it', async ({ page }) => {
   await page.goto('/?s=cash_rate')
-  await expect(page.getByRole('dialog')).toBeVisible()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  // Native <dialog>+showModal() is expected to make the rest of the document
+  // inert, so repeated Tab presses should never move focus outside it.
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Tab')
+  const focusInside = await page.evaluate(() => {
+    const d = document.querySelector('dialog[open]')
+    return !!d && d.contains(document.activeElement)
+  })
+  expect(focusInside).toBe(true)
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(page).not.toHaveURL(/s=/)
@@ -82,8 +91,29 @@ test('keyboard: charts are reachable as accessible images', async ({ page }) => 
 
 test('keyboard/motion: reduced motion suppresses the draw-in', async ({ page }) => {
   await page.goto('/')
-  const animated = await page.evaluate(() =>
-    [...document.querySelectorAll('.draw-in')].some(el =>
-      getComputedStyle(el).animationName !== 'none'))
-  expect(animated).toBe(false)   // both projects emulate reduced motion
+  await page.locator('article svg[role="img"]').first().waitFor()
+  // Both projects emulate reducedMotion: 'reduce', so LineChart's `reduced()`
+  // check must gate the class off entirely — assert the DOM invariant
+  // directly rather than a CSS-derived proxy that's empty either way.
+  const drawInCount = await page.evaluate(() => document.querySelectorAll('.draw-in').length)
+  expect(drawInCount).toBe(0)   // JS gate suppressed the animation entirely
+})
+
+// Companion to the reduced-motion test above: proves the draw-in class
+// actually ships by default when motion IS allowed, so the assertion above
+// can't pass simply because the feature was deleted.
+test.describe('with motion enabled', () => {
+  test.use({ reducedMotion: 'no-preference' })
+
+  test('charts animate in when motion is allowed', async ({ page }) => {
+    await page.goto('/')
+    const first = page.locator('article svg[role="img"]').first()
+    await first.waitFor()
+    // drawn only flips true once the IntersectionObserver reports the chart
+    // in view — force that regardless of where it lands in the viewport.
+    await first.scrollIntoViewIfNeeded()
+    await page.waitForFunction(() => document.querySelectorAll('.draw-in').length > 0)
+    const drawIn = await page.evaluate(() => document.querySelectorAll('.draw-in').length)
+    expect(drawIn).toBeGreaterThan(0)
+  })
 })
