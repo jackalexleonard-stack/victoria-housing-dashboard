@@ -40,12 +40,28 @@ export const TILE_FMT: Record<string, Fmt> = {
   oo_lending: f(v => `$${n0(v)}m`, d => sign(d, `${Math.abs(d).toFixed(1)}% qtr`)),
 }
 
+// Normalise a unit string for matching, e.g. 'AUD/week' -> 'aud_per_week'.
+function normUnit(unit: string): string {
+  return unit.trim().toLowerCase().replace(/\//g, '_per_').replace(/\s+/g, '_')
+}
+
 export function fmtUnit(v: number, unit: string): string {
-  if (unit === 'percent') return `${+v.toFixed(2)}%`
-  if (unit === 'index') return v.toLocaleString('en-AU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-  if (unit === 'aud') return `$${n0(v)}`
-  if (unit.startsWith('usd')) return v < 10 ? `US$${v.toFixed(2)}` : `US$${n0(v)}`
-  if (['dwellings', 'applications', 'number', 'persons'].includes(unit)) return n0(v)
+  const u = normUnit(unit)
+  // toLocaleString with only maximumFractionDigits (no minimum) rounds to 2dp
+  // and drops unnecessary trailing zeros, matching Python's round+strip.
+  if (u === 'percent') return `${v.toLocaleString('en-AU', { maximumFractionDigits: 2 })}%`
+  if (u === 'index') return v.toLocaleString('en-AU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  if (u === 'aud') return `$${n0(v)}`
+  if (u === 'aud_million') return `$${n0(v)}m`
+  if (u === 'aud_per_week') return `$${n0(v)}/wk`
+  if (u === 'years') return `${v.toFixed(1)} yrs`
+  if (u === 'usd_per_aud') {  // exchange rate, not a money amount
+    return v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  if (u.startsWith('usd')) {  // any USD-per-commodity money unit
+    return Math.abs(v) < 10 ? `US$${v.toFixed(2)}` : `US$${n0(v)}`
+  }
+  if (['dwellings', 'applications', 'number', 'persons', 'lots'].includes(u)) return n0(v)
   return v.toLocaleString('en-AU', { maximumFractionDigits: 2 })
 }
 

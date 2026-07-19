@@ -85,3 +85,35 @@ def test_fmt_value_units():
     assert findings.fmt_value(4400, "dwellings") == "4,400"
     assert findings.fmt_value(183.4, "index") == "183.4"
     assert findings.fmt_value(820000, "aud") == "$820,000"
+
+
+def test_fmt_value_full_unit_vocabulary():
+    # Regressions observed live on real data.
+    assert findings.fmt_value(3.52655, "percent") == "3.53%"
+    assert findings.fmt_value(580, "AUD/week") == "$580/wk"
+    assert findings.fmt_value(16808.9, "aud_million") == "$16,809m"
+    # percent: round to 2dp, strip trailing zeros.
+    assert findings.fmt_value(4.35, "percent") == "4.35%"
+    assert findings.fmt_value(9.70, "percent") == "9.7%"
+    assert findings.fmt_value(3.0, "percent") == "3%"
+    # dwellings / applications / persons / lots / number: thousands, 0dp.
+    assert findings.fmt_value(4400, "applications") == "4,400"
+    assert findings.fmt_value(4400, "persons") == "4,400"
+    assert findings.fmt_value(4400, "lots") == "4,400"
+    assert findings.fmt_value(4400, "number") == "4,400"
+    # index: 1dp, unchanged.
+    assert findings.fmt_value(183.4, "index") == "183.4"
+    # aud: unchanged.
+    assert findings.fmt_value(820000, "aud") == "$820,000"
+    # years: 1dp with unit suffix.
+    assert findings.fmt_value(6.2, "years") == "6.2 yrs"
+    # USD-money commodity units: 0dp normally, 2dp under 10.
+    assert findings.fmt_value(82, "usd_per_barrel") == "US$82"
+    assert findings.fmt_value(82, "USD/dmtu") == "US$82"
+    assert findings.fmt_value(82, "USD/m3") == "US$82"
+    assert findings.fmt_value(82, "USD/tonne") == "US$82"
+    assert findings.fmt_value(3.2, "usd_per_barrel") == "US$3.20"
+    # usd_per_aud: exchange rate, no $ prefix, 2dp.
+    assert findings.fmt_value(0.7, "usd_per_aud") == "0.70"
+    # unrecognised: sensible 2dp fallback.
+    assert findings.fmt_value(1.23456, "mystery_unit") == "1.23"

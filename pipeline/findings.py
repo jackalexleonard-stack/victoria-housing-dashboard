@@ -121,16 +121,40 @@ def fmt_period(ts: pd.Timestamp, freq: str) -> str:
     return ts.strftime("%d %b %Y")
 
 
+def _norm_unit(unit: str) -> str:
+    """Normalise a unit string for matching, e.g. 'AUD/week' -> 'aud_per_week'."""
+    u = str(unit).strip().lower()
+    u = u.replace("/", "_per_")
+    u = u.replace(" ", "_")
+    return u
+
+
+def _trim(s: str) -> str:
+    """Strip trailing fractional zeros (and a bare trailing '.') from a formatted number."""
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
+
+
 def fmt_value(v: float, unit: str) -> str:
-    if unit == "percent":
-        return f"{v:g}%" if abs(v) < 100 else f"{v:,.0f}%"
-    if unit == "index":
+    u = _norm_unit(unit)
+    if u == "percent":
+        return f"{_trim(f'{v:,.2f}')}%"
+    if u == "index":
         return f"{v:,.1f}"
-    if unit == "aud":
+    if u == "aud":
         return f"${v:,.0f}"
-    if unit in ("usd", "usd_per_tonne", "usd_per_barrel"):
-        return f"US${v:,.2f}" if v < 10 else f"US${v:,.0f}"
-    if unit in ("dwellings", "applications", "number", "persons"):
+    if u == "aud_million":
+        return f"${v:,.0f}m"
+    if u == "aud_per_week":
+        return f"${v:,.0f}/wk"
+    if u == "years":
+        return f"{v:.1f} yrs"
+    if u == "usd_per_aud":  # exchange rate, not a money amount
+        return f"{v:,.2f}"
+    if u.startswith("usd"):  # any USD-per-commodity money unit
+        return f"US${v:,.2f}" if abs(v) < 10 else f"US${v:,.0f}"
+    if u in ("dwellings", "applications", "number", "persons", "lots"):
         return f"{v:,.0f}"
     return f"{v:,.2f}"
 

@@ -37,6 +37,38 @@ test('unit and period formatting', () => {
   expect(ago(null, new Date())).toBe('unknown')
 })
 
+test('fmtUnit covers the full real unit vocabulary', () => {
+  // Regressions observed live on real data.
+  expect(fmtUnit(3.52655, 'percent')).toBe('3.53%')
+  expect(fmtUnit(580, 'AUD/week')).toBe('$580/wk')
+  expect(fmtUnit(16808.9, 'aud_million')).toBe('$16,809m')
+  // percent: round to 2dp, strip trailing zeros.
+  expect(fmtUnit(4.35, 'percent')).toBe('4.35%')
+  expect(fmtUnit(9.70, 'percent')).toBe('9.7%')
+  expect(fmtUnit(3.0, 'percent')).toBe('3%')
+  // dwellings / applications / persons / lots / number: thousands, 0dp.
+  expect(fmtUnit(4400, 'applications')).toBe('4,400')
+  expect(fmtUnit(4400, 'persons')).toBe('4,400')
+  expect(fmtUnit(4400, 'lots')).toBe('4,400')
+  expect(fmtUnit(4400, 'number')).toBe('4,400')
+  // index: 1dp, unchanged.
+  expect(fmtUnit(183.4, 'index')).toBe('183.4')
+  // aud: unchanged.
+  expect(fmtUnit(820000, 'aud')).toBe('$820,000')
+  // years: 1dp with unit suffix.
+  expect(fmtUnit(6.2, 'years')).toBe('6.2 yrs')
+  // USD-money commodity units: 0dp normally, 2dp under 10.
+  expect(fmtUnit(82, 'usd_per_barrel')).toBe('US$82')
+  expect(fmtUnit(82, 'USD/dmtu')).toBe('US$82')
+  expect(fmtUnit(82, 'USD/m3')).toBe('US$82')
+  expect(fmtUnit(82, 'USD/tonne')).toBe('US$82')
+  expect(fmtUnit(3.2, 'usd_per_barrel')).toBe('US$3.20')
+  // usd_per_aud: exchange rate, no $ prefix, 2dp.
+  expect(fmtUnit(0.7, 'usd_per_aud')).toBe('0.70')
+  // unrecognised: sensible 2dp fallback.
+  expect(fmtUnit(1.23456, 'mystery_unit')).toBe('1.23')
+})
+
 test('zero deltas keep the + sign (python :+ parity)', () => {
   expect(TILE_FMT.cash_rate.delta(0)).toBe('+0.00 pp')
   expect(TILE_FMT.vic_approvals.delta(0)).toBe('+0')
