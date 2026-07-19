@@ -1,0 +1,31 @@
+@import 'tailwindcss';
+@import './theme/tokens.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/newsreader/opsz.css';
+
+@theme {
+  --color-bg: var(--bg); --color-bg2: var(--bg2); --color-card: var(--card);
+  --color-line: var(--line); --color-line2: var(--line2);
+  --color-ink: var(--ink); --color-muted: var(--muted); --color-faint: var(--faint);
+  --color-blue: var(--blue); --color-clay: var(--clay);
+  --color-up: var(--up); --color-down: var(--down); --color-warn: var(--warn);
+  --font-ui: 'Inter Variable', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Newsreader Variable', Georgia, serif;
+}
+
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); }
+.num { font-feature-settings: 'tnum' 1; }
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 40;
+}
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important; }
+}
+
+.draw-in { stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: draw 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .draw-in { animation: none; stroke-dashoffset: 0; } }

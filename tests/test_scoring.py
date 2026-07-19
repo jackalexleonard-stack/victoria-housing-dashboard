@@ -3,7 +3,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from app import scoring
+from pipeline import scoring
 
 TODAY = date(2026, 7, 17)
 

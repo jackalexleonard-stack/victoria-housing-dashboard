@@ -1,0 +1,83 @@
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import siteEdge from '../test/fixtures/site.edge.json'
+import { assertSiteData } from '../lib/types'
+import { DetailView } from './DetailView'
+
+const site = assertSiteData(siteEdge)
+const NOW = new Date('2026-07-18T00:00:00Z')
+const chart = site.charts.find(c => c.id === 'cash_rate')!
+
+beforeAll(() => {
+  vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} })
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+  HTMLDialogElement.prototype.showModal ??= function () { this.open = true }
+  HTMLDialogElement.prototype.close ??= function () { this.open = false }
+})
+
+function renderView(over: Partial<Parameters<typeof DetailView>[0]> = {}) {
+  const onClose = vi.fn(); const onCompare = vi.fn()
+  render(<DetailView site={site} chart={chart} finding="The cash rate held"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={onClose} onCompare={onCompare} {...over} />)
+  return { onClose, onCompare }
+}
+
+test('shows provenance and stat block', () => {
+  renderView()
+  expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('The cash rate held')
+  expect(screen.getByText('RBA F1.1')).toHaveAttribute('href', 'https://rba.gov.au')
+  expect(screen.getByText(/Data to Jun 2026/)).toBeInTheDocument()
+  expect(screen.getByText(/next update ~/)).toBeInTheDocument()
+})
+
+test('close button fires onClose', async () => {
+  const { onClose } = renderView()
+  await userEvent.click(screen.getByRole('button', { name: /close/i }))
+  expect(onClose).toHaveBeenCalled()
+})
+
+test('copy link writes the current url and confirms', async () => {
+  const write = vi.fn().mockResolvedValue(undefined)
+  Object.assign(navigator, { clipboard: { writeText: write } })
+  renderView()
+  await userEvent.click(screen.getByRole('button', { name: /copy link/i }))
+  expect(write).toHaveBeenCalledWith(location.href)
+  expect(await screen.findByText(/copied/i)).toBeInTheDocument()
+})
+
+test('download csv builds a blob from the visible lines', async () => {
+  const spy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x')
+  renderView()
+  await userEvent.click(screen.getByRole('button', { name: /download csv/i }))
+  const blob = spy.mock.calls[0][0] as Blob
+  expect(await blob.text()).toContain('date,series,value')
+  expect(await blob.text()).toContain('2026-06-30')
+  spy.mockRestore()
+})
+
+test('compare picker offers other charts', async () => {
+  const { onCompare } = renderView()
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /compare/i }),
+                                'median_rent')
+  expect(onCompare).toHaveBeenCalledWith('median_rent')
+})
+
+test('failed series surfaces the raw source error', () => {
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding="No recent data — source currently unavailable"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  // The finding text ("No recent data — source currently unavailable") is
+  // also shown verbatim in the fallback <p> below the missing chart, so
+  // scope the query to that paragraph to avoid matching the <h2> too.
+  expect(screen.getByText(/source currently unavailable/i, { selector: 'p' })).toBeInTheDocument()
+  expect(screen.getByText('HTTPError')).toBeInTheDocument()
+})
+
+test('compare series formats with its own unit, not the primary chart’s', async () => {
+  renderView({ compare: 'median_rent' })
+  await userEvent.click(screen.getByText(/view data table/i))
+  expect(screen.getByText('$580')).toBeInTheDocument()
+  expect(screen.queryByText('580.00%')).not.toBeInTheDocument()
+})

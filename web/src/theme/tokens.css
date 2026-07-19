@@ -1,0 +1,11 @@
+:root {
+  --bg: #FAF7EF; --bg2: #F2F0E5; --card: #FFFEFA;
+  --line: #E6E4D9; --line2: #DAD8CE;
+  --ink: #1C1B1A; --muted: #575653; --faint: #6F6E69;
+  --blue: #205EA6; --clay: #BC5215;
+  --up: #00824D; --down: #AF3029; --warn: #7A5900;
+  --chip-up: #DDF7CE; --chip-down: #FFE0E0; --chip-warn: #FFEECC;
+  --zeroline: #B7B5AC;
+  --font-ui: 'Inter Variable', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Newsreader Variable', Georgia, serif;
+}
