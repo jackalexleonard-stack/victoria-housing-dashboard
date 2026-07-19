@@ -3,7 +3,7 @@ export const PALETTE = {
   line: '#E6E4D9', line2: '#DAD8CE',
   ink: '#1C1B1A', muted: '#575653', faint: '#6F6E69',
   blue: '#205EA6', clay: '#BC5215',
-  up: '#00824D', down: '#AF3029', warn: '#AD8301',
+  up: '#00824D', down: '#AF3029', warn: '#7A5900',
   chip_up: '#DDF7CE', chip_down: '#FFE0E0', chip_warn: '#FFEECC',
   zeroline: '#B7B5AC',
 } as const
