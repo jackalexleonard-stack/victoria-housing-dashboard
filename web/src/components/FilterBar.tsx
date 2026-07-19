@@ -9,11 +9,25 @@ const GEO_SHORT: Record<Geo, string> = {
 function Segmented<T extends string>({ options, value, label, format, onPick }: {
   options: readonly T[]; value: T; label: string
   format: (o: T) => string; onPick: (o: T) => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const i = options.indexOf(value)
+    let next: number | null = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % options.length
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + options.length) % options.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = options.length - 1
+    if (next === null) return
+    e.preventDefault()
+    onPick(options[next])
+    ref.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
+  }
   return (
-    <div role="radiogroup" aria-label={label}
+    <div ref={ref} role="radiogroup" aria-label={label} onKeyDown={onKeyDown}
          className="inline-flex rounded-md border border-line overflow-hidden">
       {options.map(o => (
         <button key={o} role="radio" aria-checked={o === value} type="button"
+                tabIndex={o === value ? 0 : -1}
                 onClick={() => onPick(o)}
                 className={`px-2.5 py-1 text-xs num ${o === value
                   ? 'bg-blue/10 text-blue font-medium' : 'text-muted hover:text-ink'}`}>
