@@ -8,7 +8,7 @@ export function TodaySection({ site, news, onOpen }: {
     .map(u => news.items.find(i => i.url === u))
     .filter(i => i != null)
   return (
-    <section id="today" aria-label="Today">
+    <section aria-label="Today">
       <HeroTiles tiles={site.hero} onOpen={onOpen} />
       {site.whats_new.length > 0 && (
         <div className="mt-4">

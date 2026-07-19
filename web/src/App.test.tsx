@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from './test/fixtures/site.edge.json'
 import App from './App'
@@ -20,6 +20,14 @@ function mockFetch(site: unknown = siteEdge) {
     json: async () => (String(url).includes('news') ? news : site),
   })))
 }
+
+test('shows a skeleton, not a spinner, before data loads', () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+  render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+  const main = screen.getByRole('main')
+  expect(main.querySelector('[aria-busy="true"]')).toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+})
 
 test('renders masthead, sections and a chart finding after load', async () => {
   history.replaceState(null, '', '/')
@@ -49,7 +57,8 @@ test('deep link opens the detail view on load', async () => {
   mockFetch()
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
   await waitFor(() =>
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/held at 3.85%/))
+    expect(within(screen.getByRole('dialog')).getByRole('heading', { level: 2 }))
+      .toHaveTextContent(/held at 3.85%/))
 })
 
 test('clicking a chart card opens detail and url gains ?s=', async () => {

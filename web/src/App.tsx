@@ -4,6 +4,7 @@ import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale } from './lib/staleness'
 import { fmtDate } from './lib/format'
 import { useUrlState } from './lib/urlState'
+import { PALETTE } from './theme/tokens'
 import { Masthead } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
 import { TodaySection } from './components/TodaySection'
@@ -81,7 +82,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       <Masthead generatedAt={site.generated_at} failedCount={failedCount} />
       {siteIsStale(site.generated_at, now) && (
         <p role="alert" className="text-sm rounded-md px-3 py-2 mb-3"
-           style={{ background: '#FFEECC', color: '#AD8301' }}>
+           style={{ background: PALETTE.chip_warn, color: PALETTE.warn }}>
           The daily update hasn't run since {fmtDate(site.generated_at)} — data may be stale.
         </p>
       )}
@@ -95,7 +96,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
         return (
           <section key={id} id={id} ref={el => { sectionsRef.current[id] = el }}
                    className="pt-10" aria-label={label}>
-            <h3 className="font-display text-2xl mb-4">{label}</h3>
+            <h2 className="font-display text-2xl mb-4">{label}</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {charts.map((c, i) => (
                 <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
@@ -110,7 +111,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       })}
       <section id="news" ref={el => { sectionsRef.current.news = el }}
                className="pt-10" aria-label="News">
-        <h3 className="font-display text-2xl mb-4">News</h3>
+        <h2 className="font-display text-2xl mb-4">News</h2>
         <NewsSection news={news} />
       </section>
       <footer className="text-xs text-faint border-t border-line mt-12 pt-4">
