@@ -20,6 +20,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so `git pull --rebase` below is reliable
 
       - uses: actions/setup-python@v5
         with:
