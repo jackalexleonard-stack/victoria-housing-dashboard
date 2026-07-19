@@ -1,8 +1,8 @@
 import { fmtDate, fmtUnit } from '../lib/format'
 import type { Pt } from '../lib/types'
 
-export function DataTable({ lines, unit }: {
-  lines: { name: string; pts: Pt[] }[]; unit: string }) {
+export function DataTable({ lines, unit, unitByName }: {
+  lines: { name: string; pts: Pt[] }[]; unit: string; unitByName?: Record<string, string> }) {
   const dates = [...new Set(lines.flatMap(l => l.pts.map(p => p.date)))].sort()
   return (
     <details className="mt-2">
@@ -19,8 +19,9 @@ export function DataTable({ lines, unit }: {
                 <td className="p-1">{fmtDate(d)}</td>
                 {lines.map(l => {
                   const p = l.pts.find(p => p.date === d)
+                  const u = unitByName?.[l.name] ?? unit
                   return <td key={l.name} className="text-right p-1">
-                    {p ? fmtUnit(p.value, unit) : '—'}</td>
+                    {p ? fmtUnit(p.value, u) : '—'}</td>
                 })}
               </tr>
             ))}

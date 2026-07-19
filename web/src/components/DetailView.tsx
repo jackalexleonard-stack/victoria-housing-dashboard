@@ -37,10 +37,13 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   const unit = entry ? Object.values(entry.units)[0] ?? '' : ''
   const st = entry ? staleness(entry, now) : null
   const cmpChart = compare ? site.charts.find(c => c.id === compare) : null
+  const cmpEntry = cmpChart ? site.series[cmpChart.series_id] : null
+  const cmpUnit = cmpEntry ? Object.values(cmpEntry.units)[0] ?? '' : ''
   const cmpLines = cmpChart
     ? chartPoints(site, cmpChart, localRange, geo, now).lines.slice(0, 1)
       .map(l => ({ ...l, name: cmpChart.title }))
     : []
+  const unitByName = cmpChart ? { [cmpChart.title]: cmpUnit } : undefined
   const primary = lines[0]?.pts ?? []
   const latest = primary[primary.length - 1]
   const prev = primary[primary.length - 2]
@@ -55,8 +58,14 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
     URL.revokeObjectURL(url)
   }
   const copy = async () => {
-    await navigator.clipboard.writeText(location.href)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(location.href)
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard write can reject (permissions, unsupported context, etc.) —
+      // fail quietly and leave the button label unchanged rather than
+      // throwing an unhandled promise rejection.
+    }
   }
 
   return (
@@ -85,6 +94,8 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
                      unit={unit} markers={chart.markers} label={finding} height={280}
                      touchScrub
                      y2Lines={cmpChart ? cmpLines.map(l => l.name) : undefined}
+                     y2Percent={cmpChart?.percent}
+                     unitByName={unitByName}
                      annotations={chart.annotate
                        ? site.annotations.cash_rate_moves.map(m => ({
                            date: m.date, label: `${m.delta > 0 ? '+' : ''}${m.delta}` }))
@@ -105,7 +116,8 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
                <dd>{fmtPeriod(latest.date, entry?.meta.frequency ?? null)}</dd></div>
         </dl>
       )}
-      {lines.length > 0 && <DataTable lines={[...lines, ...cmpLines]} unit={unit} />}
+      {lines.length > 0 &&
+        <DataTable lines={[...lines, ...cmpLines]} unit={unit} unitByName={unitByName} />}
       <p className="flex flex-wrap items-center gap-2 text-xs text-faint mt-3">
         {entry?.meta.source_url &&
           <a href={entry.meta.source_url} target="_blank" rel="noreferrer"

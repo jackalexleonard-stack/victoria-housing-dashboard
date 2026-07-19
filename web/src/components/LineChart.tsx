@@ -15,6 +15,8 @@ export interface LineChartProps {
   touchScrub?: boolean   // false on cards (tap opens detail); true in DetailView
   height?: number
   y2Lines?: string[]   // names plotted against an independent right-hand axis
+  y2Percent?: boolean  // whether the y2 axis's series is a percent unit
+  unitByName?: Record<string, string>   // per-line unit override for the tooltip
 }
 
 const reduced = () =>
@@ -24,7 +26,7 @@ const reduced = () =>
 export function LineChart({ lines, percent, unit, label, markers = false,
                             annotations = [], interactive = true,
                             touchScrub = false, height = 220,
-                            y2Lines }: LineChartProps) {
+                            y2Lines, y2Percent, unitByName }: LineChartProps) {
   const wrap = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(600)
   const [drawn, setDrawn] = useState(reduced())
@@ -43,7 +45,8 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   }, [])
 
   const b = useMemo(() => buildChart(lines, width, height,
-    { colorway: COLORWAY, percent, y2Lines }), [lines, width, height, percent, y2Lines])
+    { colorway: COLORWAY, percent, y2Lines, y2Percent }),
+    [lines, width, height, percent, y2Lines, y2Percent])
   const colorByName = new Map(b.paths.map(p => [p.name, p.color]))
   // Points on a y2 line read off the right-hand scale; everything else uses
   // the primary (left) scale. Falls back to `y` whenever no y2 axis exists.
@@ -122,8 +125,15 @@ export function LineChart({ lines, percent, unit, label, markers = false,
             choreography on viewport entry. Never gate visibility on the
             IntersectionObserver: if it doesn't fire (headless, hidden tab),
             the chart must still render. */}
-        {b.flat.filter(p => markers ||
-            b.flat.filter(q => q.name === p.name).length < 2)
+        {b.flat.filter(p => {
+            const onY2 = !!(b.y2 && y2Lines?.includes(p.name))
+            // A y2/compare line always gets its distinguishing square marker,
+            // regardless of the primary chart's `markers` flag — that flag
+            // only governs y1 marker behaviour (explicit opt-in, or the
+            // single-point auto-marker fallback).
+            if (onY2) return true
+            return markers || b.flat.filter(q => q.name === p.name).length < 2
+          })
           .map((p, i) => {
             const onY2 = !!(b.y2 && y2Lines?.includes(p.name))
             const cx = b.x(p.t); const cy = yFor(p.name)(p.value)
@@ -155,7 +165,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
           borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
           <div style={{ color: PALETTE.faint }}>{fmtDate(hover.date)}</div>
           <div className="num" style={{ fontWeight: 500 }}>
-            {fmtUnit(hover.value, unit)}
+            {fmtUnit(hover.value, unitByName?.[hover.name] ?? unit)}
             <span style={{ color: PALETTE.muted, fontWeight: 400 }}> {hover.name}</span>
           </div>
         </div>

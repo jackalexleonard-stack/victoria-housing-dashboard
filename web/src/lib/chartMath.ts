@@ -32,7 +32,10 @@ export function buildChart(
           // Lines whose `name` is in y2Lines are plotted against a second,
           // independently-scaled right-hand axis (e.g. a compare series in
           // different units) instead of the primary left axis.
-          y2Lines?: string[] },
+          y2Lines?: string[]
+          // Whether the y2 axis's own series is a percent unit — mirrors
+          // `percent` but applies to the right-hand tick labels only.
+          y2Percent?: boolean },
 ): Built {
   const y2Names = new Set(opts.y2Lines ?? [])
   // Reserve extra room for right-axis tick labels only when a right axis is
@@ -64,7 +67,8 @@ export function buildChart(
   })
   const yTicks = y.ticks(4).map(v => ({
     y: y(v), label: opts.percent ? `${+v.toFixed(2)}%` : v.toLocaleString('en-AU') }))
-  const y2Ticks = y2 ? y2.ticks(4).map(v => ({ y: y2(v), label: v.toLocaleString('en-AU') })) : []
+  const y2Ticks = y2 ? y2.ticks(4).map(v => ({
+    y: y2(v), label: opts.y2Percent ? `${+v.toFixed(2)}%` : v.toLocaleString('en-AU') })) : []
   const xTicks = x.ticks(4).map(d => ({
     x: x(d), label: `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}` }))
   flat.sort((a, b) => a.t - b.t)

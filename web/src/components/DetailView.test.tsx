@@ -62,3 +62,22 @@ test('compare picker offers other charts', async () => {
                                 'median_rent')
   expect(onCompare).toHaveBeenCalledWith('median_rent')
 })
+
+test('failed series surfaces the raw source error', () => {
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding="No recent data — source currently unavailable"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  // The finding text ("No recent data — source currently unavailable") is
+  // also shown verbatim in the fallback <p> below the missing chart, so
+  // scope the query to that paragraph to avoid matching the <h2> too.
+  expect(screen.getByText(/source currently unavailable/i, { selector: 'p' })).toBeInTheDocument()
+  expect(screen.getByText('HTTPError')).toBeInTheDocument()
+})
+
+test('compare series formats with its own unit, not the primary chart’s', async () => {
+  renderView({ compare: 'median_rent' })
+  await userEvent.click(screen.getByText(/view data table/i))
+  expect(screen.getByText('$580')).toBeInTheDocument()
+  expect(screen.queryByText('580.00%')).not.toBeInTheDocument()
+})
