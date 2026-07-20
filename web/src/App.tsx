@@ -29,11 +29,60 @@ function Skeleton() {
   )
 }
 
+// A section <h2> that doubles as a disclosure control: the heading text
+// stays a real heading (screen-reader landmark navigation still works) while
+// the button carries the toggle semantics and the rotating chevron. The
+// icon span is aria-hidden so the button's accessible name is just the
+// label — the global prefers-reduced-motion rule already zeroes out the
+// rotation transition, so no extra handling is needed here.
+function SectionHeading({ label, open, onToggle }: {
+  label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <h2 className="font-display text-2xl mb-4">
+      <button type="button" onClick={onToggle} aria-expanded={open}
+              className="flex items-center gap-1.5 text-left hover:text-blue">
+        {label}
+        <span aria-hidden="true"
+              className={`material-symbols-rounded text-xl text-muted transition-transform duration-200 ${
+                open ? '' : '-rotate-90'}`}>
+          expand_more
+        </span>
+      </button>
+    </h2>
+  )
+}
+
+const COLLAPSED_KEY = 'vh.collapsed'
+
+// Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
+// to "everything expanded" rather than crash the app over a persistence nicety.
+function readCollapsed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function writeCollapsed(ids: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...ids]))
+  } catch {
+    // ignore — collapse state just won't persist this session
+  }
+}
+
 export default function App({ now = new Date() }: { now?: Date }) {
   const [data, setData] = useState<{ site: SiteData; news: NewsData } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { state, setFilters, openDetail, closeDetail, setCompare } = useUrlState()
   const [active, setActive] = useState('today')
+  const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed)
+  // Set by jump() when the target section was collapsed: the section body
+  // must mount before scrollIntoView measures anything, so the actual scroll
+  // happens in an effect that runs after that render commits.
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null)
   const sectionsRef = useRef<Record<string, HTMLElement | null>>({})
 
   const load = () => {
@@ -51,6 +100,15 @@ export default function App({ now = new Date() }: { now?: Date }) {
     Object.values(sectionsRef.current).forEach(el => el && io.observe(el))
     return () => io.disconnect()
   }, [data])
+
+  // Runs after the freshly-expanded section's body has actually mounted, so
+  // scrollIntoView measures real layout rather than the still-collapsed one.
+  useEffect(() => {
+    if (scrollTarget == null) return
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    sectionsRef.current[scrollTarget]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
+    setScrollTarget(null)
+  }, [scrollTarget])
 
   const detailChart = useMemo(() =>
     data?.site.charts.find(c => c.id === state.detail) ?? null, [data, state.detail])
@@ -71,7 +129,22 @@ export default function App({ now = new Date() }: { now?: Date }) {
   const { site, news } = data
   const failedCount = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed').length
+  const toggleSection = (id: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      writeCollapsed(next)
+      return next
+    })
+  }
   const jump = (id: string) => {
+    if (collapsed.has(id)) {
+      // Expand first — the scroll itself happens once the body has mounted
+      // (see the scrollTarget effect above), not synchronously here.
+      toggleSection(id)
+      setScrollTarget(id)
+      return
+    }
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     sectionsRef.current[id]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
   }
@@ -94,26 +167,30 @@ export default function App({ now = new Date() }: { now?: Date }) {
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
+        const open = !collapsed.has(id)
         return (
           <section key={id} id={id} ref={el => { sectionsRef.current[id] = el }}
                    className="pt-10 scroll-mt-28" aria-label={label}>
-            <h2 className="font-display text-2xl mb-4">{label}</h2>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {charts.map((c, i) => (
-                <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
-                  <ChartCard site={site} chart={c} finding={site.findings[c.id]}
-                             range={state.range} geo={state.geo} now={now}
-                             onOpen={openDetail} />
-                </div>
-              ))}
-            </div>
+            <SectionHeading label={label} open={open} onToggle={() => toggleSection(id)} />
+            {open && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                {charts.map((c, i) => (
+                  <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
+                    <ChartCard site={site} chart={c} finding={site.findings[c.id]}
+                               range={state.range} geo={state.geo} now={now}
+                               onOpen={openDetail} />
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )
       })}
       <section id="news" ref={el => { sectionsRef.current.news = el }}
                className="pt-10 scroll-mt-28" aria-label="News">
-        <h2 className="font-display text-2xl mb-4">News</h2>
-        <NewsSection news={news} />
+        <SectionHeading label="News" open={!collapsed.has('news')}
+                         onToggle={() => toggleSection('news')} />
+        {!collapsed.has('news') && <NewsSection news={news} />}
       </section>
       <footer className="text-xs text-faint border-t border-line mt-12 pt-4">
         Free public sources, updated daily by GitHub Actions ·{' '}

@@ -92,3 +92,72 @@ test('masthead only counts sources that are actually overdue, singular wording',
   expect(await screen.findByText('1 source unavailable')).toBeInTheDocument()
   expect(screen.queryByText(/sources unavailable/)).not.toBeInTheDocument()
 })
+
+describe('collapsible sections', () => {
+  beforeEach(() => localStorage.clear())
+
+  test('toggling a section header hides its body and flips aria-expanded', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    // Sections have an accessible name via aria-label, so a plain <section>
+    // gets the implicit 'region' role — scope through that rather than a raw
+    // CSS attribute selector (jsdom's attribute-selector matcher chokes on a
+    // literal '&' in the value, e.g. "Money & credit", and always returns null).
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const toggle = within(section).getByRole('button', { name: 'Money & credit' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+
+    await userEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+  })
+
+  test('collapsed state persists in localStorage across remounts', async () => {
+    history.replaceState(null, '', '/')
+    localStorage.setItem('vh.collapsed', JSON.stringify(['money']))
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const toggle = within(section).getByRole('button', { name: 'Money & credit' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+  })
+
+  test('jumping to a collapsed section expands it and then scrolls', async () => {
+    history.replaceState(null, '', '/')
+    localStorage.setItem('vh.collapsed', JSON.stringify(['money']))
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const nav = screen.getByRole('navigation', { name: /filters and sections/i })
+    const chip = within(nav).getByRole('button', { name: 'Money & credit' })
+
+    await userEvent.click(chip)
+
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const toggle = within(section).getByRole('button', { name: 'Money & credit' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByText(/held at 3.85%/)).toBeInTheDocument()
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  test('a localStorage read failure degrades to all sections expanded, no crash', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    expect(within(section).getByRole('button', { name: 'Money & credit' }))
+      .toHaveAttribute('aria-expanded', 'true')
+    spy.mockRestore()
+  })
+})
