@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
-import { chartPoints } from '../lib/selectors'
+import { chartPoints, lineName } from '../lib/selectors'
 import { staleness, nextUpdate } from '../lib/staleness'
 import { ago, fmtPeriod, fmtUnit } from '../lib/format'
 import { RANGES, type Geo, type Range } from '../lib/urlState'
@@ -34,16 +34,32 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
 
   const entry = site.series[chart.series_id]
   const { lines, scopeNote } = chartPoints(site, chart, localRange, geo, now)
-  const unit = entry ? Object.values(entry.units)[0] ?? '' : ''
+  // See ChartCard.tsx: a series can carry mixed units across its metrics, so
+  // one scalar unit for the whole chart would misformat whichever metric
+  // isn't first. Build a per-line unit map from the primary chart's own
+  // metrics (or every metric the series has, when the chart doesn't name
+  // specific ones) and merge in the compare chart's unit under its line's
+  // name. The scalar `unit`/`cmpUnit` stay as fallbacks, derived from each
+  // chart's primary metric where identifiable, else the first unit found.
+  const chartMetrics = chart.metrics ?? (entry ? Object.keys(entry.units) : [])
+  const primaryUnits = entry
+    ? Object.fromEntries(chartMetrics.map(m => [lineName(m), entry.units[m] ?? '']))
+    : {}
+  const unit = entry ? (entry.units[chartMetrics[0]] ?? Object.values(entry.units)[0] ?? '') : ''
   const st = entry ? staleness(entry, now) : null
   const cmpChart = compare ? site.charts.find(c => c.id === compare) : null
   const cmpEntry = cmpChart ? site.series[cmpChart.series_id] : null
-  const cmpUnit = cmpEntry ? Object.values(cmpEntry.units)[0] ?? '' : ''
+  const cmpMetrics = cmpChart ? (cmpChart.metrics ?? (cmpEntry ? Object.keys(cmpEntry.units) : [])) : []
+  const cmpUnit = cmpEntry ? (cmpEntry.units[cmpMetrics[0]] ?? Object.values(cmpEntry.units)[0] ?? '') : ''
   const cmpLines = cmpChart
     ? chartPoints(site, cmpChart, localRange, geo, now).lines.slice(0, 1)
       .map(l => ({ ...l, name: cmpChart.title }))
     : []
-  const unitByName = cmpChart ? { [cmpChart.title]: cmpUnit } : undefined
+  const unitByName = cmpChart ? { ...primaryUnits, [cmpChart.title]: cmpUnit } : primaryUnits
+  // The stat block (Latest / vs previous / vs year ago) always describes the
+  // primary chart's first line, so it should format with that line's own
+  // unit rather than the chart-wide scalar fallback.
+  const statUnit = (lines[0] && unitByName[lines[0].name]) ?? unit
   const primary = lines[0]?.pts ?? []
   const latest = primary[primary.length - 1]
   const prev = primary[primary.length - 2]
@@ -107,11 +123,11 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
       {latest && (
         <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm num my-3">
           <div><dt className="text-xs text-faint">Latest</dt>
-               <dd className="font-medium">{fmtUnit(latest.value, unit)}</dd></div>
+               <dd className="font-medium">{fmtUnit(latest.value, statUnit)}</dd></div>
           {prev && <div><dt className="text-xs text-faint">vs previous</dt>
-               <dd>{fmtUnit(latest.value - prev.value, unit).replace(/^/, latest.value >= prev.value ? '+' : '')}</dd></div>}
+               <dd>{fmtUnit(latest.value - prev.value, statUnit).replace(/^/, latest.value >= prev.value ? '+' : '')}</dd></div>}
           {yearAgo && <div><dt className="text-xs text-faint">vs year ago</dt>
-               <dd>{fmtUnit(latest.value - yearAgo.value, unit).replace(/^/, latest.value >= yearAgo.value ? '+' : '')}</dd></div>}
+               <dd>{fmtUnit(latest.value - yearAgo.value, statUnit).replace(/^/, latest.value >= yearAgo.value ? '+' : '')}</dd></div>}
           <div><dt className="text-xs text-faint">Period</dt>
                <dd>{fmtPeriod(latest.date, entry?.meta.frequency ?? null)}</dd></div>
         </dl>

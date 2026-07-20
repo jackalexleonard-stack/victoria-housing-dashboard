@@ -15,6 +15,13 @@ const FALLBACK: Record<Geo, string[]> = {
 
 const YEARS: Record<Exclude<Range, 'all'>, number> = { '1y': 1, '3y': 3, '5y': 5, '10y': 10 }
 
+// Single source of truth for turning a raw metric key into a display-ready
+// line name — used both to build chart lines and to key per-metric unit
+// lookups (unitByName), so the two always agree on naming.
+export function lineName(metric: string): string {
+  return metric.replaceAll('_', ' ')
+}
+
 function cutoff(range: Range, now: Date): number {
   if (range === 'all') return -Infinity
   const d = new Date(now)
@@ -49,7 +56,7 @@ export function chartPoints(site: SiteData, chart: ChartSpec, range: Range,
                    pts: pts.filter(p => p.region === region) })
   } else {
     for (const metric of [...new Set(pts.map(p => p.metric))])
-      lines.push({ name: metric.replaceAll('_', ' '),
+      lines.push({ name: lineName(metric),
                    pts: pts.filter(p => p.metric === metric)
                           .sort((a, b) => a.date.localeCompare(b.date)) })
   }

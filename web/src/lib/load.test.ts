@@ -16,7 +16,9 @@ test('edge fixture passes: failed series with and without points', () => {
   expect(site.series.vic_auctions.status).toBe('failed')
   expect(site.series.vic_auctions.points).toHaveLength(0)
   expect(site.series.vic_rents.status).toBe('failed')
-  expect(site.series.vic_rents.points).toHaveLength(1)
+  // vic_rents now carries two metrics (median_rent + rent_growth_annual) so
+  // F4's mixed-unit fixture point is included — see selectors/ChartCard tests.
+  expect(site.series.vic_rents.points).toHaveLength(2)
 })
 
 test('guard fails loudly on wrong shapes', () => {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from '../lib/types'
@@ -80,4 +80,18 @@ test('compare series formats with its own unit, not the primary chart’s', asyn
   await userEvent.click(screen.getByText(/view data table/i))
   expect(screen.getByText('$580')).toBeInTheDocument()
   expect(screen.queryByText('580.00%')).not.toBeInTheDocument()
+})
+
+test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {
+  // Same fixture quirk as ChartCard's test: vic_rents declares
+  // rent_growth_annual (percent) before median_rent (aud) in its units map.
+  // The median_rent chart's stat block ("Latest") must still read as a
+  // dollar figure, not the series' first-declared unit.
+  const medianRentChart = site.charts.find(c => c.id === 'median_rent')!
+  render(<DetailView site={site} chart={medianRentChart} finding="The median rent held at $580/wk"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  const latest = screen.getByText('Latest').closest('div')!
+  expect(within(latest).getByText('$580')).toBeInTheDocument()
+  expect(within(latest).queryByText(/580.*%/)).not.toBeInTheDocument()
 })

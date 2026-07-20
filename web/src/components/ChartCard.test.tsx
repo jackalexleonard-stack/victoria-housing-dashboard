@@ -45,3 +45,17 @@ test('scope chip appears when geo falls back', () => {
                     range="all" geo="regional_vic" now={NOW} onOpen={() => {}} />)
   expect(screen.getByText('Melbourne', { selector: 'span' })).toBeInTheDocument()
 })
+
+test('mixed-unit series formats each line with its own metric unit, not the series-wide first one', async () => {
+  // vic_rents carries rent_growth_annual (percent) FIRST in units and
+  // median_rent (aud) second — the old single-scalar-unit code picked
+  // whichever unit sat first in the object, so a $-denominated metric could
+  // render with a % suffix if a percent metric happened to be declared
+  // earlier. The median_rent chart only plots the median_rent metric, so
+  // its table cell must read as a dollar figure regardless of unit order.
+  render(<ChartCard site={site} chart={chart('median_rent')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  await userEvent.click(screen.getByText(/view data table/i))
+  expect(screen.getByText('$580')).toBeInTheDocument()
+  expect(screen.queryByText('580%')).not.toBeInTheDocument()
+})
