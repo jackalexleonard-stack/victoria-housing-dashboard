@@ -1,9 +1,30 @@
 """DFFH / Homes Victoria Rental Report (``vic_rents``).
 
-Quarterly Victorian rental data. The report's data workbook ("Tables from Rental
-Report - <Quarter> <Year>.xlsx") is linked from the report index with the quarter
-in the URL slug, so we discover the current link on each run rather than
-hardcoding it.
+Quarterly Victorian rental data, built from TWO workbooks linked off the same
+report index (the quarter is baked into each URL slug, so we discover both
+links fresh on each run rather than hardcoding them):
+
+* "Tables from Rental Report - <Quarter> <Year>.xlsx" — ``fetch_tables`` /
+  ``parse_tables``. Time series (full history) plus a dwelling-type snapshot:
+  * ``rent_growth_annual`` — Rent Index annual % change        (Fig 1 source, 2000Q2->)
+  * ``affordable_share``   — affordable lettings % of new lets (Fig 8 source, 2020Q3->)
+  * ``rent_<size>_<type>`` — median rent by dwelling type       (Table 3, report quarter only)
+* "Quarterly median rents by Local Government Area.xlsx" — ``fetch_lga_medians`` /
+  ``parse_lga_medians``. The ``All Properties`` sheet's METRO NON-METRO
+  aggregate rows give the overall median rent for EVERY quarter back to
+  Jun 1999 (~106 quarters), so:
+  * ``median_rent`` — overall median rent, new lettings, full history (Metro/Non-Metro rows)
+  comes entirely from this workbook. (Table 1 in the other workbook has its own,
+  current-quarter-only "Melbourne"/"Regional Victoria" median rent, on a
+  slightly different statistical-region grouping than this workbook's LGA-based
+  Metro/Non-Metro split — the two figures are close but not identical, so to
+  avoid two competing sources for the same metric we no longer read Table 1
+  at all.)
+
+``fetch_vic_rents``/``parse_vic_rents`` (used by the ``vic_rents`` Series below)
+fetch and parse both workbooks and concatenate the tidy rows. Dwelling-type
+history (the 6 dwelling sheets in the LGA workbook) is out of scope for now —
+those metrics remain current-quarter-only snapshots from Table 3.
 
 USER-AGENT NOTE: www.dffh.vic.gov.au tarpits/blocks non-browser User-Agents — the
 plain pipeline UA times out, and even a browser UA with our identifier appended is
@@ -12,19 +33,12 @@ default UA out of necessity. We stay polite in every other respect: one run/day,
 robots.txt permits these paths (/publications/ and the data files aren't
 disallowed), and the usual timeouts + retries apply.
 
-``vic_rents`` is built for metro (Melbourne) vs regional Victoria from:
-* ``rent_growth_annual`` — Rent Index annual % change        (Fig 1 source, 2000Q2->)
-* ``affordable_share``   — affordable lettings % of new lets (Fig 8 source, 2020Q3->)
-* ``median_rent``        — overall median rent, new lettings  (Table 1, report quarter)
-* ``rent_<size>_<type>`` — median rent by dwelling type       (Table 3, report quarter)
-The two time series give immediate history; the two snapshot tables carry only the
-report's own quarter, and the pipeline appends a fresh point each quarter (git
-history preserves every vintage).
-
 Discovery:  GET https://www.dffh.vic.gov.au/publications/rental-report
             -> href matching 'tables-rental-report-<quarter>-excel'
-            -> GET that URL (redirects to the .xlsx)
-Verified live 2026-07-16 (September Quarter 2025 report).
+               and href matching 'quarterly-median-rents-local-government-area-<quarter>-excel'
+            -> GET each URL (redirects to its .xlsx)
+Verified live 2026-07-16 (September Quarter 2025 report; LGA-medians discovery
+verified live 2026-07-21).
 """
 from __future__ import annotations
 
@@ -45,8 +59,12 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
 _TABLES_RE = re.compile(r'href="([^"]*tables-rental-report-[^"]*-excel)"', re.I)
+_LGA_MEDIANS_RE = re.compile(
+    r'href="([^"]*quarterly-median-rents-local-government-area-[^"]*-excel)"', re.I
+)
 _TITLE_RE = re.compile(r"(march|june|september|december)\s+quarter\s+(\d{4})", re.I)
 _QUARTER_MONTH = {"march": 3, "june": 6, "september": 9, "december": 12}
+_QUARTER_LABEL_FMT = "%b %Y"  # 'Jun 1999' as used by the LGA-medians header row
 
 # Table 3 row labels -> tidy metric / region
 _DWELLING_METRIC = {
@@ -79,9 +97,35 @@ def discover_tables_url(index_html: str) -> str:
     return href if href.startswith("http") else BASE + href
 
 
+def discover_lga_medians_url(index_html: str) -> str:
+    """Return the absolute URL of the current 'Quarterly median rents by LGA' XLSX."""
+    m = _LGA_MEDIANS_RE.search(index_html)
+    if not m:
+        raise ValueError(
+            "no 'quarterly-median-rents-local-government-area-*-excel' link "
+            "on the report index"
+        )
+    href = m.group(1)
+    return href if href.startswith("http") else BASE + href
+
+
 def fetch_tables() -> bytes:
     html = _browser_fetch(INDEX).text
     return _browser_fetch(discover_tables_url(html)).content
+
+
+def fetch_lga_medians() -> bytes:
+    html = _browser_fetch(INDEX).text
+    return _browser_fetch(discover_lga_medians_url(html)).content
+
+
+def fetch_vic_rents() -> dict:
+    """Fetch both workbooks behind ``vic_rents`` with a single INDEX page load."""
+    html = _browser_fetch(INDEX).text
+    return {
+        "tables": _browser_fetch(discover_tables_url(html)).content,
+        "lga_medians": _browser_fetch(discover_lga_medians_url(html)).content,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -129,17 +173,6 @@ def _table3_by_dwelling(ws, report_date: str) -> list[tuple]:
     return out
 
 
-def _table1_overall(ws, report_date: str) -> list[tuple]:
-    """Table 1: 'Melbourne' / 'Regional Victoria' rows, col 1 = median rent."""
-    labels = {"melbourne": "melbourne", "regional victoria": "regional_vic"}
-    out = []
-    for row in _rows(ws):
-        label = str(row[0]).strip().lower() if row[0] is not None else ""
-        if label in labels and _num(row[1]):
-            out.append((report_date, labels[label], "median_rent", float(row[1]), "AUD/week"))
-    return out
-
-
 def parse_tables(raw: bytes) -> pd.DataFrame:
     wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     title = next(wb["Contents"].iter_rows(max_row=1, values_only=True))[0]
@@ -149,11 +182,82 @@ def parse_tables(raw: bytes) -> pd.DataFrame:
     # Time series (metro = MRI / Metro col; regional = RRI / Regional col).
     rows += _timeseries(wb["Fig 1 source"], {1: "melbourne", 2: "regional_vic"}, "rent_growth_annual")
     rows += _timeseries(wb["Fig 8 source"], {2: "melbourne", 3: "regional_vic"}, "affordable_share")
-    # Current-quarter snapshots.
-    rows += _table1_overall(wb["Table 1"], report_date)
+    # Current-quarter snapshot (dwelling-type breakdown). The overall
+    # median_rent snapshot (Table 1) is deliberately NOT read here any more —
+    # ``parse_lga_medians`` below supplies the full median_rent history from a
+    # different workbook, and reading both would give the metric two
+    # (slightly different) sources for the same quarter.
     rows += _table3_by_dwelling(wb["Table 3"], report_date)
 
     return pd.DataFrame(rows, columns=common.TIDY_COLUMNS)
+
+
+# --------------------------------------------------------------------------
+# Parse: "Quarterly median rents by Local Government Area" workbook
+# --------------------------------------------------------------------------
+_LGA_SHEET = "All Properties"
+_LGA_REGION = {"metro": "melbourne", "non-metro": "regional_vic"}
+
+
+def _quarter_label_to_iso(label) -> str:
+    dt = _dt.datetime.strptime(str(label).strip(), _QUARTER_LABEL_FMT)
+    return common.period_end(f"{dt.year}-{dt.month:02d}")
+
+
+def _lga_quarter_columns(header_row: tuple) -> dict[int, str]:
+    """Map each quarter's MEDIAN column index -> ISO period-end.
+
+    Row 1 of the sheet gives each quarter a label spanning a (Count, Median)
+    column pair, starting at column 2 (e.g. cols 2/3 = 'Jun 1999' Count/Median,
+    cols 4/5 = 'Sep 1999' Count/Median, ...). We only need the Median column.
+    """
+    cols: dict[int, str] = {}
+    for ci in range(2, len(header_row) - 1, 2):
+        label = header_row[ci]
+        if label is not None:
+            cols[ci + 1] = _quarter_label_to_iso(label)
+    return cols
+
+
+def parse_lga_medians(raw: bytes) -> pd.DataFrame:
+    """'Quarterly median rents by Local Government Area' workbook, ``All
+    Properties`` sheet only: label-scan for the METRO NON-METRO section's
+    Metro / Non-Metro aggregate rows (NOT fixed row numbers — the sheet grows
+    a suburb/LGA row occasionally), then walk every quarter-pair column to
+    emit the full median-rent history for melbourne / regional_vic.
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    rows = _rows(wb[_LGA_SHEET])
+    quarter_cols = _lga_quarter_columns(rows[1])
+
+    out: list[tuple] = []
+    in_section = False
+    for row in rows:
+        label0 = str(row[0]).strip().lower() if row[0] is not None else ""
+        if label0 == "metro non-metro":
+            in_section = True
+        if not in_section:
+            continue
+        label1 = str(row[1]).strip().lower() if row[1] is not None else ""
+        region = _LGA_REGION.get(label1)
+        if not region:
+            continue
+        for ci, date in quarter_cols.items():
+            if ci < len(row) and _num(row[ci]):
+                out.append((date, region, "median_rent", float(row[ci]), "AUD/week"))
+
+    if not out:
+        raise ValueError(
+            f"no Metro/Non-Metro median-rent rows found in '{_LGA_SHEET}' sheet"
+        )
+    return pd.DataFrame(out, columns=common.TIDY_COLUMNS)
+
+
+def parse_vic_rents(raw: dict) -> pd.DataFrame:
+    """Combine both workbooks' tidy rows for the ``vic_rents`` series."""
+    df_tables = parse_tables(raw["tables"])
+    df_lga = parse_lga_medians(raw["lga_medians"])
+    return pd.concat([df_tables, df_lga], ignore_index=True)[common.TIDY_COLUMNS]
 
 
 SERIES = [
@@ -162,7 +266,7 @@ SERIES = [
         source_name="DFFH / Homes Victoria Rental Report",
         source_url=INDEX,
         frequency="quarterly",
-        fetch=fetch_tables,
-        parse=parse_tables,
+        fetch=fetch_vic_rents,
+        parse=parse_vic_rents,
     ),
 ]

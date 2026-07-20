@@ -48,7 +48,7 @@ CHARTS: list[dict] = [
        metrics=["rent_growth_annual"], region_mode="geo", percent=True,
        noun="Annual rent growth"),
     _c("median_rent", "rents", "Median weekly rent", "vic_rents",
-       metrics=["median_rent"], region_mode="geo", markers=True,
+       metrics=["median_rent"], region_mode="geo",
        noun="The median rent"),
     _c("affordable_share", "rents", "Affordable lettings share", "vic_rents",
        metrics=["affordable_share"], region_mode="geo", percent=True,
