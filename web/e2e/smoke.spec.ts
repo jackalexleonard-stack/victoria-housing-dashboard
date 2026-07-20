@@ -32,7 +32,11 @@ test('section jump lands with the heading visible below the sticky bar', async (
   await page.goto('/')
   const nav = page.locator('nav[aria-label="Filters and sections"]')
   await nav.waitFor()
-  await page.getByRole('button', { name: 'Prices', exact: true }).click()
+  // Scoped to the jump-chip row: since C1 (collapsible sections) the section
+  // heading itself is now ALSO a same-named button (the disclosure toggle),
+  // so an unscoped page-wide query is ambiguous — the chip and the toggle
+  // are different controls that happen to share visible/accessible text.
+  await nav.getByRole('button', { name: 'Prices', exact: true }).click()
   // The jump animates (App.tsx's `jump()` only skips the animation when
   // `prefers-reduced-motion` is actually honoured, which isn't guaranteed
   // across every browser/emulation combination) — wait for window.scrollY
