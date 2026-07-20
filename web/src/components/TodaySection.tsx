@@ -9,7 +9,9 @@ export function TodaySection({ site, news, onOpen }: {
     .filter(i => i != null)
   return (
     <section aria-label="Today">
-      <HeroTiles tiles={site.hero} onOpen={onOpen} />
+      <div title="Today's most notable movements">
+        <HeroTiles tiles={site.hero} onOpen={onOpen} />
+      </div>
       {site.whats_new.length > 0 && (
         <div className="mt-4">
           <h3 className="font-display text-lg mb-2">Changed this week</h3>
@@ -30,7 +32,8 @@ export function TodaySection({ site, news, onOpen }: {
       )}
       {top.length > 0 && (
         <div className="mt-5">
-          <h3 className="font-display text-lg mb-2">Top stories</h3>
+          <h3 className="font-display text-lg mb-2"
+              title="Ranked by source, topic and recency">Top stories</h3>
           <div className="grid sm:grid-cols-2 gap-3">
             {top.map(item => (
               <article key={item.url} className="flex gap-3 bg-card border border-line rounded-lg p-3">

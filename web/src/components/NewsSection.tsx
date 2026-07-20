@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmtDate } from '../lib/format'
+import { ago, fmtDate } from '../lib/format'
 import type { NewsData, NewsItem } from '../lib/types'
 
 // Mirrors pipeline/scoring.py's TAG_VALUE weighting order — an item's group
@@ -61,7 +61,7 @@ function NewsGroup({ id, items }: { id: GroupId; items: NewsItem[] }) {
   )
 }
 
-export function NewsSection({ news }: { news: NewsData }) {
+export function NewsSection({ news, now }: { news: NewsData; now: Date }) {
   const [source, setSource] = useState('')
   const allSources = [...new Set(news.items.map(i => i.source))].sort()
   const filtering = source !== ''
@@ -82,7 +82,13 @@ export function NewsSection({ news }: { news: NewsData }) {
 
   return (
     <div>
-      <div className="flex items-center justify-end mb-3">
+      <div className="flex items-center justify-between mb-3">
+        {news.health
+          ? <p className="text-xs text-faint">
+              {news.health.feeds_ok} of {news.health.feeds_total} feeds
+              {' '}· fetched {ago(news.health.last_fetched, now)}
+            </p>
+          : <span />}
         <label className="text-xs text-muted">Source{' '}
           <select aria-label="Source" value={source}
                   onChange={e => setSource(e.target.value)}

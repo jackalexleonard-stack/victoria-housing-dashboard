@@ -100,6 +100,44 @@ def test_news_ranked_with_scores_and_digest():
     assert news["digest"] == "Digest text"
 
 
+def test_news_health_passthrough_from_meta():
+    items = [{"title": "A", "url": "https://a/1", "source": "S",
+              "published": "2026-07-17", "tags": []}]
+    meta = {"feeds_ok": 11, "feeds_failed": 0, "item_count": 147,
+            "last_item_date": "2026-07-20", "last_fetched": "2026-07-20T06:23:14Z"}
+    news = export.build_news(items, date(2026, 7, 18), digest=None, meta=meta)
+    export.validate_news(news)
+    assert news["health"] == {"feeds_ok": 11, "feeds_total": 11,
+                               "last_fetched": "2026-07-20T06:23:14Z"}
+
+
+def test_news_health_absent_when_meta_has_no_feed_counts():
+    items = [{"title": "A", "url": "https://a/1", "source": "S",
+              "published": "2026-07-17", "tags": []}]
+    news = export.build_news(items, date(2026, 7, 18), digest=None)
+    export.validate_news(news)
+    assert "health" not in news
+    # Old-shape meta (present but no feeds_ok, e.g. a series meta file) must
+    # also produce no health key rather than raising.
+    news2 = export.build_news(items, date(2026, 7, 18), digest=None, meta={"status": "ok"})
+    assert "health" not in news2
+
+
+def test_news_health_counts_failed_feeds_into_total():
+    items = []
+    meta = {"feeds_ok": 9, "feeds_failed": 2, "last_fetched": "2026-07-20T06:23:14Z"}
+    news = export.build_news(items, date(2026, 7, 18), digest=None, meta=meta)
+    assert news["health"] == {"feeds_ok": 9, "feeds_total": 11,
+                               "last_fetched": "2026-07-20T06:23:14Z"}
+
+
+def test_validate_news_rejects_health_feeds_ok_exceeding_total():
+    bad = {"schema_version": 1, "items": [], "top_story_urls": [], "digest": None,
+           "health": {"feeds_ok": 5, "feeds_total": 3, "last_fetched": None}}
+    with pytest.raises(ValueError, match="health"):
+        export.validate_news(bad)
+
+
 def test_validate_rejects_bad_status():
     ls, lm = _loaders()
     site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
@@ -132,3 +170,7 @@ def test_end_to_end_against_real_repo_data(tmp_path):
     assert on_disk["schema_version"] == 1
     assert "vic_hvi" in on_disk["series"]
     assert on_disk["series"]["vic_auctions"]["status"] == "failed"
+    # data/meta/news.json (committed) carries feeds_ok, so the real export
+    # must surface a health object end-to-end.
+    assert news["health"]["feeds_ok"] >= 0
+    assert news["health"]["feeds_total"] >= news["health"]["feeds_ok"]

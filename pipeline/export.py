@@ -145,7 +145,20 @@ def build_site(ls: Loader, lm: Loader, today: date,
     }
 
 
-def build_news(items: list[dict], today: date, digest: Optional[str]) -> dict:
+def _news_health(meta: dict) -> Optional[dict]:
+    """{feeds_ok, feeds_total, last_fetched}, or None when meta has no feed
+    counts to report (e.g. missing data/meta/news.json — keeps old fixtures
+    without this key valid, since the field is optional)."""
+    ok = meta.get("feeds_ok")
+    if ok is None:
+        return None
+    failed = meta.get("feeds_failed") or 0
+    return {"feeds_ok": ok, "feeds_total": ok + failed,
+            "last_fetched": meta.get("last_fetched")}
+
+
+def build_news(items: list[dict], today: date, digest: Optional[str],
+               meta: Optional[dict] = None) -> dict:
     ranked = scoring.rank_news(items, today)
     top = scoring.top_stories(items, today, n=4)
     out_items = []
@@ -157,11 +170,15 @@ def build_news(items: list[dict], today: date, digest: Optional[str]) -> dict:
             "dup_sources": it.get("dup_sources") or [],
             "score": round(scoring.score_news(it, today), 3),
         })
-    return {"schema_version": SCHEMA_VERSION,
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "items": out_items,
-            "top_story_urls": [t.get("url", "") for t in top],
-            "digest": digest}
+    out = {"schema_version": SCHEMA_VERSION,
+           "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "items": out_items,
+           "top_story_urls": [t.get("url", "") for t in top],
+           "digest": digest}
+    health = _news_health(meta or {})
+    if health is not None:
+        out["health"] = health
+    return out
 
 
 def dumps(obj: dict) -> str:
@@ -207,6 +224,13 @@ def validate_news(news: dict) -> None:
             _fail("news item missing title/url")
         if not isinstance(it.get("tags"), list):
             _fail("news item tags must be a list")
+    health = news.get("health")  # optional key — only validated when present
+    if health is not None:
+        if not isinstance(health.get("feeds_ok"), int) or \
+           not isinstance(health.get("feeds_total"), int):
+            _fail("health feeds_ok/feeds_total must be ints")
+        if health["feeds_ok"] > health["feeds_total"]:
+            _fail("health feeds_ok exceeds feeds_total")
 
 
 def _load_news_items() -> list[dict]:
@@ -222,10 +246,15 @@ def _load_digest() -> Optional[str]:
     return p.read_text(encoding="utf-8") if p.exists() else None
 
 
+def _load_news_meta() -> dict:
+    p = DATA / "meta" / "news.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
 def export_all(out_dir: Path = OUT, today: Optional[date] = None):
     today = today or datetime.now(timezone.utc).date()
     site = build_site(load_series, load_meta, today)
-    news = build_news(_load_news_items(), today, _load_digest())
+    news = build_news(_load_news_items(), today, _load_digest(), _load_news_meta())
     validate_site(site)
     validate_news(news)
     out_dir = Path(out_dir)

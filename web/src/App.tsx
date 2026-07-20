@@ -188,7 +188,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
                className="pt-10 scroll-mt-28" aria-label="News">
         <SectionHeading label="News" open={!collapsed.has('news')}
                          onToggle={() => toggleSection('news')} />
-        {!collapsed.has('news') && <NewsSection news={news} />}
+        {!collapsed.has('news') && <NewsSection news={news} now={now} />}
       </section>
       <footer className="text-xs text-faint border-t border-line mt-12 pt-4">
         Free public sources, updated daily by GitHub Actions ·{' '}

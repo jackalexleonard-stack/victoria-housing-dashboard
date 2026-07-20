@@ -38,9 +38,14 @@ export interface NewsItem {
   tags: string[]; image: string | null; dup_sources: string[]; score: number
 }
 
+export interface NewsHealth {
+  feeds_ok: number; feeds_total: number; last_fetched: string | null
+}
+
 export interface NewsData {
   schema_version: 1; generated_at: string
   items: NewsItem[]; top_story_urls: string[]; digest: string | null
+  health?: NewsHealth
 }
 
 function bad(detail: string): never {
@@ -70,5 +75,11 @@ export function assertNewsData(x: unknown): NewsData {
   if (n.schema_version !== 1) bad(`news schema_version`)
   if (!Array.isArray(n.items)) bad('news items')
   if (!Array.isArray(n.top_story_urls)) bad('top_story_urls')
+  // health is optional — older exports/fixtures without it stay valid; when
+  // present, tolerate only the documented shape.
+  if (n.health != null &&
+      (typeof n.health.feeds_ok !== 'number' || typeof n.health.feeds_total !== 'number')) {
+    bad('news health shape')
+  }
   return n
 }

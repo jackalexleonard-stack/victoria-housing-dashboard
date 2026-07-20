@@ -43,3 +43,11 @@ test('a flat delta is not coloured as a move', () => {
   const flat = screen.getByText('+0.00 pp')
   expect(flat).toHaveStyle({ color: '#575653' })   // PALETTE.muted, not up-green
 })
+
+test('hero tiles and top stories carry a one-line explainer tooltip', () => {
+  render(<TodaySection site={site} news={news} onOpen={() => {}} />)
+  expect(screen.getByText('3.85%').closest('[title]'))
+    .toHaveAttribute('title', "Today's most notable movements")
+  expect(screen.getByRole('heading', { name: 'Top stories' }))
+    .toHaveAttribute('title', 'Ranked by source, topic and recency')
+})
