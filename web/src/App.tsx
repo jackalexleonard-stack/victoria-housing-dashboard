@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAll } from './lib/load'
 import type { NewsData, SiteData } from './lib/types'
-import { siteIsStale } from './lib/staleness'
+import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate } from './lib/format'
 import { useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
@@ -70,7 +70,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
 
   const { site, news } = data
   const failedCount = Object.values(site.series)
-    .filter(s => s.status === 'failed').length
+    .filter(s => staleness(s, now).kind === 'failed').length
   const jump = (id: string) => {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     sectionsRef.current[id]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })

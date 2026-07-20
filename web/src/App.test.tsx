@@ -69,3 +69,14 @@ test('clicking a chart card opens detail and url gains ?s=', async () => {
   await userEvent.click(screen.getByRole('button', { name: /RBA cash rate target — open details/i }))
   expect(location.search).toContain('s=cash_rate')
 })
+
+test('masthead only counts sources that are actually overdue, singular wording', async () => {
+  history.replaceState(null, '', '/')
+  mockFetch()
+  // vic_auctions: failed, no data -> counts.
+  // vic_rents: failed, last_data 2026-03-31, cadence 92 -> gap ~109d <= 1.5*92=138 -> quiet, does not count.
+  render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+  await screen.findByText('Victorian Housing')
+  expect(await screen.findByText('1 source unavailable')).toBeInTheDocument()
+  expect(screen.queryByText(/sources unavailable/)).not.toBeInTheDocument()
+})

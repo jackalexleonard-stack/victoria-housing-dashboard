@@ -10,7 +10,8 @@ export function Masthead({ generatedAt, failedCount }: {
       <span className="text-xs text-faint ml-auto num">
         as at {fmtDate(generatedAt)}</span>
       {failedCount > 0
-        ? <Chip kind="warn">{failedCount} sources unavailable</Chip>
+        ? <Chip kind="warn">
+            {failedCount} source{failedCount === 1 ? '' : 's'} unavailable</Chip>
         : <Chip kind="good">run ok</Chip>}
     </header>
   )

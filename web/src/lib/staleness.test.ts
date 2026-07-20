@@ -20,11 +20,15 @@ test('ageing past 1.5 cadences, stale past 2.5', () => {
     .toBe('Data to Apr 2026 · stale')
 })
 
-test('failed wins regardless of dates', () => {
+test('failed only wins when the data is overdue', () => {
   const s = staleness(entry({ last_data_date: null }, 'failed'), NOW)
   expect(s).toEqual({ kind: 'failed', label: 'No data · source unavailable' })
-  expect(staleness(entry({}, 'failed'), NOW).label)
-    .toBe('Data to Jun 2026 · source unavailable')
+  // failed fetch, but retained data is still within 1.5x cadence -> stays quiet
+  expect(staleness(entry({}, 'failed'), NOW))
+    .toEqual({ kind: 'fresh', label: 'Data to Jun 2026' })
+  // failed fetch AND the retained data is overdue -> chip fires
+  expect(staleness(entry({ last_data_date: '2026-04-01' }, 'failed'), NOW))
+    .toEqual({ kind: 'failed', label: 'Data to Apr 2026 · source unavailable' })
 })
 
 test('next update estimate and site banner', () => {

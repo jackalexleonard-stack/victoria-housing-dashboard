@@ -6,9 +6,13 @@ const DAY = 86_400_000
 export function staleness(e: SeriesEntry, now: Date) {
   const { last_data_date, frequency, cadence_days } = e.meta
   const period = last_data_date ? `Data to ${fmtPeriod(last_data_date, frequency)}` : null
-  if (e.status === 'failed')
-    return { kind: 'failed' as const,
-             label: period ? `${period} · source unavailable` : 'No data · source unavailable' }
+  if (e.status === 'failed') {
+    if (!period) return { kind: 'failed' as const, label: 'No data · source unavailable' }
+    const gap = (now.getTime() - Date.parse(`${last_data_date}T00:00:00Z`)) / DAY
+    if (gap > 1.5 * cadence_days)
+      return { kind: 'failed' as const, label: `${period} · source unavailable` }
+    return { kind: 'fresh' as const, label: period }
+  }
   if (!period) return { kind: 'stale' as const, label: 'No data' }
   const gap = (now.getTime() - Date.parse(`${last_data_date}T00:00:00Z`)) / DAY
   if (gap > 2.5 * cadence_days) return { kind: 'stale' as const, label: `${period} · stale` }
