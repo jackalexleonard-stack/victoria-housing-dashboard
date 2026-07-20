@@ -70,6 +70,18 @@ test('clicking a chart card opens detail and url gains ?s=', async () => {
   expect(location.search).toContain('s=cash_rate')
 })
 
+test('jump targets carry scroll-margin so a scrolled-to heading clears the sticky bar', async () => {
+  history.replaceState(null, '', '/')
+  mockFetch()
+  render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+  await screen.findByText('Victorian Housing')
+  const main = screen.getByRole('main')
+  expect(main.querySelector('#today')).toHaveClass('scroll-mt-28')
+  document.querySelectorAll('main > section').forEach(section => {
+    expect(section).toHaveClass('scroll-mt-28')
+  })
+})
+
 test('masthead only counts sources that are actually overdue, singular wording', async () => {
   history.replaceState(null, '', '/')
   mockFetch()

@@ -88,14 +88,15 @@ export default function App({ now = new Date() }: { now?: Date }) {
       )}
       <FilterBar range={state.range} geo={state.geo} sections={site.sections}
                  activeSection={active} onFilters={setFilters} onJump={jump} />
-      <div ref={el => { sectionsRef.current.today = el }} id="today" className="pt-6">
+      <div ref={el => { sectionsRef.current.today = el }} id="today"
+           className="pt-6 scroll-mt-28">
         <TodaySection site={site} news={news} onOpen={openDetail} />
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
         return (
           <section key={id} id={id} ref={el => { sectionsRef.current[id] = el }}
-                   className="pt-10" aria-label={label}>
+                   className="pt-10 scroll-mt-28" aria-label={label}>
             <h2 className="font-display text-2xl mb-4">{label}</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {charts.map((c, i) => (
@@ -110,7 +111,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
         )
       })}
       <section id="news" ref={el => { sectionsRef.current.news = el }}
-               className="pt-10" aria-label="News">
+               className="pt-10 scroll-mt-28" aria-label="News">
         <h2 className="font-display text-2xl mb-4">News</h2>
         <NewsSection news={news} />
       </section>

@@ -23,6 +23,39 @@ test('filters update the url and the charts', async ({ page }) => {
   await expect(page).toHaveURL(/range=1y/)
 })
 
+test('section jump lands with the heading visible below the sticky bar', async ({ page }) => {
+  // FilterBar is `sticky top-0` and overlaps the top of the viewport; a
+  // scroll-into-view jump must leave the target heading BELOW the bar, not
+  // hidden behind it. Both projects render the section chip row (it's
+  // outside the `hidden sm:flex` / `sm:hidden` controls split), so this
+  // holds on desktop and mobile alike.
+  await page.goto('/')
+  const nav = page.locator('nav[aria-label="Filters and sections"]')
+  await nav.waitFor()
+  await page.getByRole('button', { name: 'Prices', exact: true }).click()
+  // The jump animates (App.tsx's `jump()` only skips the animation when
+  // `prefers-reduced-motion` is actually honoured, which isn't guaranteed
+  // across every browser/emulation combination) — wait for window.scrollY
+  // to stop moving before measuring, so this isn't a race against the
+  // scroll animation still in flight.
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __lastScrollY?: number }
+    const y = window.scrollY
+    if (w.__lastScrollY === y) return true
+    w.__lastScrollY = y
+    return false
+  }, undefined, { timeout: 5000, polling: 100 }).catch(() => {})
+  const heading = page.locator('section[aria-label="Prices"] h2')
+  await expect(heading).toBeVisible()
+  const navBox = await nav.boundingBox()
+  const headingBox = await heading.boundingBox()
+  expect(navBox).not.toBeNull()
+  expect(headingBox).not.toBeNull()
+  // The heading's top must sit at/below the bottom edge of the sticky bar —
+  // i.e. not obscured behind it.
+  expect(headingBox!.y).toBeGreaterThanOrEqual(navBox!.y + navBox!.height)
+})
+
 test('detail opens, deep-links and closes via back', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /open details/ }).first().click()
