@@ -20,9 +20,9 @@ test('section chips jump and mark the active section', async () => {
   const onJump = vi.fn()
   render(<FilterBar range="5y" geo="melbourne" sections={sections}
                     activeSection="prices" onFilters={() => {}} onJump={onJump} />)
-  const active = screen.getByRole('button', { name: 'Prices' })
+  const active = screen.getByRole('button', { name: 'Jump to Prices' })
   expect(active).toHaveAttribute('aria-current', 'true')
-  await userEvent.click(screen.getByRole('button', { name: 'Today' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Jump to Today' }))
   expect(onJump).toHaveBeenCalledWith('today')
 })
 

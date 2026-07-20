@@ -130,12 +130,10 @@ export default function App({ now = new Date() }: { now?: Date }) {
   const failedCount = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed').length
   const toggleSection = (id: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      writeCollapsed(next)
-      return next
-    })
+    const next = new Set(collapsed)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setCollapsed(next)
+    writeCollapsed(next)
   }
   const jump = (id: string) => {
     if (collapsed.has(id)) {

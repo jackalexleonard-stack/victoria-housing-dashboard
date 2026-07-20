@@ -135,7 +135,12 @@ describe('collapsible sections', () => {
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     const nav = screen.getByRole('navigation', { name: /filters and sections/i })
-    const chip = within(nav).getByRole('button', { name: 'Money & credit' })
+    const chip = within(nav).getByRole('button', { name: 'Jump to Money & credit' })
+    // The chip and the section's own disclosure toggle used to share the same
+    // accessible name ("Money & credit"), so a screen reader couldn't tell
+    // them apart. The chip's aria-label now disambiguates it: only the
+    // disclosure toggle answers to the plain label.
+    expect(screen.getAllByRole('button', { name: 'Money & credit' })).toHaveLength(1)
 
     await userEvent.click(chip)
 

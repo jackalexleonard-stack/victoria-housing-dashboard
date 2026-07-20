@@ -70,6 +70,7 @@ export function FilterBar({ range, geo, sections, activeSection, onFilters, onJu
         {sections.map(([id, label]) => (
           <button key={id} type="button" onClick={() => onJump(id)}
                   aria-current={id === activeSection ? 'true' : undefined}
+                  aria-label={`Jump to ${label}`}
                   className={`px-3 py-1 text-xs whitespace-nowrap rounded-full border
                     ${id === activeSection
                       ? 'border-blue text-blue font-medium'
