@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { LineChart } from './LineChart'
 
 const lines = [{ name: 'cash rate', pts: [
@@ -53,4 +53,47 @@ test('markers on a multi-line chart use their own line’s color', () => {
   const markers = container.querySelectorAll('circle.pt-marker')
   expect(markers.length).toBe(1)                        // only line b is single-point
   expect(markers[0].getAttribute('fill')).toBe('#BC5215')  // line b = colorway[1], not [0]
+})
+
+const sharedDateLines = [
+  { name: 'a', pts: [
+    { date: '2026-01-31', region: 'x', metric: 'a', value: 10 },
+    { date: '2026-06-30', region: 'x', metric: 'a', value: 12 },
+  ] },
+  { name: 'b', pts: [
+    { date: '2026-01-31', region: 'x', metric: 'b', value: 99 },
+    { date: '2026-06-30', region: 'x', metric: 'b', value: 101 },
+  ] },
+]
+
+test('hovering shows an x-unified tooltip listing every line at the hovered date', () => {
+  const { container } = render(
+    <LineChart lines={sharedDateLines} percent={false} unit="index" label="two lines" />)
+  const svg = container.querySelector('svg') as SVGSVGElement
+  // clientX near the left margin lands on/near the leftmost shared date
+  // (2026-01-31), where both lines have a point.
+  fireEvent.pointerMove(svg, { clientX: 50, clientY: 100, pointerId: 1 })
+  const tooltip = screen.getByRole('status')
+  expect(tooltip).toHaveTextContent('a')
+  expect(tooltip).toHaveTextContent('b')
+  expect(tooltip).toHaveTextContent('10')
+  expect(tooltip).toHaveTextContent('99')
+})
+
+test('no legend for a single-line chart', () => {
+  render(<LineChart lines={lines} percent unit="percent" label="one line" />)
+  expect(screen.queryByText('cash rate')).not.toBeInTheDocument()
+})
+
+test('legend lists every line name for a multi-line chart', () => {
+  render(<LineChart lines={sharedDateLines} percent={false} unit="index" label="two lines" />)
+  expect(screen.getByText('a')).toBeInTheDocument()
+  expect(screen.getByText('b')).toBeInTheDocument()
+})
+
+test('a y2 line is labelled "(right axis)" in the legend', () => {
+  render(<LineChart lines={sharedDateLines} percent={false} unit="index" label="two lines"
+                    y2Lines={['b']} />)
+  expect(screen.getByText('a')).toBeInTheDocument()
+  expect(screen.getByText(/^b \(right axis\)$/)).toBeInTheDocument()
 })

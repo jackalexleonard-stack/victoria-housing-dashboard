@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildChart, nearest, type FlatPt } from '../lib/chartMath'
+import { buildChart, atTime, type FlatPt } from '../lib/chartMath'
 import { COLORWAY, PALETTE } from '../theme/tokens'
 import { fmtDate, fmtUnit } from '../lib/format'
 import type { Pt } from '../lib/types'
@@ -30,7 +30,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   const wrap = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(600)
   const [drawn, setDrawn] = useState(reduced())
-  const [hover, setHover] = useState<FlatPt | null>(null)
+  const [hover, setHover] = useState<{ t: number; points: FlatPt[] } | null>(null)
 
   useEffect(() => {
     const el = wrap.current
@@ -59,7 +59,8 @@ export function LineChart({ lines, percent, unit, label, markers = false,
     if (e.pointerType === 'touch' && !touchScrub) return
     const rect = e.currentTarget.getBoundingClientRect()
     const t = b.x.invert(e.clientX - rect.left).getTime()
-    setHover(nearest(b.flat, t))
+    const at = atTime(b.flat, t)
+    setHover(at.points.length ? at : null)
   }
 
   return (
@@ -151,23 +152,55 @@ export function LineChart({ lines, percent, unit, label, markers = false,
           <g>
             <line x1={b.x(hover.t)} x2={b.x(hover.t)} y1={b.margin.t}
                   y2={height - b.margin.b} stroke={PALETTE.line2} />
-            <circle cx={b.x(hover.t)} cy={yFor(hover.name)(hover.value)} r="4"
-                    fill={PALETTE.clay} />
+            {hover.points.map(p => (
+              <circle key={p.name} cx={b.x(p.t)} cy={yFor(p.name)(p.value)} r="4"
+                      fill={colorByName.get(p.name) ?? PALETTE.clay} />
+            ))}
           </g>
         )}
       </svg>
-      {hover && (
-        <div role="status" style={{
-          position: 'absolute', pointerEvents: 'none',
-          left: Math.min(b.x(hover.t) + 10, width - 150),
-          top: Math.max(yFor(hover.name)(hover.value) - 44, 0),
-          background: PALETTE.card, border: `1px solid ${PALETTE.line2}`,
-          borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
-          <div style={{ color: PALETTE.faint }}>{fmtDate(hover.date)}</div>
-          <div className="num" style={{ fontWeight: 500 }}>
-            {fmtUnit(hover.value, unitByName?.[hover.name] ?? unit)}
-            <span style={{ color: PALETTE.muted, fontWeight: 400 }}> {hover.name}</span>
+      {hover && (() => {
+        // Anchor near the topmost (smallest-y) of the hovered points, above
+        // the pointer by default; clamp so the tooltip never overflows above
+        // the container, flipping below the pointer instead when there's no
+        // room above.
+        const rowH = 16
+        const tooltipH = 20 + hover.points.length * rowH + 8
+        const anchorY = Math.min(...hover.points.map(p => yFor(p.name)(p.value)))
+        const above = anchorY - tooltipH - 8
+        const top = Math.max(0, above >= 0 ? above : anchorY + 12)
+        return (
+          <div role="status" style={{
+            position: 'absolute', pointerEvents: 'none',
+            left: Math.min(b.x(hover.t) + 10, width - 170),
+            top,
+            background: PALETTE.card, border: `1px solid ${PALETTE.line2}`,
+            borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
+            <div style={{ color: PALETTE.faint }}>{fmtDate(hover.points[0].date)}</div>
+            {hover.points.map(p => (
+              <div key={p.name} style={{ display: 'flex', alignItems: 'center',
+                                          gap: 4, whiteSpace: 'nowrap' }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8,
+                               borderRadius: 2, background: colorByName.get(p.name),
+                               flex: '0 0 auto' }} />
+                <span style={{ color: PALETTE.muted }}>{p.name}</span>
+                <span className="num" style={{ fontWeight: 500 }}>
+                  {fmtUnit(p.value, unitByName?.[p.name] ?? unit)}
+                </span>
+              </div>
+            ))}
           </div>
+        )
+      })()}
+      {lines.length > 1 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-1">
+          {lines.map(l => (
+            <span key={l.name} className="inline-flex items-center gap-1">
+              <span style={{ display: 'inline-block', width: 8, height: 8,
+                             borderRadius: 2, background: colorByName.get(l.name) }} />
+              {l.name}{y2Lines?.includes(l.name) ? ' (right axis)' : ''}
+            </span>
+          ))}
         </div>
       )}
     </div>

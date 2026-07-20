@@ -82,3 +82,13 @@ export function nearest(flat: FlatPt[], t: number): FlatPt | null {
   const i = bis.center(flat, t)
   return flat[Math.max(0, Math.min(flat.length - 1, i))]
 }
+
+// x-unified lookup: snap to the nearest observed timestamp, then return every
+// line's point AT that exact timestamp (a line with no point there is simply
+// absent — flat is sorted by time and built in line order, and Array#sort is
+// stable, so points sharing a timestamp stay in line order after filtering).
+export function atTime(flat: FlatPt[], t: number): { t: number; points: FlatPt[] } {
+  const n = nearest(flat, t)
+  if (!n) return { t, points: [] }
+  return { t: n.t, points: flat.filter(p => p.t === n.t) }
+}
