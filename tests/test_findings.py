@@ -74,6 +74,17 @@ def test_accord_finding_vs_target():
         "Completions trail the Accord track by 46,545 homes as at Mar qtr 2026"
 
 
+def test_median_rent_by_type_finding_uses_3br_house_primary():
+    ls, lm = _loaders({"vic_rents": _df([
+        ("2025-06-30", "melbourne", "rent_3br_house", 540, "AUD/week"),
+        ("2025-09-30", "melbourne", "rent_3br_house", 550, "AUD/week"),
+        ("2025-09-30", "melbourne", "rent_1br_flat", 500, "AUD/week"),
+    ])}, {"vic_rents": {"frequency": "quarterly"}})
+    out = findings.build_findings(ls, lm)
+    assert out["median_rent_by_type"] == \
+        "The median 3-bedroom-house rent rose 1.9% to $550/wk in Sep qtr 2025"
+
+
 def test_failed_series_gets_no_data_finding():
     ls, lm = _loaders({}, {"vic_auctions": {"frequency": "weekly", "status": "failed"}})
     out = findings.build_findings(ls, lm)

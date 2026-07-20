@@ -5,26 +5,29 @@ report index (the quarter is baked into each URL slug, so we discover both
 links fresh on each run rather than hardcoding them):
 
 * "Tables from Rental Report - <Quarter> <Year>.xlsx" — ``fetch_tables`` /
-  ``parse_tables``. Time series (full history) plus a dwelling-type snapshot:
+  ``parse_tables``. Two genuine time series:
   * ``rent_growth_annual`` — Rent Index annual % change        (Fig 1 source, 2000Q2->)
   * ``affordable_share``   — affordable lettings % of new lets (Fig 8 source, 2020Q3->)
-  * ``rent_<size>_<type>`` — median rent by dwelling type       (Table 3, report quarter only)
+  (Table 1's current-quarter median-rent snapshot and Table 3's current-quarter
+  dwelling-type snapshot are deliberately NOT read any more — both are
+  superseded by full-history equivalents from the other workbook below.)
 * "Quarterly median rents by Local Government Area.xlsx" — ``fetch_lga_medians`` /
-  ``parse_lga_medians``. The ``All Properties`` sheet's METRO NON-METRO
-  aggregate rows give the overall median rent for EVERY quarter back to
-  Jun 1999 (~106 quarters), so:
-  * ``median_rent`` — overall median rent, new lettings, full history (Metro/Non-Metro rows)
-  comes entirely from this workbook. (Table 1 in the other workbook has its own,
-  current-quarter-only "Melbourne"/"Regional Victoria" median rent, on a
-  slightly different statistical-region grouping than this workbook's LGA-based
-  Metro/Non-Metro split — the two figures are close but not identical, so to
-  avoid two competing sources for the same metric we no longer read Table 1
-  at all.)
+  ``parse_lga_medians``. Every sheet shares the same METRO NON-METRO aggregate
+  layout (Metro/Non-Metro rows, one quarter-pair of columns each, back to
+  Jun 1999, ~106 quarters):
+  * ``All Properties`` sheet -> ``median_rent`` — overall median rent, new lettings
+  * the 6 dwelling-type sheets -> ``rent_<size>_<type>`` (one metric per sheet,
+    see ``_LGA_DWELLING_SHEET`` for the sheet-name -> metric mapping; these are
+    the exact same metric names Table 3 used to emit as a single-quarter
+    snapshot, so nothing downstream that already reads them by name changes)
+  Both come entirely from this workbook now. (Table 1's "Melbourne"/"Regional
+  Victoria" median rent uses a slightly different statistical-region grouping
+  than this workbook's LGA-based Metro/Non-Metro split — the two figures are
+  close but not identical, so to avoid two competing sources for the same
+  metric we no longer read Table 1 at all.)
 
 ``fetch_vic_rents``/``parse_vic_rents`` (used by the ``vic_rents`` Series below)
-fetch and parse both workbooks and concatenate the tidy rows. Dwelling-type
-history (the 6 dwelling sheets in the LGA workbook) is out of scope for now —
-those metrics remain current-quarter-only snapshots from Table 3.
+fetch and parse both workbooks and concatenate the tidy rows.
 
 USER-AGENT NOTE: www.dffh.vic.gov.au tarpits/blocks non-browser User-Agents — the
 plain pipeline UA times out, and even a browser UA with our identifier appended is
@@ -65,20 +68,6 @@ _LGA_MEDIANS_RE = re.compile(
 _TITLE_RE = re.compile(r"(march|june|september|december)\s+quarter\s+(\d{4})", re.I)
 _QUARTER_MONTH = {"march": 3, "june": 6, "september": 9, "december": 12}
 _QUARTER_LABEL_FMT = "%b %Y"  # 'Jun 1999' as used by the LGA-medians header row
-
-# Table 3 row labels -> tidy metric / region
-_DWELLING_METRIC = {
-    "1 bed flat": "rent_1br_flat",
-    "2 bed flat": "rent_2br_flat",
-    "3 bed flat": "rent_3br_flat",
-    "2 bed house": "rent_2br_house",
-    "3 bed house": "rent_3br_house",
-    "4 bed house": "rent_4br_house",
-}
-_REGION_HEADER = {
-    "metropolitan melbourne": "melbourne",
-    "regional victoria": "regional_vic",
-}
 
 
 # --------------------------------------------------------------------------
@@ -161,33 +150,18 @@ def _timeseries(ws, colmap: dict[int, str], metric: str) -> list[tuple]:
     return out
 
 
-def _table3_by_dwelling(ws, report_date: str) -> list[tuple]:
-    """Table 3: region header rows followed by dwelling-type rows (snapshot)."""
-    out, region = [], None
-    for row in _rows(ws):
-        label = str(row[0]).strip().lower() if row[0] is not None else ""
-        if label in _REGION_HEADER:
-            region = _REGION_HEADER[label]
-        elif region and label in _DWELLING_METRIC and _num(row[1]):
-            out.append((report_date, region, _DWELLING_METRIC[label], float(row[1]), "AUD/week"))
-    return out
-
-
 def parse_tables(raw: bytes) -> pd.DataFrame:
     wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    title = next(wb["Contents"].iter_rows(max_row=1, values_only=True))[0]
-    report_date = _report_quarter_end(title)
 
     rows: list[tuple] = []
     # Time series (metro = MRI / Metro col; regional = RRI / Regional col).
+    # Table 1's overall median-rent snapshot and Table 3's dwelling-type
+    # snapshot are deliberately NOT read here any more — ``parse_lga_medians``
+    # below supplies full history for both from a different workbook, and
+    # reading both would give those metrics two (slightly different) sources
+    # for the same quarter.
     rows += _timeseries(wb["Fig 1 source"], {1: "melbourne", 2: "regional_vic"}, "rent_growth_annual")
     rows += _timeseries(wb["Fig 8 source"], {2: "melbourne", 3: "regional_vic"}, "affordable_share")
-    # Current-quarter snapshot (dwelling-type breakdown). The overall
-    # median_rent snapshot (Table 1) is deliberately NOT read here any more —
-    # ``parse_lga_medians`` below supplies the full median_rent history from a
-    # different workbook, and reading both would give the metric two
-    # (slightly different) sources for the same quarter.
-    rows += _table3_by_dwelling(wb["Table 3"], report_date)
 
     return pd.DataFrame(rows, columns=common.TIDY_COLUMNS)
 
@@ -197,6 +171,17 @@ def parse_tables(raw: bytes) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 _LGA_SHEET = "All Properties"
 _LGA_REGION = {"metro": "melbourne", "non-metro": "regional_vic"}
+# Dwelling-type sheet name (exact, as openpyxl reports it — casing is
+# inconsistent in the source workbook, e.g. '1br flat' vs '2br Flat') -> the
+# same tidy metric names Table 3 used to emit as a single-quarter snapshot.
+_LGA_DWELLING_SHEET = {
+    "1br flat": "rent_1br_flat",
+    "2br Flat": "rent_2br_flat",
+    "3br Flat": "rent_3br_flat",
+    "2br House": "rent_2br_house",
+    "3br House": "rent_3br_house",
+    "4br House": "rent_4br_house",
+}
 
 
 def _quarter_label_to_iso(label) -> str:
@@ -219,15 +204,16 @@ def _lga_quarter_columns(header_row: tuple) -> dict[int, str]:
     return cols
 
 
-def parse_lga_medians(raw: bytes) -> pd.DataFrame:
-    """'Quarterly median rents by Local Government Area' workbook, ``All
-    Properties`` sheet only: label-scan for the METRO NON-METRO section's
-    Metro / Non-Metro aggregate rows (NOT fixed row numbers — the sheet grows
-    a suburb/LGA row occasionally), then walk every quarter-pair column to
-    emit the full median-rent history for melbourne / regional_vic.
+def _lga_metro_trend(ws, metric: str) -> list[tuple]:
+    """Label-scan one sheet of the LGA-medians workbook for the METRO
+    NON-METRO section's Metro / Non-Metro aggregate rows (NOT fixed row
+    numbers — the sheet grows a suburb/LGA row occasionally), then walk every
+    quarter-pair column to emit ``metric``'s full history for melbourne /
+    regional_vic. Shared by the ``All Properties`` sheet (-> ``median_rent``)
+    and each of the 6 dwelling-type sheets (-> ``rent_<size>_<type>``) — same
+    layout in every one of the 7 sheets.
     """
-    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    rows = _rows(wb[_LGA_SHEET])
+    rows = _rows(ws)
     quarter_cols = _lga_quarter_columns(rows[1])
 
     out: list[tuple] = []
@@ -244,7 +230,22 @@ def parse_lga_medians(raw: bytes) -> pd.DataFrame:
             continue
         for ci, date in quarter_cols.items():
             if ci < len(row) and _num(row[ci]):
-                out.append((date, region, "median_rent", float(row[ci]), "AUD/week"))
+                out.append((date, region, metric, float(row[ci]), "AUD/week"))
+    return out
+
+
+def parse_lga_medians(raw: bytes) -> pd.DataFrame:
+    """'Quarterly median rents by Local Government Area' workbook: label-scan
+    the ``All Properties`` sheet (-> ``median_rent``) and each of the 6
+    dwelling-type sheets (-> ``rent_<size>_<type>``, see
+    ``_LGA_DWELLING_SHEET``) for their Metro/Non-Metro aggregate rows, giving
+    every one of these metrics the same ~106-quarter history back to Jun 1999.
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+
+    out: list[tuple] = list(_lga_metro_trend(wb[_LGA_SHEET], "median_rent"))
+    for sheet_name, metric in _LGA_DWELLING_SHEET.items():
+        out += _lga_metro_trend(wb[sheet_name], metric)
 
     if not out:
         raise ValueError(

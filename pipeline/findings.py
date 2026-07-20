@@ -53,6 +53,11 @@ CHARTS: list[dict] = [
     _c("affordable_share", "rents", "Affordable lettings share", "vic_rents",
        metrics=["affordable_share"], region_mode="geo", percent=True,
        noun="The affordable share of new lettings"),
+    _c("median_rent_by_type", "rents", "Median rent by dwelling type", "vic_rents",
+       metrics=["rent_1br_flat", "rent_2br_flat", "rent_3br_flat",
+                "rent_2br_house", "rent_3br_house", "rent_4br_house"],
+       region_mode="geo", noun="The median 3-bedroom-house rent",
+       primary="rent_3br_house"),
     _c("vacancy", "rents", "Rental vacancy rate", "vic_vacancy",
        metrics=["vacancy_rate"], region_mode="geo", percent=True),
     # --- supply ---
