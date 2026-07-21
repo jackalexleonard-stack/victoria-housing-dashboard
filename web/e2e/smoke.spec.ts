@@ -127,11 +127,31 @@ test('keyboard: charts are reachable as accessible images', async ({ page }) => 
 })
 
 test('keyboard/motion: reduced motion suppresses the draw-in', async ({ page }) => {
+  // Both projects also declare reducedMotion: 'reduce' at the config level,
+  // but that context option has been confirmed (via instrumented diagnostic
+  // runs) to NOT reliably reach this page's `matchMedia` on this Playwright/
+  // Chromium build — colorScheme propagates the same way and does take
+  // effect, so this is specific to reducedMotion, not a general emulation
+  // failure. Call emulateMedia explicitly so the emulation this test relies
+  // on is actually real, not assumed from config.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
-  await page.locator('article svg[role="img"]').first().waitFor()
-  // Both projects emulate reducedMotion: 'reduce', so LineChart's `reduced()`
-  // check must gate the class off entirely — assert the DOM invariant
-  // directly rather than a CSS-derived proxy that's empty either way.
+  const first = page.locator('article svg[role="img"]').first()
+  await first.waitFor()
+  // Assert the precondition FIRST: if emulation ever silently stops working
+  // again, this fails loudly with an obvious reason instead of racing on
+  // IntersectionObserver timing and producing a confusing "Received: 1".
+  expect(await page.evaluate(() =>
+    matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
+  // Give the first chart's IntersectionObserver every chance to fire before
+  // asserting the negative below — otherwise a pass is ambiguous between
+  // "correctly suppressed" and "observer just hadn't run yet", which is
+  // exactly the race that made this test flaky.
+  await first.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(300)
+  // LineChart's `reduced()` check must gate the class off entirely — assert
+  // the DOM invariant directly rather than a CSS-derived proxy that's empty
+  // either way.
   const drawInCount = await page.evaluate(() => document.querySelectorAll('.draw-in').length)
   expect(drawInCount).toBe(0)   // JS gate suppressed the animation entirely
 })
@@ -143,9 +163,15 @@ test.describe('with motion enabled', () => {
   test.use({ reducedMotion: 'no-preference' })
 
   test('charts animate in when motion is allowed', async ({ page }) => {
+    // Mirrors the reduced-motion test: don't rely solely on the config-level
+    // context option (see note above — it's not proven reliable), assert
+    // the real, current state explicitly via emulateMedia + matchMedia.
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.goto('/')
     const first = page.locator('article svg[role="img"]').first()
     await first.waitFor()
+    expect(await page.evaluate(() =>
+      matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(false)
     // drawn only flips true once the IntersectionObserver reports the chart
     // in view — force that regardless of where it lands in the viewport.
     await first.scrollIntoViewIfNeeded()
