@@ -29,13 +29,26 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
 // pass through unchanged. Non-percent values get compact notation once they
 // grow past the point where a full `toLocaleString` would blow out the fixed
 // 44px left margin (e.g. `1,000,000` clips to `00,000`) — millions collapse
-// to `1M`/`1.5M`, tens-of-thousands-and-up collapse to whole `k`, and
-// anything smaller keeps today's comma-grouped formatting.
+// to `1M`/`1.5M`.
+//
+// D1(b) re-verification fix: the k-form threshold used to start at 10,000,
+// so any axis whose 4-tick domain straddled that boundary rendered mixed
+// forms on the SAME order of magnitude (live: oo_lending's "5,000 / 10k /
+// 15k / 20k"). Lowering the threshold to |v| >= 1,000 means every tick from
+// 1,000 up on a given axis compacts consistently — a domain that straddles
+// 10,000 now reads "5k / 10k / 15k / 20k", not half-and-half. Below 10,000
+// keeps one decimal ONLY when the value isn't a whole thousand ("1.5k",
+// "7.5k"; "5k" stays bare); 10,000 and up drops the decimal entirely
+// ("15k", "950k") since a fractional k is no longer meaningfully precise at
+// that scale.
 export function fmtTickLabel(v: number, percent: boolean): string {
   if (percent) return `${+v.toFixed(2)}%`
   const abs = Math.abs(v)
   if (abs >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (abs >= 10_000) return `${Math.round(v / 1_000)}k`
+  if (abs >= 1_000) {
+    const k = v / 1_000
+    return `${abs < 10_000 ? +k.toFixed(1) : Math.round(k)}k`
+  }
   return v.toLocaleString('en-AU')
 }
 

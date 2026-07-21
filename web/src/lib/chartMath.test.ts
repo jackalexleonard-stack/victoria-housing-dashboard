@@ -100,7 +100,7 @@ test('atTime omits a line with no point at the hovered date', () => {
 test('fmtTickLabel: compact notation for large non-percent values', () => {
   expect(fmtTickLabel(1_000_000, false)).toBe('1M')
   expect(fmtTickLabel(950_000, false)).toBe('950k')
-  expect(fmtTickLabel(8_000, false)).toBe('8,000')
+  expect(fmtTickLabel(8_000, false)).toBe('8k')
   expect(fmtTickLabel(4.35, true)).toBe('4.35%')
 })
 
@@ -108,6 +108,16 @@ test('fmtTickLabel: keeps one decimal only when needed, and handles negatives', 
   expect(fmtTickLabel(1_500_000, false)).toBe('1.5M')
   expect(fmtTickLabel(-1_000_000, false)).toBe('-1M')
   expect(fmtTickLabel(10_000, false)).toBe('10k')
+})
+
+// D1(b) re-verification: the lowered (>= 1,000) k-form threshold — the exact
+// oo_lending live break ("5,000 / 10k / 15k / 20k") is fixed by 5,000 now
+// compacting too, and a value that isn't a whole thousand keeps one decimal
+// below the 10k cutoff.
+test('fmtTickLabel: values from 1,000 up compact to k-form (the oo_lending mixed-axis fix)', () => {
+  expect(fmtTickLabel(5_000, false)).toBe('5k')
+  expect(fmtTickLabel(1_500, false)).toBe('1.5k')
+  expect(fmtTickLabel(999, false)).toBe('999')   // just below the threshold: unchanged
 })
 
 test('placeAnnotationLabels: spread-out annotations alternate rows 0/1', () => {
