@@ -4,6 +4,6 @@
   "source_url": "https://www.domain.com.au/auction-results/melbourne/",
   "frequency": "weekly",
   "status": "failed",
-  "last_fetched": "2026-07-20T06:23:08Z",
+  "last_fetched": "2026-07-21T05:55:52Z",
   "error": "RuntimeError: no reachable auction source: https://www.cotality.com/au/insights/auction-market-results -> HTTPError; https://www.domain.com.au/auction-results/melbourne/ -> HTTPError"
 }

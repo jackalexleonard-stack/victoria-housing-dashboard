@@ -3,9 +3,9 @@
   "source_name": "DFFH / Homes Victoria Rental Report",
   "source_url": "https://www.dffh.vic.gov.au/publications/rental-report",
   "frequency": "quarterly",
-  "status": "ok",
-  "last_fetched": "2026-07-20T23:42:12Z",
-  "error": null,
+  "status": "failed",
+  "last_fetched": "2026-07-21T05:49:21Z",
+  "error": "ReadTimeout: HTTPSConnectionPool(host='www.dffh.vic.gov.au', port=443): Read timed out. (read timeout=60)",
   "last_data_date": "2025-09-30",
   "last_changed": "2026-07-20T23:42:12Z"
 }
