@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildChart, atTime, type FlatPt } from '../lib/chartMath'
+import { buildChart, atTime, placeAnnotationLabels, type FlatPt } from '../lib/chartMath'
 import { COLORWAY, PALETTE } from '../theme/tokens'
 import { fmtDate, fmtUnit } from '../lib/format'
 import type { Pt } from '../lib/types'
@@ -54,6 +54,17 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   const y2Color = b.paths.find(p => p.axis === 'y2')?.color ?? PALETTE.clay
   const y2Name = b.y2Ticks.length ? y2Lines?.[0] : undefined
 
+  // Annotation lines always render (best-effort labels only) — filter to
+  // those actually on the visible plot, then stagger their text between two
+  // rows so a dense cluster (e.g. the 2022-23 rate-hike cycle) doesn't pile
+  // every label at the same height. `annotationRows[i]` is null when even
+  // the second row was too crowded, in which case only the dashed marker
+  // line renders for that annotation.
+  const visibleAnnotations = annotations
+    .map(a => ({ ...a, ax: b.x(Date.parse(`${a.date}T00:00:00Z`)) }))
+    .filter(a => Number.isFinite(a.ax) && a.ax >= b.margin.l)
+  const annotationRows = placeAnnotationLabels(visibleAnnotations.map(a => a.ax), 36)
+
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!interactive) return
     if (e.pointerType === 'touch' && !touchScrub) return
@@ -104,15 +115,16 @@ export function LineChart({ lines, percent, unit, label, markers = false,
             )}
           </>
         )}
-        {annotations.map(a => {
-          const ax = b.x(Date.parse(`${a.date}T00:00:00Z`))
-          if (!Number.isFinite(ax) || ax < b.margin.l) return null
+        {visibleAnnotations.map((a, i) => {
+          const row = annotationRows[i]
           return (
             <g key={a.date}>
-              <line x1={ax} x2={ax} y1={b.margin.t} y2={height - b.margin.b}
+              <line x1={a.ax} x2={a.ax} y1={b.margin.t} y2={height - b.margin.b}
                     stroke={PALETTE.clay} strokeWidth="1" strokeDasharray="2 3" />
-              <text x={ax + 3} y={b.margin.t + 9} fontSize="10"
-                    fill={PALETTE.clay}>{a.label}</text>
+              {row !== null && (
+                <text x={a.ax + 3} y={b.margin.t + (row === 0 ? 9 : 21)} fontSize="10"
+                      fill={PALETTE.clay}>{a.label}</text>
+              )}
             </g>
           )
         })}

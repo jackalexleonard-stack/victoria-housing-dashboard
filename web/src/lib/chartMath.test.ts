@@ -1,4 +1,4 @@
-import { buildChart, nearest, atTime, fmtTickLabel } from './chartMath'
+import { buildChart, nearest, atTime, fmtTickLabel, placeAnnotationLabels } from './chartMath'
 
 const lines = [{ name: 'a', pts: [
   { date: '2026-01-31', region: 'vic', metric: 'm', value: 10 },
@@ -107,6 +107,33 @@ test('fmtTickLabel: keeps one decimal only when needed, and handles negatives', 
   expect(fmtTickLabel(1_500_000, false)).toBe('1.5M')
   expect(fmtTickLabel(-1_000_000, false)).toBe('-1M')
   expect(fmtTickLabel(10_000, false)).toBe('10k')
+})
+
+test('placeAnnotationLabels: spread-out annotations alternate rows 0/1', () => {
+  const xs = [0, 100, 200, 300]
+  expect(placeAnnotationLabels(xs, 36)).toEqual([0, 1, 0, 1])
+})
+
+test('placeAnnotationLabels: a dense cluster drops some labels to null', () => {
+  const xs = [0, 10, 20, 30, 40, 50]
+  const rows = placeAnnotationLabels(xs, 36)
+  expect(rows).toHaveLength(6)
+  expect(rows.some(r => r === null)).toBe(true)
+  // every non-null placement must respect the min gap within its own row
+  const byRow: Record<'0' | '1', number[]> = { '0': [], '1': [] }
+  rows.forEach((r, i) => { if (r !== null) byRow[String(r) as '0' | '1'].push(xs[i]) })
+  for (const arr of Object.values(byRow)) {
+    for (let i = 1; i < arr.length; i++) expect(arr[i] - arr[i - 1]).toBeGreaterThanOrEqual(36)
+  }
+})
+
+test('placeAnnotationLabels: exact-gap boundary (== minGap) still places; just-under fails over to null', () => {
+  // pos0 x=0 -> row0 (primary). pos1 x=20 -> row1 (primary, first in that row).
+  // pos2 x=36 -> primary row0, gap to lastX0(0) is exactly 36 -> fits.
+  expect(placeAnnotationLabels([0, 20, 36], 36)).toEqual([0, 1, 0])
+  // Same shape but x=35 for the third point: primary row0 gap=35 (<36) fails,
+  // secondary row1 gap to lastX1(20)=15 (<36) also fails -> null.
+  expect(placeAnnotationLabels([0, 20, 35], 36)).toEqual([0, 1, null])
 })
 
 test('atTime snaps to the nearest date before grouping', () => {

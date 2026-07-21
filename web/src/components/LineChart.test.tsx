@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { LineChart } from './LineChart'
+import { PALETTE } from '../theme/tokens'
 
 const lines = [{ name: 'cash rate', pts: [
   { date: '2026-05-31', region: 'australia', metric: 'cash_rate', value: 3.85 },
@@ -96,4 +97,29 @@ test('a y2 line is labelled "(right axis)" in the legend', () => {
                     y2Lines={['b']} />)
   expect(screen.getByText('a')).toBeInTheDocument()
   expect(screen.getByText(/^b \(right axis\)$/)).toBeInTheDocument()
+})
+
+test('dense annotations render every dashed marker line but stagger/skip crowded text labels', () => {
+  // A wide date domain (two years) with annotations only days apart maps to
+  // pixel gaps well under the 36px min-gap — reproduces the 2022-23
+  // cash-rate cycle pile-up.
+  const wideLines = [{ name: 'cash rate', pts: [
+    { date: '2022-01-01', region: 'australia', metric: 'cash_rate', value: 0.1 },
+    { date: '2023-12-31', region: 'australia', metric: 'cash_rate', value: 4.35 },
+  ] }]
+  const denseAnnotations = [
+    { date: '2022-06-01', label: '+0.25' },
+    { date: '2022-06-06', label: '-0.25' },
+    { date: '2022-06-11', label: '+0.25' },
+    { date: '2022-06-16', label: '-0.25' },
+    { date: '2022-06-21', label: '+0.25' },
+    { date: '2022-06-26', label: '-0.25' },
+  ]
+  const { container } = render(
+    <LineChart lines={wideLines} percent unit="percent" label="cash rate"
+               annotations={denseAnnotations} />)
+  const dashedLines = container.querySelectorAll('line[stroke-dasharray]')
+  expect(dashedLines.length).toBe(6)   // lines always render
+  const labelTexts = container.querySelectorAll(`text[fill="${PALETTE.clay}"]`)
+  expect(labelTexts.length).toBeLessThan(6)   // some text labels yield
 })

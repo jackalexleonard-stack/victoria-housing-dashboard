@@ -89,6 +89,39 @@ export function buildChart(
   return { x, y, y2, paths, xTicks, yTicks, y2Ticks, flat, margin }
 }
 
+// Decides which of two label rows (0 or 1) each annotation's text should
+// render in, given its pixel x position — or null when it should be skipped
+// entirely (the dashed marker line still always renders; only the text is
+// best-effort). Dense clusters (e.g. the 2022-23 cash-rate cycle) would
+// otherwise pile every label onto one row at the same height.
+//
+// Annotations are visited in x-sorted order. Each gets a "primary" row that
+// simply alternates by sorted position (0, 1, 0, 1, ...), so neighbours
+// default to different rows. If the primary row's last PLACED label (in that
+// row) is still closer than `minGap`, the other row is tried instead; if
+// both rows are too close, the label is dropped (row stays null) without
+// disturbing either row's "last placed" tracking.
+export function placeAnnotationLabels(xs: number[], minGap: number): (0 | 1 | null)[] {
+  const order = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b])
+  const result: (0 | 1 | null)[] = new Array(xs.length).fill(null)
+  const lastX: [number | null, number | null] = [null, null]
+  const fits = (row: 0 | 1, x: number) => {
+    const last = lastX[row]
+    return last === null || x - last >= minGap
+  }
+  order.forEach((origIndex, pos) => {
+    const x = xs[origIndex]
+    const primary: 0 | 1 = pos % 2 === 0 ? 0 : 1
+    const secondary: 0 | 1 = primary === 0 ? 1 : 0
+    const row = fits(primary, x) ? primary : fits(secondary, x) ? secondary : null
+    if (row !== null) {
+      lastX[row] = x
+      result[origIndex] = row
+    }
+  })
+  return result
+}
+
 const bis = bisector<FlatPt, number>(p => p.t)
 
 export function nearest(flat: FlatPt[], t: number): FlatPt | null {
