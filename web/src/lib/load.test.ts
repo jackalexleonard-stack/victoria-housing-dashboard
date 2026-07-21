@@ -52,6 +52,20 @@ test('edge fixture passes: failed series with and without points', () => {
   expect(site.series.vic_rents.points).toHaveLength(15)
 })
 
+// Backlog cleanup: the guard's `health` branch (assertNewsData, types.ts)
+// had no test exercising the health-ABSENT path at the guard level itself
+// (only NewsSection.test.tsx covered it, and only at the component level).
+// A deep clone of the real fixture with the key deleted — not a hand-built
+// literal — so this is a genuinely real-shaped object minus just the one
+// field under test.
+test('assertNewsData accepts a real-shaped payload with no health field', () => {
+  const withoutHealth = structuredClone(newsReal) as Record<string, unknown>
+  delete withoutHealth.health
+  expect(() => assertNewsData(withoutHealth)).not.toThrow()
+  const news = assertNewsData(withoutHealth)
+  expect(news.health).toBeUndefined()
+})
+
 test('guard fails loudly on wrong shapes', () => {
   expect(() => assertSiteData({ schema_version: 2 })).toThrow(/unexpected data shape/)
   expect(() => assertSiteData({ ...siteEdge as object, series: null })).toThrow(/unexpected data shape/)

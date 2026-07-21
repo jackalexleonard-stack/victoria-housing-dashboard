@@ -1,4 +1,6 @@
+import json
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -6,6 +8,7 @@ import pytest
 from pipeline import scoring
 
 TODAY = date(2026, 7, 17)
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -228,3 +231,16 @@ def test_tile_chart_mirrors_registry_and_known_chart_ids():
     chart_ids = {c["id"] for c in findings.CHARTS}
     assert set(scoring.TILE_CHART) <= set(scoring.REGISTRY)
     assert set(scoring.TILE_CHART.values()) <= chart_ids
+
+
+def test_tile_chart_matches_the_cross_language_parity_fixture():
+    """Backlog cleanup: scoring.TILE_CHART and HeroTiles.tsx's own TILE_CHART
+    are two hand-maintained copies of the same mapping (TS can't import a
+    Python dict directly) — previously with no test checking they actually
+    agree. pipeline/tile_chart.json is a small checked-in fixture both sides
+    are tested against (see web/src/components/HeroTiles.test.tsx's matching
+    test): if either dict drifts from it, that side's own test fails
+    immediately, which transitively proves the two dicts still agree with
+    each other."""
+    fixture = json.loads((REPO_ROOT / "pipeline" / "tile_chart.json").read_text())
+    assert scoring.TILE_CHART == fixture

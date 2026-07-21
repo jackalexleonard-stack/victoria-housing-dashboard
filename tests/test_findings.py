@@ -1,6 +1,6 @@
 from datetime import date
 import pandas as pd
-from pipeline import findings
+from pipeline import export, findings
 
 
 def _df(rows):
@@ -369,6 +369,93 @@ def test_section_summaries_full_world_quiet_vs_real_mover():
     })
     _, quiet2 = findings.build_section_summaries_full(mover_ls, mover_lm, date(2026, 7, 18))
     assert quiet2["world"] is False
+
+
+def test_world_summary_returns_text_and_quiet_flag_together():
+    """Backlog cleanup: _world_summary chooses its bool flag WITH the text
+    it returns (a (text, is_quiet) tuple) instead of the caller re-deriving
+    "was this quiet?" by string-comparing the result against
+    WORLD_QUIET_SUMMARY after the fact."""
+    quiet_ls, quiet_lm = _loaders({
+        "intl_fred": _df([
+            ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
+            ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
+        ]),
+    })
+    findings_out = findings.build_findings(quiet_ls, quiet_lm)
+    text, is_quiet = findings._world_summary(quiet_ls, findings_out)
+    assert (text, is_quiet) == (findings.WORLD_QUIET_SUMMARY, True)
+
+    mover_ls, mover_lm = _loaders({
+        "intl_commodities": _df([
+            ("2026-06-30", "global", "iron_ore", 95.0, "USD/tonne"),
+            ("2026-07-31", "global", "iron_ore", 115.0, "USD/tonne"),
+        ]),
+    })
+    findings_out2 = findings.build_findings(mover_ls, mover_lm)
+    text2, is_quiet2 = findings._world_summary(mover_ls, findings_out2)
+    assert text2 == findings_out2["iron_ore"]
+    assert is_quiet2 is False
+
+
+def test_world_summary_unchanged_against_real_committed_data():
+    """Locks in the refactor's own "must not change current exported
+    values" requirement: runs both the OLD (pre-refactor, string-equality)
+    algorithm and the NEW (text, is_quiet)-tuple one over the real committed
+    data/ directory (the same loaders test_export.py's real end-to-end test
+    uses) and asserts they agree byte-for-byte."""
+    today = date(2026, 7, 21)
+    findings_out = findings.build_findings(export.load_series, export.load_meta)
+
+    def old_world_summary(load_series, findings_out):
+        best = None
+        for chart in findings.CHARTS:
+            if chart["section"] != "world":
+                continue
+            df = findings._primary_frame(chart, load_series)
+            if len(df) < 2:
+                continue
+            v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
+            unit = str(df["unit"].iloc[-1])
+            if unit == "percent":
+                mag, floor = abs(v - p), findings.WORLD_QUIET_PP
+            else:
+                if p == 0:
+                    continue
+                mag, floor = abs((v / p - 1) * 100), findings.WORLD_QUIET_PCT
+            if mag < floor:
+                continue
+            if best is None or mag > best[0]:
+                best = (mag, chart["id"])
+        if best is None:
+            return findings.WORLD_QUIET_SUMMARY
+        return findings_out.get(best[1]) or findings.WORLD_QUIET_SUMMARY
+
+    old_text = old_world_summary(export.load_series, findings_out)
+    old_quiet = old_text == findings.WORLD_QUIET_SUMMARY
+    new_text, new_quiet = findings._world_summary(export.load_series, findings_out)
+    assert (new_text, new_quiet) == (old_text, old_quiet)
+    # Sanity: real data has a genuine mover today, not the quiet fallback —
+    # otherwise this test would pass vacuously.
+    assert new_quiet is False
+
+
+def test_hvi_near_zero_mom_reads_as_held_flat_not_a_fake_move():
+    """Backlog cleanup: an exact `v == 0` check missed the same near-zero-
+    but-displays-as-0.0 case _generic's HELD_THRESHOLD_PP already covers
+    elsewhere (design review P1-copy) — align _hvi with the same
+    display-precision threshold. Both sides of the boundary."""
+    def hvi_finding(mom):
+        ls, lm = _loaders({"vic_hvi": _df([
+            ("2026-05-31", "melbourne", "hvi_change_mom", 1.0, "percent"),
+            ("2026-06-30", "melbourne", "hvi_change_mom", mom, "percent"),
+        ])}, {"vic_hvi": {"frequency": "daily"}})
+        return findings.build_findings(ls, lm)["hvi_melbourne"]
+
+    # Just inside the threshold (0.03 < 0.05) -> "held flat", not "rose 0.0%".
+    assert hvi_finding(0.03) == "Melb dwelling values held flat in Jun 2026"
+    # Just outside it (0.06 >= 0.05) -> a real move, rounded to 1dp as usual.
+    assert hvi_finding(0.06) == "Melb dwelling values rose 0.1% in Jun 2026"
 
 
 def test_fmt_value_full_unit_vocabulary():

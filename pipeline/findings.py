@@ -314,7 +314,12 @@ def _hvi(chart, load_series, load_meta):
     if len(yoy):
         y = float(yoy.sort_values("date")["value"].iloc[-1])
         tail = f" ({y:+.1f}% over the year)"
-    if v == 0:
+    # Backlog cleanup: an exact `v == 0` check missed the same near-zero-but-
+    # displays-as-0.0 case _generic's HELD_THRESHOLD_PP already fixed
+    # elsewhere (design review P1-copy) — a mom of e.g. 0.03 rounds to "0.0%"
+    # at this sentence's own 1dp precision, so it must read "held flat", not
+    # "rose 0.0%". Same threshold, same display precision, same bug class.
+    if abs(v) < HELD_THRESHOLD_PP:
         return f"{subject} held flat in {period}{tail}"
     return f"{subject} {verb} {abs(v):.1f}% in {period}{tail}"
 
@@ -521,7 +526,13 @@ def _section_mover_chart_id(section_id: str, load_series: Loader, load_meta: Loa
     return best_id
 
 
-def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> str:
+def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> tuple[str, bool]:
+    """(summary text, is_quiet) — chosen together, right where
+    WORLD_QUIET_SUMMARY is authored, rather than leaving the caller to
+    recover "was this actually quiet?" later by re-comparing the returned
+    text against the sentinel string (design review honesty-override class,
+    T6 — the same drift risk that motivated section_summary_quiet in the
+    first place, just for World's bespoke path instead of the generic one)."""
     best = None  # (magnitude, chart_id)
     for chart in CHARTS:
         if chart["section"] != "world":
@@ -542,8 +553,11 @@ def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> str:
         if best is None or mag > best[0]:
             best = (mag, chart["id"])
     if best is None:
-        return WORLD_QUIET_SUMMARY
-    return findings_out.get(best[1]) or WORLD_QUIET_SUMMARY
+        return WORLD_QUIET_SUMMARY, True
+    text = findings_out.get(best[1])
+    if not text:
+        return WORLD_QUIET_SUMMARY, True
+    return text, False
 
 
 _SUMMARY_SECTIONS = ("prices", "rents", "supply", "money", "people", "social", "world")
@@ -563,9 +577,9 @@ def build_section_summaries_full(load_series: Loader, load_meta: Loader,
     quiet: dict[str, bool] = {}
     for section_id in _SUMMARY_SECTIONS:
         if section_id == "world":
-            summary = _world_summary(load_series, findings_out)
+            summary, is_quiet = _world_summary(load_series, findings_out)
             text[section_id] = summary
-            quiet[section_id] = summary == WORLD_QUIET_SUMMARY
+            quiet[section_id] = is_quiet
             continue
         mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
         found = findings_out.get(mover) if mover else None

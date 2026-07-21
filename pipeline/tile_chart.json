@@ -1,0 +1,22 @@
+{
+  "cash_rate": "cash_rate",
+  "melb_dwelling_values": "hvi_melbourne",
+  "au_dwelling_values": "hvi_australia",
+  "vic_mean_price": "mean_price",
+  "vic_approvals": "approvals",
+  "accord_runrate": "accord",
+  "melb_vacancy": "vacancy",
+  "melb_rent_growth": "rent_growth",
+  "credit_growth": "credit",
+  "mortgage_new": "mortgage_rates",
+  "vic_commencements": "activity",
+  "vhr_waitlist": "waitlist",
+  "nom": "population",
+  "input_costs": "input_costs",
+  "iron_ore": "iron_ore",
+  "melb_rent": "median_rent",
+  "greenfield_supply": "land",
+  "melb_median_house": "reiv_median",
+  "melb_clearance": "auctions",
+  "oo_lending": "lending"
+}

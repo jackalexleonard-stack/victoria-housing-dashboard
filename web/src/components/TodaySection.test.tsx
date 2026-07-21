@@ -170,16 +170,22 @@ test('dates render human-formatted, not raw ISO', () => {
   expect(screen.queryByText(/2026-07-17/)).not.toBeInTheDocument()
 })
 
-test('hero tiles carry a one-line explainer tooltip', () => {
+// Backlog cleanup: these explainers were hover-only `title=` attrs,
+// unreachable by touch or keyboard — now a visible caption line, present
+// in the accessible tree (not just on hover), matching the product's
+// existing honest-caption idiom.
+test('hero tiles carry a one-line explainer as visible text, not just a hover tooltip', () => {
   render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
-  expect(screen.getByTestId('hero-strip'))
-    .toHaveAttribute('title', "Today's most notable movements")
+  const strip = screen.getByTestId('hero-strip')
+  expect(strip).not.toHaveAttribute('title')
+  expect(within(strip).getByText("Today's most notable movements")).toBeInTheDocument()
 })
 
-test('top stories heading carries an explainer tooltip', () => {
+test('top stories heading explainer is visible text, not just a hover tooltip', () => {
   render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
-  expect(screen.getByRole('heading', { name: 'Top stories' }))
-    .toHaveAttribute('title', 'Ranked by source, topic and recency')
+  const heading = screen.getByRole('heading', { name: 'Top stories' })
+  expect(heading).not.toHaveAttribute('title')
+  expect(screen.getByText('Ranked by source, topic and recency')).toBeInTheDocument()
 })
 
 test('no hero_lead (older export) falls back to strip only, no crash', () => {

@@ -131,8 +131,12 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false }:
           )}
         </div>
       )}
-      <div className={leadKey ? 'mt-4' : ''} title="Today's most notable movements"
-           data-testid="hero-strip">
+      {/* Backlog cleanup: this explainer was a hover-only `title=` attr,
+          unreachable by touch or keyboard. A visible caption line matches
+          the product's own honest-caption idiom (e.g. ChartCard's band
+          caption) rather than an aria-describedby'd sr-only alternative. */}
+      <div className={leadKey ? 'mt-4' : ''} data-testid="hero-strip">
+        <p className="text-xs text-faint mb-2">Today's most notable movements</p>
         <HeroTiles tiles={site.hero} extraTiles={site.extra_tiles} onOpen={onOpen} />
       </div>
       {whatsNew.length > 0 && (
@@ -177,8 +181,8 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false }:
       )}
       {top.length > 0 && (
         <div className="mt-5">
-          <h3 className="font-display text-lg mb-2"
-              title="Ranked by source, topic and recency">Top stories</h3>
+          <h3 className="font-display text-lg mb-1">Top stories</h3>
+          <p className="text-xs text-faint mb-2">Ranked by source, topic and recency</p>
           <div className="grid sm:grid-cols-2 gap-3">
             {top.map(item => (
               <article key={item.url} className="flex gap-3 bg-card border border-line rounded-lg p-3">
