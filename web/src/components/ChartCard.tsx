@@ -3,22 +3,28 @@ import { DataTable } from './DataTable'
 import { Chip } from './Chip'
 import { chartPoints, lineName } from '../lib/selectors'
 import { staleness } from '../lib/staleness'
-import { fmtPeriod, shortSource } from '../lib/format'
+import { fmtPeriod, fmtUnit, shortSource } from '../lib/format'
 import { xExtentOf } from '../lib/chartMath'
 import type { ChartSpec, SiteData } from '../lib/types'
 import type { Geo, Range } from '../lib/urlState'
 
-// Design review P1-emphasis: on a ≥4-line card, the line matching the
-// chart's own finding gets the emphasis treatment; everything else
-// de-emphasises to grey. The finding's actual analytical "primary" metric
-// (pipeline/findings.py's `primary=`) isn't exported to the frontend chart
-// spec — only `metrics` (display order) is — so metrics[0] is a correct
-// fallback EXCEPT where display order deliberately differs from the
-// analytical primary. Currently only median_rent_by_type does (its metrics
-// are ordered by bedroom count; the finding is specifically about the
-// 3-bed house).
-const EMPHASIS_PRIMARY: Record<string, string> = {
+// Design review P1-emphasis / D1(c): the finding's actual analytical
+// "primary" metric (pipeline/findings.py's `primary=`) isn't exported to the
+// frontend chart spec — only `metrics` (display order, or for a chart with
+// no explicit `metrics` list, the series' own units-object key order) is —
+// so metrics[0] is a correct fallback EXCEPT where display order
+// deliberately differs from the analytical primary. Two things key off this
+// map: (1) on a ≥4-line card, the line matching the chart's own finding gets
+// the emphasis treatment (everything else de-emphasises to grey) —
+// median_rent_by_type's metrics are ordered by bedroom count, but the
+// finding is specifically about the 3-bed house; (2) a stat-tile chart's
+// (D1c below) headline numeral shows THIS metric's latest value —
+// vic_land's units-object keys sort alphabetically (lot_supply, lots_titled,
+// years_of_supply), so metrics[0] would show the wrong figure without this
+// override.
+const FINDING_PRIMARY_METRIC: Record<string, string> = {
   median_rent_by_type: 'rent_3br_house',
+  land: 'greenfield_years_of_supply',
 }
 
 // Design review P1-outage: a dead card (status failed, zero points) used to
@@ -104,8 +110,9 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // The mortgage-rates card small-multiples into New vs Outstanding minis
   // (design review P1-emphasis) instead of taking the emphasize treatment,
   // so it's excluded from the general ≥4-line emphasis rule below.
+  const findingPrimaryMetric = FINDING_PRIMARY_METRIC[chart.id] ?? primaryMetric
   const emphasize = (!isMortgage && lines.length >= 4)
-    ? lineName(EMPHASIS_PRIMARY[chart.id] ?? primaryMetric, site.metric_labels)
+    ? lineName(findingPrimaryMetric, site.metric_labels)
     : undefined
   // mortgage_rates' chart spec has no explicit `metrics` list (the whole
   // series is new+outstanding x fixed+variable), so `lines` already carries
@@ -132,6 +139,22 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   const showBandCaption = annotationMode === 'band' &&
     visibleAnnotationCount(annotations, lines) >= 2
   const failedEmpty = !lines.length
+  // D1(c) re-verification: vic_land carries exactly one point per metric —
+  // every path degenerates to a zero-length `moveto`+`closepath` (blank
+  // plot), and mixed-scale metrics (lots in the hundred-thousands vs. years
+  // in the teens) would badly mis-share one axis even if it did render. The
+  // gate is data-driven (every LINE has <2 points), not keyed on chart.id —
+  // it auto-reverts to the normal LineChart the moment any line accrues a
+  // second point. A chart with only SOME short lines (mixed cadence) does
+  // NOT qualify — LineChart's own auto-marker fallback (a visible circle on
+  // any line with <2 points) already handles that case at the normal chart
+  // size, unchanged.
+  const isStatTile = !failedEmpty && !isMortgage && lines.every(l => l.pts.length < 2)
+  const statLine = isStatTile
+    ? (lines.find(l => l.name === lineName(findingPrimaryMetric, site.metric_labels)) ?? lines[0])
+    : undefined
+  const statValue = statLine?.pts.at(-1)?.value
+  const statUnit = entry?.units[findingPrimaryMetric] ?? unit
 
   // Design review P1-outage: a dead card's headline slot names the SERIES
   // (chart.title), not the generic finding sentence — showing "No recent
@@ -170,6 +193,16 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           <p className="text-sm text-muted py-6 text-center">
             {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
           </p>
+        ) : isStatTile ? (
+          // No <svg>, short fixed height — a plotted line would be zero-length
+          // ink here anyway (every line has under 2 points). The headline
+          // above already carries the finding sentence; this body's only job
+          // is the primary metric's own latest figure, large.
+          <div className="h-24 flex items-center justify-center">
+            <p className="num text-4xl font-semibold text-ink">
+              {statValue != null ? fmtUnit(statValue, statUnit) : '—'}
+            </p>
+          </div>
         ) : isMortgage ? (
           <div className="space-y-3">
             <div>

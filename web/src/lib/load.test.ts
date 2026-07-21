@@ -42,12 +42,14 @@ test('edge fixture passes: failed series with and without points', () => {
   expect(site.series.vic_auctions.status).toBe('failed')
   expect(site.series.vic_auctions.points).toHaveLength(0)
   expect(site.series.vic_rents.status).toBe('failed')
-  // vic_rents carries median_rent + rent_growth_annual (F4's mixed-unit
-  // fixture point) plus, since T2 (chart-internals scan batch) added the
-  // median_rent_by_type card fixture, 12 more points across the 6
-  // rent-by-dwelling-type metrics (2 dates each) — see selectors/ChartCard
-  // tests. 14 total, not the old 2.
-  expect(site.series.vic_rents.points).toHaveLength(14)
+  // vic_rents carries median_rent (2 points — D1(c) added a second so the
+  // median_rent card isn't accidentally caught by the greenfield-style
+  // stat-tile gate, which fires when EVERY line has < 2 points) +
+  // rent_growth_annual (F4's mixed-unit fixture point) plus, since T2
+  // (chart-internals scan batch) added the median_rent_by_type card
+  // fixture, 12 more points across the 6 rent-by-dwelling-type metrics
+  // (2 dates each) — see selectors/ChartCard tests. 15 total, not the old 2.
+  expect(site.series.vic_rents.points).toHaveLength(15)
 })
 
 test('guard fails loudly on wrong shapes', () => {

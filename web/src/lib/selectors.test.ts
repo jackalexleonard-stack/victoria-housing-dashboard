@@ -20,7 +20,9 @@ test('fixed region mode ignores the geo filter', () => {
 
 test('geo mode falls back with a scope note', () => {
   const { lines, scopeNote } = chartPoints(site, chart('median_rent'), 'all', 'regional_vic', NOW)
-  expect(lines[0].pts).toHaveLength(1)       // melbourne data only in fixture
+  // 2, not 1: D1(c) gave median_rent a second fixture point (melbourne data
+  // only, still — regional_vic itself has none, hence the fallback below).
+  expect(lines[0].pts).toHaveLength(2)
   expect(scopeNote).toBe('Melbourne')        // fell back, so the note names it
 })
 

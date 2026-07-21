@@ -205,6 +205,98 @@ test('band caption disappears along with the band when fewer than 2 annotations 
   expect(screen.queryByText('Shaded: cash-rate cycle')).not.toBeInTheDocument()
 })
 
+// --- D1(c): greenfield-style stat-tile gate (every line < 2 points) ---
+// vic_land isn't in this file's shared fixture, so these tests build their
+// own minimal series/chart (mirroring pipeline/sources/udp.py's real shape:
+// 3 metrics, alphabetically-sorted units-object keys, so
+// greenfield_lot_supply sorts first even though the finding's real subject
+// is greenfield_years_of_supply — the exact case FINDING_PRIMARY_METRIC
+// exists for).
+function siteWithLandChart(pointsPerMetric: 1 | 2) {
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'land', section: 'supply', title: 'Greenfield land supply',
+    series_id: 'vic_land', metrics: null, region_mode: 'fixed:melbourne',
+    percent: false, markers: false, annotate: false, note: null, modal_metrics: null,
+  })
+  // Slice from the END: a 1-point fixture should carry the LATEST value
+  // (values[1]), not the earlier one — mirrors how a real 1-point-per-metric
+  // series (vic_land in production) only ever has its most recent reading.
+  const dates = ['2024-12-31', '2025-12-31'].slice(-pointsPerMetric)
+  const series = (metric: string, values: number[]) => {
+    const vals = values.slice(-pointsPerMetric)
+    return dates.map((date, i) => ({ date, region: 'melbourne', metric, value: vals[i] }))
+  }
+  mutated.series.vic_land = {
+    status: 'ok',
+    meta: { source_name: 'Urban Development Program', source_url: null, frequency: 'annual',
+            last_fetched: '2026-07-18T00:00:00Z', last_changed: null,
+            last_data_date: dates.at(-1), error: null, cadence_days: 365 },
+    units: { greenfield_lot_supply: 'lots', greenfield_lots_titled: 'lots',
+             greenfield_years_of_supply: 'years' },
+    points: [
+      ...series('greenfield_lot_supply', [300_000, 334_019]),
+      ...series('greenfield_lots_titled', [17_000, 18_543]),
+      ...series('greenfield_years_of_supply', [16, 18]),
+    ],
+  }
+  mutated.findings.land = 'Greenfield years of supply sits at 18.0 years'
+  return assertSiteData(mutated)
+}
+
+test('a chart whose every line has < 2 points renders a stat tile (fmtUnit value, no chart) instead of a blank plot', () => {
+  const landSite = siteWithLandChart(1)
+  render(<ChartCard site={landSite} chart={landSite.charts.find(c => c.id === 'land')!}
+                    finding="f" range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  // greenfield_years_of_supply (FINDING_PRIMARY_METRIC override), not the
+  // alphabetically-first greenfield_lot_supply metric.
+  expect(screen.getByText('18.0 yrs')).toBeInTheDocument()
+})
+
+test('the same chart auto-reverts to the normal LineChart once every line reaches >= 2 points', () => {
+  const landSite = siteWithLandChart(2)
+  render(<ChartCard site={landSite} chart={landSite.charts.find(c => c.id === 'land')!}
+                    finding="f" range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.getByRole('img')).toBeInTheDocument()
+  expect(screen.queryByText('18.0 yrs')).not.toBeInTheDocument()
+})
+
+test('a MIXED chart (one line short, others long) still renders the chart, not a stat tile — auto-marker behaviour is unaffected', () => {
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'land', section: 'supply', title: 'Greenfield land supply',
+    series_id: 'vic_land', metrics: null, region_mode: 'fixed:melbourne',
+    percent: false, markers: false, annotate: false, note: null, modal_metrics: null,
+  })
+  mutated.series.vic_land = {
+    status: 'ok',
+    meta: { source_name: 'Urban Development Program', source_url: null, frequency: 'annual',
+            last_fetched: '2026-07-18T00:00:00Z', last_changed: null,
+            last_data_date: '2025-12-31', error: null, cadence_days: 365 },
+    units: { greenfield_lot_supply: 'lots', greenfield_lots_titled: 'lots',
+             greenfield_years_of_supply: 'years' },
+    points: [
+      { date: '2024-12-31', region: 'melbourne', metric: 'greenfield_lot_supply', value: 300_000 },
+      { date: '2025-12-31', region: 'melbourne', metric: 'greenfield_lot_supply', value: 334_019 },
+      // Only one point for this metric — the "MIXED" line.
+      { date: '2025-12-31', region: 'melbourne', metric: 'greenfield_lots_titled', value: 18_543 },
+      { date: '2024-12-31', region: 'melbourne', metric: 'greenfield_years_of_supply', value: 16 },
+      { date: '2025-12-31', region: 'melbourne', metric: 'greenfield_years_of_supply', value: 18 },
+    ],
+  }
+  mutated.findings.land = 'f'
+  const landSite = assertSiteData(mutated)
+  const { container } = render(
+    <ChartCard site={landSite} chart={landSite.charts.find(c => c.id === 'land')!}
+              finding="f" range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.getByRole('img')).toBeInTheDocument()
+  // The short line (greenfield_lots_titled, 1 point) still gets its existing
+  // LineChart auto-marker fallback — unchanged behaviour, just proved from
+  // the ChartCard level now that the stat-tile gate exists alongside it.
+  expect(container.querySelectorAll('circle.pt-marker').length).toBeGreaterThanOrEqual(1)
+})
+
 test('mixed-unit series formats each line with its own metric unit, not the series-wide first one', async () => {
   // vic_rents carries rent_growth_annual (percent) FIRST in units and
   // median_rent (aud) second — the old single-scalar-unit code picked
