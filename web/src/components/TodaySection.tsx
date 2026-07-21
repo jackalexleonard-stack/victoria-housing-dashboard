@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { deltaColor, HeroTiles, splitCadenceCode, TILE_CHART } from './HeroTiles'
-import { TILE_FMT, fmtDate, fmtPeriod } from '../lib/format'
+import { TILE_FMT, fmtPeriod, newsByline } from '../lib/format'
 import { staleness } from '../lib/staleness'
 import { PALETTE } from '../theme/tokens'
 import type { HeroTile, NewsData, SiteData } from '../lib/types'
@@ -193,9 +193,8 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false }:
                      className="font-medium text-sm leading-snug hover:text-blue">
                     {item.title}</a>
                   <p className="text-xs text-faint mt-1">
-                    {item.source} · {fmtDate(item.published)}
-                    {item.dup_sources.length > 0 &&
-                      ` · covered by ${item.dup_sources.length + 1} outlets`}
+                    {newsByline(item.source, item.published, item.dup_sources.length > 0
+                      ? `covered by ${item.dup_sources.length + 1} outlets` : undefined)}
                   </p>
                 </div>
               </article>

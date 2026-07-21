@@ -23,13 +23,6 @@ def test_discover_tables_url_missing_raises():
         dffh.discover_tables_url("<a href='/something-else'>x</a>")
 
 
-def test_report_quarter_end():
-    assert dffh._report_quarter_end("Homes Victoria Rental Report - September Quarter 2025") == "2025-09-30"
-    assert dffh._report_quarter_end("... March Quarter 2024") == "2024-03-31"
-    with pytest.raises(ValueError):
-        dffh._report_quarter_end("no quarter here")
-
-
 def test_parse_tables_offline():
     raw = (FIX / "dffh_rental_report.xlsx").read_bytes()
     df = dffh.parse_tables(raw)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ago, fmtDate } from '../lib/format'
+import { ago, newsByline } from '../lib/format'
 import type { NewsData, NewsItem } from '../lib/types'
 
 // Mirrors pipeline/scoring.py's TAG_VALUE weighting order — an item's group
@@ -47,7 +47,7 @@ function NewsGroup({ id, items }: { id: GroupId; items: NewsItem[] }) {
           <li key={i.url} className="py-2.5">
             <a href={i.url} target="_blank" rel="noreferrer"
                className="text-sm font-medium leading-snug hover:text-blue">{i.title}</a>
-            <p className="text-xs text-faint mt-0.5">{i.source} · {fmtDate(i.published)}</p>
+            <p className="text-xs text-faint mt-0.5">{newsByline(i.source, i.published)}</p>
           </li>
         ))}
       </ul>
@@ -104,7 +104,7 @@ export function NewsSection({ news, now }: { news: NewsData; now: Date }) {
               <li key={i.url} className="py-2.5">
                 <a href={i.url} target="_blank" rel="noreferrer"
                    className="text-sm font-medium leading-snug hover:text-blue">{i.title}</a>
-                <p className="text-xs text-faint mt-0.5">{i.source} · {fmtDate(i.published)}</p>
+                <p className="text-xs text-faint mt-0.5">{newsByline(i.source, i.published)}</p>
               </li>
             ))}
           </ul>

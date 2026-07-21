@@ -356,6 +356,31 @@ RARITY = {"daily": 0.2, "weekly": 0.4, "monthly": 0.7,
 WORLD_NOTABILITY_WEIGHT = 0.5
 
 
+def _resample_last(s: pd.Series, rule: str) -> pd.Series:
+    """Equivalent to ``s.resample(rule).last().dropna()`` (collapse to one,
+    latest-in-period value per calendar period) WITHOUT calling
+    ``Series.resample()`` directly.
+
+    For an anchored end-of-period rule like "ME" (month end) — the only kind
+    used here — pandas' real ``.resample()`` hits an internal binning path
+    (``DatetimeIndexResampler._adjust_bin_edges``) that builds a bare/
+    'generic'-unit NumPy timedelta and raises a ``DeprecationWarning`` on
+    this repo's pinned pandas==2.2.3 + newer NumPy (2.x) combination — an
+    upstream pandas/NumPy version-interaction bug, not something fixable by
+    passing an explicit unit at this call site (reproduces even against a
+    freshly-built, explicitly-``datetime64[ns]`` index; confirmed by direct
+    reproduction against pandas' own resample internals). Grouping by the
+    equivalent ``PeriodIndex`` and relabelling each group back to that
+    period's calendar end-timestamp is the same operation, minus the private
+    binning path that emits the warning — same values, same index dtype,
+    same dates, for every rule this registry currently uses.
+    """
+    period_alias = rule[:-1] if rule.endswith("E") else rule  # "ME" -> "M"
+    grouped = s.groupby(s.index.to_period(period_alias)).last()
+    grouped.index = grouped.index.to_timestamp(period_alias)
+    return grouped.dropna()
+
+
 def _robust_sigma(prior: pd.Series) -> float:
     med = prior.median()
     mad = (prior - med).abs().median()
@@ -375,7 +400,7 @@ def score_metric(key: str, load_series: Loader, load_meta: Loader,
         return None
     s = df.set_index("date")["value"]
     if spec["resample"]:
-        s = s.resample(spec["resample"]).last().dropna()
+        s = _resample_last(s, spec["resample"])
     if len(s) < 2:
         return None
 

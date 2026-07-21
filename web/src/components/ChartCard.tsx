@@ -1,8 +1,7 @@
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
-import { chartPoints, lineName } from '../lib/selectors'
-import { staleness } from '../lib/staleness'
+import { lineName, useChartData } from '../lib/selectors'
 import { fmtPeriod, fmtUnit, shortSource } from '../lib/format'
 import { xExtentOf } from '../lib/chartMath'
 import type { ChartSpec, SiteData } from '../lib/types'
@@ -78,24 +77,8 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // card's own chip then drops to the quieter "{period} · unavailable"
   // form instead of repeating the full staleness sentence.
   quietOutage?: boolean }) {
-  const entry = site.series[chart.series_id]
-  const { lines, scopeNote } = chartPoints(site, chart, range, geo, now)
-  // A series can carry mixed units across its metrics (e.g. vic_rents:
-  // rent_growth_annual=percent, median_rent=aud) — one scalar unit for the
-  // whole chart would misformat whichever metric isn't first. Build a
-  // per-line unit map from the chart's own metrics (or, for region-mode
-  // charts with no explicit metrics list, every metric the series has)
-  // and let LineChart/DataTable key off the line name. The scalar `unit`
-  // stays as a fallback for lines that don't match (e.g. region_mode
-  // 'all', whose line names are region labels, not metric names) —
-  // derived from the chart's primary metric where identifiable.
-  const chartMetrics = chart.metrics ?? (entry ? Object.keys(entry.units) : [])
-  const unitByName = entry
-    ? Object.fromEntries(chartMetrics.map(m => [lineName(m, site.metric_labels), entry.units[m] ?? '']))
-    : undefined
-  const primaryMetric = chartMetrics[0]
-  const unit = entry ? (entry.units[primaryMetric] ?? Object.values(entry.units)[0] ?? '') : ''
-  const st = entry ? staleness(entry, now) : null
+  const { entry, lines, scopeNote, unitByName, primaryMetric, unit, st } =
+    useChartData(site, chart, range, geo, now)
   const annotations = chart.annotate
     ? site.annotations.cash_rate_moves.map(m => ({
         date: m.date, label: `${m.delta > 0 ? '+' : ''}${m.delta}` }))

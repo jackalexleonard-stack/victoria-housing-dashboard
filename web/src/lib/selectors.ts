@@ -1,5 +1,6 @@
-import type { ChartSpec, Pt, SiteData } from './types'
+import type { ChartSpec, Pt, SeriesEntry, SiteData } from './types'
 import type { Geo, Range } from './urlState'
+import { staleness } from './staleness'
 
 export const GEO_LABEL: Record<string, string> = {
   melbourne: 'Melbourne', regional_vic: 'Regional Vic', vic: 'Victoria',
@@ -66,4 +67,48 @@ export function chartPoints(site: SiteData, chart: ChartSpec, range: Range,
                           .sort((a, b) => a.date.localeCompare(b.date)) })
   }
   return { lines, scopeNote }
+}
+
+// Backlog cleanup: ChartCard and DetailView both derived the same ~15-20
+// line block (entry lookup, chartPoints, per-line unit map, primary unit,
+// staleness) with only cosmetic variable-naming differences. One shared
+// derivation, called by both, so the two can't drift out of sync. A plain
+// function, not a real React hook (it calls no hooks itself) — safe to call
+// from any component body, but named `useChartData` to match how both
+// call sites use it (compute-once-per-render, chart-keyed).
+export interface ChartData {
+  entry: SeriesEntry | undefined
+  lines: { name: string; pts: Pt[] }[]
+  scopeNote: string | null
+  chartMetrics: string[]
+  primaryMetric: string
+  // undefined (not {}) when the series can't be found at all — matches
+  // ChartCard's own long-standing convention; DetailView falls back to {}
+  // itself where it needs an always-defined object to spread.
+  unitByName: Record<string, string> | undefined
+  unit: string
+  st: ReturnType<typeof staleness> | null
+}
+
+export function useChartData(site: SiteData, chart: ChartSpec, range: Range,
+                              geo: Geo, now: Date): ChartData {
+  const entry = site.series[chart.series_id]
+  const { lines, scopeNote } = chartPoints(site, chart, range, geo, now)
+  // A series can carry mixed units across its metrics (e.g. vic_rents:
+  // rent_growth_annual=percent, median_rent=aud) — one scalar unit for the
+  // whole chart would misformat whichever metric isn't first. Build a
+  // per-line unit map from the chart's own metrics (or, for region-mode
+  // charts with no explicit metrics list, every metric the series has) and
+  // let LineChart/DataTable key off the line name. The scalar `unit` stays
+  // as a fallback for lines that don't match (e.g. region_mode 'all', whose
+  // line names are region labels, not metric names) — derived from the
+  // chart's primary metric where identifiable.
+  const chartMetrics = chart.metrics ?? (entry ? Object.keys(entry.units) : [])
+  const unitByName = entry
+    ? Object.fromEntries(chartMetrics.map(m => [lineName(m, site.metric_labels), entry.units[m] ?? '']))
+    : undefined
+  const primaryMetric = chartMetrics[0]
+  const unit = entry ? (entry.units[primaryMetric] ?? Object.values(entry.units)[0] ?? '') : ''
+  const st = entry ? staleness(entry, now) : null
+  return { entry, lines, scopeNote, chartMetrics, primaryMetric, unitByName, unit, st }
 }

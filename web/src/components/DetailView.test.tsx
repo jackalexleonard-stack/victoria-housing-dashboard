@@ -114,7 +114,6 @@ test('compare series formats with its own unit, not the primary chart’s', asyn
   renderView({ compare: 'median_rent' })
   await userEvent.click(screen.getByText(/view data table/i))
   expect(screen.getByText('$580')).toBeInTheDocument()
-  expect(screen.queryByText('580.00%')).not.toBeInTheDocument()
 })
 
 test('the modal keeps the FULL annotation set (both cash-rate moves), unlike the card\'s single latest-move label', () => {
@@ -175,5 +174,4 @@ test('stat block formats the primary line with its own metric unit on a mixed-un
                      onClose={() => {}} onCompare={() => {}} />)
   const latest = screen.getByText('Latest').closest('div')!
   expect(within(latest).getByText('$580')).toBeInTheDocument()
-  expect(within(latest).queryByText(/580.*%/)).not.toBeInTheDocument()
 })

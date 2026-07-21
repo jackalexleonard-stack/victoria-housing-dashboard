@@ -153,6 +153,13 @@ export function shortSource(name: string | null | undefined): string {
   return name.split(/\s+/)[0]
 }
 
+// Shared "{source} · {date}[ · extra]" byline idiom — was duplicated
+// (near-)verbatim across NewsSection's two item lists and TodaySection's
+// top-stories cards (the latter appending a "covered by N outlets" clause).
+export function newsByline(source: string, published: string, extra?: string): string {
+  return extra ? `${source} · ${fmtDate(published)} · ${extra}` : `${source} · ${fmtDate(published)}`
+}
+
 export function ago(iso: string | null, now: Date): string {
   if (!iso) return 'unknown'
   const t = Date.parse(iso)

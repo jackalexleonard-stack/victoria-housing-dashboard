@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
-import { chartPoints, lineName } from '../lib/selectors'
-import { staleness, nextUpdate } from '../lib/staleness'
+import { chartPoints, useChartData } from '../lib/selectors'
+import { nextUpdate } from '../lib/staleness'
 import { ago, fmtPeriod, fmtUnit } from '../lib/format'
 import { RANGES, type Geo, type Range } from '../lib/urlState'
 import type { ChartSpec, SiteData } from '../lib/types'
@@ -32,21 +32,13 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
     return () => d?.removeEventListener('cancel', onCancel)
   }, [onClose])
 
-  const entry = site.series[chart.series_id]
-  const { lines, scopeNote } = chartPoints(site, chart, localRange, geo, now)
-  // See ChartCard.tsx: a series can carry mixed units across its metrics, so
-  // one scalar unit for the whole chart would misformat whichever metric
-  // isn't first. Build a per-line unit map from the primary chart's own
-  // metrics (or every metric the series has, when the chart doesn't name
-  // specific ones) and merge in the compare chart's unit under its line's
-  // name. The scalar `unit`/`cmpUnit` stay as fallbacks, derived from each
-  // chart's primary metric where identifiable, else the first unit found.
-  const chartMetrics = chart.metrics ?? (entry ? Object.keys(entry.units) : [])
-  const primaryUnits = entry
-    ? Object.fromEntries(chartMetrics.map(m => [lineName(m, site.metric_labels), entry.units[m] ?? '']))
-    : {}
-  const unit = entry ? (entry.units[chartMetrics[0]] ?? Object.values(entry.units)[0] ?? '') : ''
-  const st = entry ? staleness(entry, now) : null
+  const { entry, lines, scopeNote, unitByName: primaryUnitsRaw, unit, st } =
+    useChartData(site, chart, localRange, geo, now)
+  // useChartData leaves unitByName undefined when the series can't be found
+  // at all (mirrors ChartCard's own convention) — this component always
+  // needs an object here, since it spreads it into the compare-chart merge
+  // below regardless of whether `entry` resolved.
+  const primaryUnits = primaryUnitsRaw ?? {}
   const cmpChart = compare ? site.charts.find(c => c.id === compare) : null
   const cmpEntry = cmpChart ? site.series[cmpChart.series_id] : null
   const cmpMetrics = cmpChart ? (cmpChart.metrics ?? (cmpEntry ? Object.keys(cmpEntry.units) : [])) : []

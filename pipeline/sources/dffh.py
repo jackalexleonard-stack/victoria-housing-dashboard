@@ -65,8 +65,6 @@ _TABLES_RE = re.compile(r'href="([^"]*tables-rental-report-[^"]*-excel)"', re.I)
 _LGA_MEDIANS_RE = re.compile(
     r'href="([^"]*quarterly-median-rents-local-government-area-[^"]*-excel)"', re.I
 )
-_TITLE_RE = re.compile(r"(march|june|september|december)\s+quarter\s+(\d{4})", re.I)
-_QUARTER_MONTH = {"march": 3, "june": 6, "september": 9, "december": 12}
 _QUARTER_LABEL_FMT = "%b %Y"  # 'Jun 1999' as used by the LGA-medians header row
 
 
@@ -120,13 +118,6 @@ def fetch_vic_rents() -> dict:
 # --------------------------------------------------------------------------
 # Parse
 # --------------------------------------------------------------------------
-def _report_quarter_end(title: str) -> str:
-    m = _TITLE_RE.search(title or "")
-    if not m:
-        raise ValueError(f"could not read report quarter from title: {title!r}")
-    return common.period_end(f"{m.group(2)}-{_QUARTER_MONTH[m.group(1).lower()]:02d}")
-
-
 def _num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
