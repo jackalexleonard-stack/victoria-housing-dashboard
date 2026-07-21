@@ -31,6 +31,11 @@ export interface LineChartProps {
   y2Lines?: string[]   // names plotted against an independent right-hand axis
   y2Percent?: boolean  // whether the y2 axis's series is a percent unit
   unitByName?: Record<string, string>   // per-line unit override for the tooltip
+  // Explicit [start, end] epoch-ms x-domain, overriding this chart's own
+  // data extent (design review P1: shared-x-range small multiples, e.g.
+  // ChartCard's mortgage New/Outstanding minis, must be handed one combined
+  // domain rather than each independently computing its own).
+  xDomain?: [number, number]
 }
 
 const reduced = () =>
@@ -41,7 +46,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
                             annotations = [], annotationMode = 'full', emphasize,
                             interactive = true,
                             touchScrub = false, height = 220,
-                            y2Lines, y2Percent, unitByName }: LineChartProps) {
+                            y2Lines, y2Percent, unitByName, xDomain }: LineChartProps) {
   const wrap = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(600)
   const [drawn, setDrawn] = useState(reduced())
@@ -74,8 +79,8 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   }, [])
 
   const b = useMemo(() => buildChart(lines, width, height,
-    { colorway: COLORWAY, percent, y2Lines, y2Percent }),
-    [lines, width, height, percent, y2Lines, y2Percent])
+    { colorway: COLORWAY, percent, y2Lines, y2Percent, xDomain }),
+    [lines, width, height, percent, y2Lines, y2Percent, xDomain])
   const colorByName = new Map(b.paths.map(p => [p.name, p.color]))
   // Points on a y2 line read off the right-hand scale; everything else uses
   // the primary (left) scale. Falls back to `y` whenever no y2 axis exists.
@@ -110,7 +115,11 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   const annotationRows = annotationMode === 'full'
     ? placeAnnotationLabels(visibleAnnotations.map(a => a.ax), 36)
     : []
-  const annotationBand = annotationMode === 'band' && visibleAnnotations.length
+  // A band needs at least two distinct annotation dates to span — exactly
+  // one visible annotation degenerates to a ~1px sliver (design review
+  // MINOR #3), so that case (and zero) renders no band at all, matching
+  // ChartCard's own gating of the "Shaded: cash-rate cycle" caption.
+  const annotationBand = annotationMode === 'band' && visibleAnnotations.length >= 2
     ? { x0: Math.min(...visibleAnnotations.map(a => a.ax)),
         x1: Math.max(...visibleAnnotations.map(a => a.ax)) }
     : null
@@ -246,7 +255,7 @@ export function LineChart({ lines, percent, unit, label, markers = false,
                   y2={height - b.margin.b} stroke={PALETTE.line2} />
             {hover.points.map(p => (
               <circle key={p.name} cx={b.x(p.t)} cy={yFor(p.name)(p.value)} r="4"
-                      fill={colorByName.get(p.name) ?? PALETTE.clay} />
+                      fill={colorFor(p.name, colorByName.get(p.name) ?? PALETTE.clay)} />
             ))}
           </g>
         )}
@@ -279,7 +288,8 @@ export function LineChart({ lines, percent, unit, label, markers = false,
               <div key={p.name} style={{ display: 'flex', alignItems: 'center',
                                           gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={{ display: 'inline-block', width: 8, height: 8,
-                               borderRadius: 2, background: colorByName.get(p.name),
+                               borderRadius: 2,
+                               background: colorFor(p.name, colorByName.get(p.name) ?? ''),
                                flex: '0 0 auto' }} />
                 <span style={{ color: PALETTE.muted }}>{p.name}</span>
                 <span className="num" style={{ fontWeight: 500 }}>

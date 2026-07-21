@@ -152,6 +152,20 @@ test("annotationMode 'band' renders one shaded rect spanning earliest to latest 
   expect(container.querySelectorAll(`text[fill="${PALETTE.clay}"]`).length).toBe(0)
 })
 
+test("annotationMode 'band' with fewer than 2 visible annotations renders NO band (no degenerate sliver)", () => {
+  const { container } = render(
+    <LineChart lines={wideLines} percent unit="percent" label="cash rate"
+               annotations={[{ date: '2022-06-01', label: '+0.25' }]} annotationMode="band" />)
+  expect(container.querySelectorAll('rect').length).toBe(0)
+})
+
+test("annotationMode 'band' with zero visible annotations renders NO band", () => {
+  const { container } = render(
+    <LineChart lines={wideLines} percent unit="percent" label="cash rate"
+               annotations={[]} annotationMode="band" />)
+  expect(container.querySelectorAll('rect').length).toBe(0)
+})
+
 test("annotationMode 'latest-label' drops the fence entirely and shows exactly one label, on the LAST annotation", () => {
   const twoMoves = [
     { date: '2022-02-01', label: '+0.25' },
@@ -201,6 +215,47 @@ test('emphasize: the named line keeps its colorway hue and width; every other li
   expect(emphPath.getAttribute('stroke-width')).toBe('2.25')
   const deemphPath = byColor(PALETTE.deemphasis)[0]
   expect(deemphPath.getAttribute('stroke-width')).toBe('1.25')
+})
+
+test('emphasize: hovering reaches the crosshair dot and tooltip swatch too, not just the path/marker/legend', () => {
+  const twoLines = [
+    { name: 'a', pts: [
+      { date: '2026-01-31', region: 'x', metric: 'a', value: 1 },
+      { date: '2026-02-28', region: 'x', metric: 'a', value: 2 } ] },
+    { name: 'b', pts: [
+      { date: '2026-01-31', region: 'x', metric: 'b', value: 10 },
+      { date: '2026-02-28', region: 'x', metric: 'b', value: 20 } ] },
+  ]
+  const { container } = render(
+    <LineChart lines={twoLines} percent={false} unit="index" label="two lines"
+               emphasize="b" />)
+  const svg = container.querySelector('svg') as SVGSVGElement
+  fireEvent.pointerMove(svg, { clientX: 50, clientY: 100, pointerId: 1 })
+  const tooltip = screen.getByRole('status')
+
+  // De-emphasized row 'a': the tooltip swatch must be the reserved grey,
+  // not its raw colorway hue (colorway[0] = '#205EA6').
+  // jsdom's CSSOM normalizes hex colors assigned via inline style to rgb().
+  const hexToRgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
+  }
+  const aRow = within(tooltip).getByText('a').closest('div')!
+  const aSwatch = aRow.querySelector('span') as HTMLElement
+  expect(aSwatch.style.background).toBe(hexToRgb(PALETTE.deemphasis))
+
+  // Emphasized row 'b' keeps its own colorway hue in the tooltip.
+  const bRow = within(tooltip).getByText('b').closest('div')!
+  const bSwatch = bRow.querySelector('span') as HTMLElement
+  expect(bSwatch.style.background).toBe(hexToRgb('#BC5215'))
+
+  // The enlarged hover crosshair dot (r=4) for the de-emphasized line must
+  // also be grey, not the raw colorway hue.
+  const hoverDots = [...container.querySelectorAll('circle[r="4"]')]
+  const hoverColors = hoverDots.map(c => c.getAttribute('fill'))
+  expect(hoverColors).toContain(PALETTE.deemphasis)
+  expect(hoverColors).not.toContain('#205EA6')
+  expect(hoverColors).toContain('#BC5215')
 })
 
 test('emphasize: the emphasized line sorts first in the legend', () => {

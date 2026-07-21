@@ -3,6 +3,7 @@ import { DataTable } from './DataTable'
 import { Chip } from './Chip'
 import { chartPoints, lineName } from '../lib/selectors'
 import { staleness } from '../lib/staleness'
+import { xExtentOf } from '../lib/chartMath'
 import type { ChartSpec, SiteData } from '../lib/types'
 import type { Geo, Range } from '../lib/urlState'
 
@@ -24,6 +25,27 @@ const EMPHASIS_PRIMARY: Record<string, string> = {
 // single latest-move label (cash rate) — see LineChart's `annotationMode`.
 // The band's meaning is spelled out once here rather than per chart.
 const BAND_CAPTION = 'Shaded: cash-rate cycle'
+
+// A band-mode chart with fewer than 2 visible annotations degenerates to a
+// ~1px sliver (LineChart's own fix — design review MINOR #3); the caption
+// must disappear along with it rather than describing a band that no longer
+// renders. "Visible" mirrors LineChart's own pixel/margin check exactly:
+// because buildChart's x scale is an UNPADDED linear map of `lines`' own
+// date extent onto the plot width, "falls within the margins" and "falls
+// within [minDate, maxDate] of `lines`" are the same condition — so
+// xExtentOf(lines) (chartMath's single source of truth for that extent)
+// decides this without duplicating LineChart's own width/margin internals.
+function visibleAnnotationCount(
+  annotations: { date: string }[], lines: { pts: { date: string }[] }[],
+): number {
+  const chartExtent = xExtentOf(lines)
+  if (!chartExtent) return 0
+  const [t0, t1] = chartExtent
+  return annotations.filter(a => {
+    const t = Date.parse(`${a.date}T00:00:00Z`)
+    return Number.isFinite(t) && t >= t0 && t <= t1
+  }).length
+}
 
 export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
   site: SiteData; chart: ChartSpec; finding: string; range: Range; geo: Geo
@@ -71,6 +93,15 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
   const newLines = isMortgage ? lines.filter(l => l.name.startsWith('mortgage new')) : []
   const outstandingLines = isMortgage
     ? lines.filter(l => l.name.startsWith('mortgage outstanding')) : []
+  // The minis' "shared x-range" must be STRUCTURAL, not coincidental (design
+  // review P1): each mini is built from an independently-filtered subset, so
+  // computing the combined extent across BOTH here and handing it down as an
+  // explicit xDomain guarantees they align even if the two subsets' own date
+  // ranges ever diverge (e.g. one metric reporting late).
+  const mortgageXDomain = isMortgage
+    ? xExtentOf([...newLines, ...outstandingLines]) ?? undefined : undefined
+  const showBandCaption = annotationMode === 'band' &&
+    visibleAnnotationCount(annotations, lines) >= 2
   const failedEmpty = !lines.length
 
   return (
@@ -91,12 +122,14 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
               <p className="text-xs font-medium text-muted mb-1">New</p>
               <LineChart lines={newLines} percent={chart.percent} unit={unit}
                          markers={chart.markers} unitByName={unitByName}
+                         xDomain={mortgageXDomain}
                          label={`${finding} — new lending rates`} height={140} />
             </div>
             <div>
               <p className="text-xs font-medium text-muted mb-1">Outstanding</p>
               <LineChart lines={outstandingLines} percent={chart.percent} unit={unit}
                          markers={chart.markers} unitByName={unitByName}
+                         xDomain={mortgageXDomain}
                          label={`${finding} — outstanding lending rates`} height={140} />
             </div>
           </div>
@@ -120,7 +153,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
              onClick={e => e.stopPropagation()}>{entry.meta.source_name}</a>
         )}
       </p>
-      {annotationMode === 'band' && <p className="text-xs text-faint mt-1">{BAND_CAPTION}</p>}
+      {showBandCaption && <p className="text-xs text-faint mt-1">{BAND_CAPTION}</p>}
       {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
     </article>
   )

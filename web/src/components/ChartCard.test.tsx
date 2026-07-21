@@ -114,6 +114,49 @@ test('the mortgage-rates card small-multiples into two full-colour minis (New / 
   expect(deemphPaths.length).toBe(0)
 })
 
+// --- design review P1: structural shared x-domain + degenerate band gating ---
+
+test('mortgage-rates minis share one STRUCTURALLY-computed x-domain even when their subsets end at different dates', () => {
+  // Fixture's mortgage_new*/mortgage_outstanding* metrics all sit at the
+  // same two dates (05-31, 06-30) today, which is exactly the "coincidental"
+  // sharing the review flagged — shift the outstanding metrics one month
+  // earlier so the two subsets have genuinely different ranges (outstanding
+  // ends at 05-31, a month before new's 06-30) and prove the combined domain
+  // (04-30..06-30) is handed to BOTH minis rather than each computing its
+  // own independently.
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  const shiftBack: Record<string, string> = { '2026-06-30': '2026-05-31', '2026-05-31': '2026-04-30' }
+  mutated.series.au_mortgage_rates.points = mutated.series.au_mortgage_rates.points
+    .map((p: { metric: string; date: string }) => p.metric.startsWith('mortgage_outstanding')
+      ? { ...p, date: shiftBack[p.date] ?? p.date } : p)
+  const mutatedSite = assertSiteData(mutated)
+
+  const { container } = render(
+    <ChartCard site={mutatedSite} chart={chart('mortgage_rates')} finding="f"
+              range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const svgs = [...container.querySelectorAll('svg[role="img"]')]
+  expect(svgs.length).toBe(2)
+  const xTicksOf = (svg: Element) =>
+    [...svg.querySelectorAll('text')]
+      .filter(t => t.getAttribute('text-anchor') === 'middle')
+      .map(t => `${t.getAttribute('x')}:${t.textContent}`)
+  const [newTicks, outstandingTicks] = svgs.map(xTicksOf)
+  expect(newTicks.length).toBeGreaterThan(0)
+  expect(outstandingTicks).toEqual(newTicks)   // same domain -> identical tick set
+})
+
+test('band caption disappears along with the band when fewer than 2 annotations are visible (no stale caption)', () => {
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.annotations.cash_rate_moves = [{ date: '2026-04-30', delta: -0.25 }]
+  const mutatedSite = assertSiteData(mutated)
+
+  const { container } = render(
+    <ChartCard site={mutatedSite} chart={chart('lending')} finding="f"
+              range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(container.querySelectorAll('rect').length).toBe(0)
+  expect(screen.queryByText('Shaded: cash-rate cycle')).not.toBeInTheDocument()
+})
+
 test('mixed-unit series formats each line with its own metric unit, not the series-wide first one', async () => {
   // vic_rents carries rent_growth_annual (percent) FIRST in units and
   // median_rent (aud) second — the old single-scalar-unit code picked

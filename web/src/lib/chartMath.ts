@@ -110,7 +110,15 @@ export function buildChart(
           y2Lines?: string[]
           // Whether the y2 axis's own series is a percent unit — mirrors
           // `percent` but applies to the right-hand tick labels only.
-          y2Percent?: boolean },
+          y2Percent?: boolean
+          // Explicit [start, end] epoch-ms x-domain, overriding this chart's
+          // own data extent (design review P1: "mortgage minis' shared
+          // x-range is coincidental" — small multiples built from
+          // independently-filtered subsets must share one STRUCTURAL
+          // x-domain rather than relying on their subsets happening to carry
+          // the same dates). Falls back to the data's own extent when absent
+          // — every existing caller is unaffected.
+          xDomain?: [number, number] },
 ): Built {
   const y2Names = new Set(opts.y2Lines ?? [])
   // Reserve extra room for right-axis tick labels only when a right axis is
@@ -120,7 +128,7 @@ export function buildChart(
   const margin = opts.margin ?? { t: 8, r: y2Names.size ? 40 : 8, b: 22, l: 44 }
   const flat: FlatPt[] = lines.flatMap(l =>
     l.pts.map(p => ({ t: T(p.date), date: p.date, value: p.value, name: l.name })))
-  const [t0, t1] = extent(flat, p => p.t)
+  const [t0, t1] = opts.xDomain ?? extent(flat, p => p.t)
   const x = scaleTime([t0 ?? 0, t1 ?? 1], [margin.l, width - margin.r])
 
   const range: [number, number] = [height - margin.b, margin.t]
@@ -149,6 +157,31 @@ export function buildChart(
     x: x(d), label: `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}` }))
   flat.sort((a, b) => a.t - b.t)
   return { x, y, y2, yZero, y2Zero, paths, xTicks, yTicks, y2Ticks, flat, margin }
+}
+
+// Combined [start, end] epoch-ms x-extent across MULTIPLE independently-
+// filtered line groups (design review P1: "mortgage minis' shared x-range is
+// coincidental" — ChartCard's New/Outstanding mortgage minis each run their
+// own buildChart over a separately-filtered subset of the same series, so
+// their x-ranges only match today because those subsets happen to carry the
+// same dates). The caller combines its subsets' groups into one array and
+// passes the result as buildChart's `xDomain` so every mini is guaranteed —
+// structurally, not coincidentally — to share one x-domain.
+//
+// Also doubles as the single source of truth for "is this annotation date
+// within the chart's own plotted range": because buildChart's x scale is an
+// UNPADDED linear map of exactly this extent onto the plot width, a date
+// inside [t0, t1] always lands inside the margins, and a date outside it
+// never does — so this same extent decides annotation visibility without
+// needing to duplicate LineChart's pixel/margin arithmetic.
+// Returns null when there are no points to extend over. Only needs each
+// point's `date`, so it accepts anything Pt-shaped (including ChartCard's
+// looser local annotation-visibility helper type) rather than requiring the
+// full Pt shape.
+export function xExtentOf(lineGroups: { pts: { date: string }[] }[]): [number, number] | null {
+  const times = lineGroups.flatMap(g => g.pts.map(p => T(p.date)))
+  const [t0, t1] = extent(times)
+  return t0 !== undefined && t1 !== undefined ? [t0, t1] : null
 }
 
 // Decides which of two label rows (0 or 1) each annotation's text should

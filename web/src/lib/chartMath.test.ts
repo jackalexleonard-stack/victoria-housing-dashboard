@@ -1,4 +1,5 @@
-import { buildChart, nearest, atTime, fmtTickLabel, placeAnnotationLabels } from './chartMath'
+import { buildChart, nearest, atTime, fmtTickLabel, placeAnnotationLabels,
+         xExtentOf } from './chartMath'
 
 const lines = [{ name: 'a', pts: [
   { date: '2026-01-31', region: 'vic', metric: 'm', value: 10 },
@@ -256,4 +257,38 @@ test('atTime tolerance: a mixed-cadence pair includes the nearby line with its o
   expect(byName.monthly).toBeDefined()
   expect(byName.monthly.date).toBe('2026-01-20')   // its OWN date, not the header's
   expect(byName.quarterly).toBeUndefined()          // hundreds of days away — stays absent
+})
+
+// --- design review P1: structural shared x-domain for small multiples ---
+
+test('buildChart honours an explicit xDomain instead of computing its own data extent', () => {
+  const explicit: [number, number] = [
+    Date.parse('2025-01-01T00:00:00Z'), Date.parse('2027-01-01T00:00:00Z'),
+  ]
+  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false,
+                                           xDomain: explicit })
+  const [d0, d1] = b.x.domain()
+  expect(d0.getTime()).toBe(explicit[0])
+  expect(d1.getTime()).toBe(explicit[1])
+})
+
+test('xExtentOf: combines the x-extent across multiple independently-filtered line groups, honouring the group that reaches furthest even when another ends earlier', () => {
+  const newSubset = [{ pts: [
+    { date: '2026-01-31', region: 'x', metric: 'mortgage_new', value: 6 },
+    { date: '2026-06-30', region: 'x', metric: 'mortgage_new', value: 6.1 },
+  ] }]
+  const outstandingSubset = [{ pts: [
+    { date: '2026-01-31', region: 'x', metric: 'mortgage_outstanding', value: 6.3 },
+    { date: '2026-03-31', region: 'x', metric: 'mortgage_outstanding', value: 6.32 },
+  ] }]   // ends earlier (Mar) than newSubset (Jun)
+  const combined = xExtentOf([...newSubset, ...outstandingSubset])
+  expect(combined).toEqual([
+    Date.parse('2026-01-31T00:00:00Z'),
+    Date.parse('2026-06-30T00:00:00Z'),   // newSubset's later end wins, not outstandingSubset's
+  ])
+})
+
+test('xExtentOf: returns null when there are no points to extend over', () => {
+  expect(xExtentOf([])).toBeNull()
+  expect(xExtentOf([{ pts: [] }, { pts: [] }])).toBeNull()
 })
