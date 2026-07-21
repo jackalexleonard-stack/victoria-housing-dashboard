@@ -130,12 +130,69 @@ export function nearest(flat: FlatPt[], t: number): FlatPt | null {
   return flat[Math.max(0, Math.min(flat.length - 1, i))]
 }
 
-// x-unified lookup: snap to the nearest observed timestamp, then return every
-// line's point AT that exact timestamp (a line with no point there is simply
-// absent — flat is sorted by time and built in line order, and Array#sort is
-// stable, so points sharing a timestamp stay in line order after filtering).
+function median(nums: number[]): number {
+  const s = [...nums].sort((a, b) => a - b)
+  const n = s.length
+  if (!n) return Infinity
+  const mid = Math.floor(n / 2)
+  return n % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
+// Median gap between consecutive DISTINCT timestamps in a set of points.
+// Used both per-line (that line's own cadence) and across an entire chart's
+// flattened points (the finest signal actually present), to size how far
+// atTime may reach for a "nearby" point instead of requiring an exact match.
+// Fewer than two distinct timestamps has no gap to measure — Infinity means
+// "this axis places no cap", not "anything goes" (atTime still combines it
+// with the other tolerance via Math.min).
+function medianSpacing(times: number[]): number {
+  const uniq = [...new Set(times)].sort((a, b) => a - b)
+  if (uniq.length < 2) return Infinity
+  const diffs: number[] = []
+  for (let i = 1; i < uniq.length; i++) diffs.push(uniq[i] - uniq[i - 1])
+  return median(diffs)
+}
+
+// x-unified lookup: snap to the nearest observed timestamp (t*), then for
+// EACH line independently find its own nearest point to t* and include it if
+// that point is within tolerance — rather than requiring an exact timestamp
+// match. This makes mixed-cadence overlays (e.g. DetailView's "Compare",
+// pairing a daily chart with a quarterly one) honest instead of either
+// silently dropping the other line or (previously) never matching at all:
+// each returned point keeps ITS OWN date, which may differ from t* — callers
+// that care (the tooltip) show that difference rather than hiding it.
+//
+// tolerance per line = min(half that line's own median point-spacing,
+// half the OVERALL median spacing across every line in the chart). The
+// per-line half-spacing lets a line reach roughly to its own neighbouring
+// point; the overall half-spacing caps that reach so a coarse-cadence line
+// can't claim a point from far away just because ITS OWN spacing is wide,
+// when the rest of the chart is much finer-grained. A line with nothing
+// within tolerance stays absent, same as the old exact-only behaviour.
 export function atTime(flat: FlatPt[], t: number): { t: number; points: FlatPt[] } {
   const n = nearest(flat, t)
   if (!n) return { t, points: [] }
-  return { t: n.t, points: flat.filter(p => p.t === n.t) }
+  const overallHalf = medianSpacing(flat.map(p => p.t)) / 2
+
+  // Group by line, preserving each line's own chronological order (flat is
+  // already time-sorted, so any subsequence of it stays sorted) and the
+  // order lines first appear in flat — which matches the original
+  // line-construction order whenever lines share a start date, per the
+  // stable-sort reasoning this function used to rely on directly.
+  const byName = new Map<string, FlatPt[]>()
+  for (const p of flat) {
+    const line = byName.get(p.name)
+    if (line) line.push(p)
+    else byName.set(p.name, [p])
+  }
+
+  const points: FlatPt[] = []
+  for (const linePts of byName.values()) {
+    const cand = nearest(linePts, n.t)
+    if (!cand) continue
+    const lineHalf = medianSpacing(linePts.map(p => p.t)) / 2
+    const tol = Math.min(lineHalf, overallHalf)
+    if (Math.abs(cand.t - n.t) <= tol) points.push(cand)
+  }
+  return { t: n.t, points }
 }

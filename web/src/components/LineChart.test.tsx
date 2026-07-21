@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { LineChart } from './LineChart'
 import { PALETTE } from '../theme/tokens'
 
@@ -122,4 +122,40 @@ test('dense annotations render every dashed marker line but stagger/skip crowded
   expect(dashedLines.length).toBe(6)   // lines always render
   const labelTexts = container.querySelectorAll(`text[fill="${PALETTE.clay}"]`)
   expect(labelTexts.length).toBeLessThan(6)   // some text labels yield
+})
+
+test('X3: tooltip side-switches — right of a left-half crosshair, left of a right-half one', () => {
+  const { container } = render(
+    <LineChart lines={sharedDateLines} percent={false} unit="index" label="two lines" />)
+  const svg = container.querySelector('svg') as SVGSVGElement
+  // sharedDateLines' only two timestamps sit at the domain extremes, so the
+  // crosshair snaps deterministically to margin.l (44) or width-margin.r
+  // (592, width defaults to 600 with no y2 axis) regardless of exact clientX.
+  fireEvent.pointerMove(svg, { clientX: 50, clientY: 100, pointerId: 1 })
+  expect(parseFloat(screen.getByRole('status').style.left)).toBe(58)    // 44 + 14
+  fireEvent.pointerMove(svg, { clientX: 550, clientY: 100, pointerId: 1 })
+  expect(parseFloat(screen.getByRole('status').style.left)).toBe(578)   // 592 - 14
+})
+
+test('X5: tooltip shows a muted per-row date suffix only for a line whose point is a tolerance-match, not exact', () => {
+  const mixedCadenceLines = [
+    { name: 'primary', pts: [
+      { date: '2026-01-01', region: 'x', metric: 'primary', value: 1 },
+      { date: '2026-01-15', region: 'x', metric: 'primary', value: 2 },
+    ] },
+    { name: 'monthly', pts: [
+      { date: '2026-01-13', region: 'x', metric: 'monthly', value: 99 },
+    ] },
+  ]
+  const { container } = render(
+    <LineChart lines={mixedCadenceLines} percent={false} unit="index" label="mixed cadence" />)
+  const svg = container.querySelector('svg') as SVGSVGElement
+  // 2026-01-15 is the domain's latest point -> pixel = width - margin.r = 592.
+  fireEvent.pointerMove(svg, { clientX: 592, clientY: 100, pointerId: 1 })
+  const tooltip = screen.getByRole('status')
+  expect(tooltip).toHaveTextContent('15 Jan 2026')   // header date
+  const primaryRow = within(tooltip).getByText('primary').closest('div')!
+  const monthlyRow = within(tooltip).getByText('monthly').closest('div')!
+  expect(primaryRow.textContent).not.toContain('·')       // exact match -> no suffix
+  expect(monthlyRow.textContent).toContain('· 13 Jan')    // tolerance match -> own date
 })

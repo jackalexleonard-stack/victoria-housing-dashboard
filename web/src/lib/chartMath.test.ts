@@ -143,3 +143,45 @@ test('atTime snaps to the nearest date before grouping', () => {
   expect(r.points).toHaveLength(1)
   expect(r.points[0].value).toBe(20)
 })
+
+test('atTime: when all lines share exact dates, every returned point matches the header date (no offset, no suffix needed)', () => {
+  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const jan = Date.parse('2026-01-31T00:00:00Z')
+  const r = atTime(b.flat, jan)
+  const headerDate = new Date(r.t).toISOString().slice(0, 10)
+  expect(r.points.every(p => p.date === headerDate)).toBe(true)
+})
+
+// X5 (mixed-cadence tolerance): a "primary" line snaps the header time
+// exactly; a moderately-sparse "monthly" line has no point at that exact
+// date but has one close enough (within tolerance) — it's included, keeping
+// its OWN (different) date; a much sparser "quarterly" line's nearest point
+// is hundreds of days away — well outside tolerance — so it stays absent,
+// same as the old exact-only behaviour would (silently) have produced.
+const mixedCadenceLines = [
+  { name: 'primary', pts: [
+    { date: '2026-01-01', region: 'vic', metric: 'primary', value: 1 },
+    { date: '2026-01-15', region: 'vic', metric: 'primary', value: 2 },
+    { date: '2026-01-30', region: 'vic', metric: 'primary', value: 3 },
+  ] },
+  { name: 'monthly', pts: [
+    { date: '2026-01-01', region: 'vic', metric: 'monthly', value: 10 },
+    { date: '2026-01-20', region: 'vic', metric: 'monthly', value: 11 },
+  ] },
+  { name: 'quarterly', pts: [
+    { date: '2025-01-01', region: 'vic', metric: 'quarterly', value: 100 },
+    { date: '2025-04-01', region: 'vic', metric: 'quarterly', value: 101 },
+  ] },
+]
+
+test('atTime tolerance: a mixed-cadence pair includes the nearby line with its own date; a far line stays absent', () => {
+  const b = buildChart(mixedCadenceLines, 400, 200,
+    { colorway: ['#205EA6', '#BC5215', '#24837B'], percent: false })
+  const hoverT = Date.parse('2026-01-15T00:00:00Z')
+  const r = atTime(b.flat, hoverT)
+  const byName = Object.fromEntries(r.points.map(p => [p.name, p]))
+  expect(byName.primary.date).toBe('2026-01-15')
+  expect(byName.monthly).toBeDefined()
+  expect(byName.monthly.date).toBe('2026-01-20')   // its OWN date, not the header's
+  expect(byName.quarterly).toBeUndefined()          // hundreds of days away — stays absent
+})

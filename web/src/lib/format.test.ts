@@ -1,4 +1,4 @@
-import { TILE_FMT, fmtUnit, fmtPeriod, fmtDate, ago } from './format'
+import { TILE_FMT, fmtUnit, fmtPeriod, fmtDate, fmtDayMonth, ago } from './format'
 
 test('tile formatters port the python lambdas exactly', () => {
   expect(TILE_FMT.cash_rate.value(3.85)).toBe('3.85%')
@@ -85,4 +85,9 @@ test('clearance uses banker’s rounding like python %.0f', () => {
 
 test('fmtDate zero-pads single-digit days', () => {
   expect(fmtDate('2026-06-05')).toBe('05 Jun 2026')
+})
+
+test('fmtDayMonth: compact day+month, no year, zero-padded day', () => {
+  expect(fmtDayMonth('2026-06-30')).toBe('30 Jun')
+  expect(fmtDayMonth('2026-06-05')).toBe('05 Jun')
 })

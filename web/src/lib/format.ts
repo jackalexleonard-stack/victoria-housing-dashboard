@@ -73,6 +73,16 @@ export function fmtDate(iso: string): string {
   return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
+// Compact day+month form (no year) for a tooltip row whose own date differs
+// from the header date shown above it (X5: honest per-row dates when a
+// tolerance-matched point isn't exactly at the hovered timestamp) — same
+// zero-padded day convention as fmtDate, just shorter since the year is
+// implied by the nearby header.
+export function fmtDayMonth(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]}`
+}
+
 export function fmtPeriod(iso: string, freq: string | null): string {
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
   const q = ['Mar', 'Jun', 'Sep', 'Dec'][Math.floor(d.getUTCMonth() / 3)]

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { buildChart, atTime, placeAnnotationLabels, type FlatPt } from '../lib/chartMath'
 import { COLORWAY, PALETTE } from '../theme/tokens'
-import { fmtDate, fmtUnit } from '../lib/format'
+import { fmtDate, fmtDayMonth, fmtUnit } from '../lib/format'
 import type { Pt } from '../lib/types'
 
 export interface LineChartProps {
@@ -31,6 +31,20 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   const [width, setWidth] = useState(600)
   const [drawn, setDrawn] = useState(reduced())
   const [hover, setHover] = useState<{ t: number; points: FlatPt[] } | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+  const [tipSize, setTipSize] = useState({ w: 0, h: 0 })
+
+  // Measure the tooltip's REAL rendered size (its row count varies with the
+  // hovered point, so a hard-coded width/height would either clip long
+  // names or leave dead space) — runs after every render; cheap (two
+  // offset* reads), and the equality guard stops it looping when the size
+  // hasn't actually changed.
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    if (!el) return
+    const w = el.offsetWidth, h = el.offsetHeight
+    setTipSize(prev => (prev.w === w && prev.h === h) ? prev : { w, h })
+  })
 
   useEffect(() => {
     const el = wrap.current
@@ -172,23 +186,29 @@ export function LineChart({ lines, percent, unit, label, markers = false,
         )}
       </svg>
       {hover && (() => {
-        // Anchor near the topmost (smallest-y) of the hovered points, above
-        // the pointer by default; clamp so the tooltip never overflows above
-        // the container, flipping below the pointer instead when there's no
-        // room above.
-        const rowH = 16
-        const tooltipH = 20 + hover.points.length * rowH + 8
-        const anchorY = Math.min(...hover.points.map(p => yFor(p.name)(p.value)))
-        const above = anchorY - tooltipH - 8
-        const top = Math.max(0, above >= 0 ? above : anchorY + 12)
+        // Side-switch so the tooltip never sits on top of the hovered
+        // points: crosshair in the left half of the chart -> tooltip's left
+        // edge sits just to its right; right half -> tooltip's right edge
+        // sits just to its left (so `left` is derived from the MEASURED
+        // width, not a guess). Vertically it anchors near the top of the
+        // plot area rather than at the hovered value's y, so it's never
+        // over the highlighted dots. Both axes then clamp against the
+        // chart's own (measured) box using the tooltip's REAL, measured
+        // dimensions — no hard-coded size.
+        const crosshairX = b.x(hover.t)
+        const leftHalf = crosshairX < width / 2
+        const rawLeft = leftHalf ? crosshairX + 14 : crosshairX - 14 - tipSize.w
+        const rawTop = b.margin.t + 4
+        const left = Math.max(0, Math.min(rawLeft, width - tipSize.w))
+        const top = Math.max(0, Math.min(rawTop, height - tipSize.h))
+        const headerDate = new Date(hover.t).toISOString().slice(0, 10)
         return (
-          <div role="status" style={{
+          <div ref={tipRef} role="status" style={{
             position: 'absolute', pointerEvents: 'none',
-            left: Math.min(b.x(hover.t) + 10, width - 170),
-            top,
+            left, top,
             background: PALETTE.card, border: `1px solid ${PALETTE.line2}`,
             borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
-            <div style={{ color: PALETTE.faint }}>{fmtDate(hover.points[0].date)}</div>
+            <div style={{ color: PALETTE.faint }}>{fmtDate(headerDate)}</div>
             {hover.points.map(p => (
               <div key={p.name} style={{ display: 'flex', alignItems: 'center',
                                           gap: 4, whiteSpace: 'nowrap' }}>
@@ -199,6 +219,14 @@ export function LineChart({ lines, percent, unit, label, markers = false,
                 <span className="num" style={{ fontWeight: 500 }}>
                   {fmtUnit(p.value, unitByName?.[p.name] ?? unit)}
                 </span>
+                {p.date !== headerDate && (
+                  // Honest per-row date (X5): this row's nearest point is a
+                  // tolerance match, not an exact one — say so rather than
+                  // implying it happened on the header's date.
+                  <span style={{ color: PALETTE.faint, fontSize: 10 }}>
+                    · {fmtDayMonth(p.date)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
