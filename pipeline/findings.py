@@ -7,6 +7,7 @@ so the SPA stays presentational and the daily run refreshes them.
 """
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Callable, Optional
 
@@ -24,19 +25,25 @@ SECTIONS: list[tuple[str, str]] = [
 
 def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
        percent=False, markers=False, annotate=False, noun=None, primary=None,
-       note=None, modal_metrics=None):
+       note=None, modal_metrics=None, source_name=None):
     """noun: subject of the generic finding sentence; primary: metric it uses
     (defaults to metrics[0]); both ignored by charts with custom rules.
     note: optional short disclosure/methodology line shown under the chart
     (source-window caveats, definition changes, etc.) — None for most charts.
     modal_metrics: optional extra metric list shown only in the detail modal
     (mixed-scale split charts keep a secondary series set there — e.g.
-    credit's mom trio, Accord's quarterly pair) — None for most charts."""
+    credit's mom trio, Accord's quarterly pair) — None for most charts.
+    source_name: optional per-chart override of the series' one shared
+    meta.source_name (design review d2) — needed when several charts share a
+    single series_id whose own instruments deserve separate citations (the
+    three FRED world charts all read intl_fred, but Brent/AUD-USD/US-10yr
+    are different instruments); None for every chart happy with its series'
+    single shared source string."""
     return dict(id=id, section=section, title=title, series_id=series_id,
                 metrics=metrics, region_mode=region_mode, percent=percent,
                 markers=markers, annotate=annotate, noun=noun,
                 primary=primary or (metrics[0] if metrics else None),
-                note=note, modal_metrics=modal_metrics)
+                note=note, modal_metrics=modal_metrics, source_name=source_name)
 
 
 _HVI_NOTE = ("Daily index — the free Cotality feed covers a rolling year; "
@@ -45,16 +52,39 @@ _MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
                      "grouping differs slightly from pre-2026 snapshot figures.")
 
 
+def _strip_cadence_code(label: str) -> str:
+    """Mirror web/src/components/HeroTiles.tsx's splitCadenceCode: a few
+    registry labels carry a trailing MoM/yr cadence qualifier meant for the
+    hero tile's own delta line, not a plain series name — drop it here so
+    what's left is the bare name."""
+    return re.sub(r"\s*\((MoM|yr)\)\s*$", "", label, flags=re.IGNORECASE)
+
+
+# Canonical short-name per chart (design review d1: the "Cotality HVI triple"
+# fix) — derived straight from scoring.REGISTRY's own hero-tile label (the
+# same string HeroTiles.tsx already displays, cadence-code stripped) rather
+# than a hand-duplicated literal, so the Cotality HVI pair's card caption
+# (chart.title, below) and finding subject (_hvi, below) can never drift from
+# what the hero tile itself shows. Deliberately scoped to just the two charts
+# with a *documented* naming mismatch (re-verification's "three different
+# names for the same two series") — every other chart keeps its own
+# independently-authored title untouched.
+SERIES_SHORT_NAMES: dict[str, str] = {
+    "hvi_melbourne": _strip_cadence_code(scoring.REGISTRY["melb_dwelling_values"]["label"]),
+    "hvi_australia": _strip_cadence_code(scoring.REGISTRY["au_dwelling_values"]["label"]),
+}
+
+
 CHARTS: list[dict] = [
     # --- prices ---
     # mean_price leads the section (full-width slot): it carries the longest
     # live history; the HVI daily worms follow (user request 2026-07-21).
     _c("mean_price", "prices", "Mean dwelling price", "au_dwelling_stock",
        metrics=["mean_price"], region_mode="geo", noun="The mean dwelling price"),
-    _c("hvi_melbourne", "prices", "Cotality HVI — Melbourne", "vic_hvi",
+    _c("hvi_melbourne", "prices", SERIES_SHORT_NAMES["hvi_melbourne"], "vic_hvi",
        metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True,
        note=_HVI_NOTE),
-    _c("hvi_australia", "prices", "Cotality HVI — 5 capitals", "au_hvi",
+    _c("hvi_australia", "prices", SERIES_SHORT_NAMES["hvi_australia"], "au_hvi",
        metrics=["hvi_index"], region_mode="fixed:australia", annotate=True,
        note=_HVI_NOTE),
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
@@ -128,13 +158,22 @@ CHARTS: list[dict] = [
        region_mode="fixed:vic", noun="Housing Register applications",
        primary="vhr_total"),
     # --- world ---
+    # source_name: intl_fred's one shared meta.source_name ("FRED — Brent
+    # crude, US 10yr Treasury, AUD/USD") reads fine on the card caption
+    # (shortSource collapses all three to "FRED" regardless), but the detail
+    # modal renders meta.source_name RAW — showing the identical three-in-one
+    # string on every one of these three cards (design review d2). Each
+    # chart cites its own FRED series id instead.
     _c("brent", "world", "Brent crude", "intl_fred", metrics=["brent_crude"],
-       region_mode="fixed:global", noun="Brent crude"),
+       region_mode="fixed:global", noun="Brent crude",
+       source_name="FRED — Brent crude (DCOILBRENTEU)"),
     _c("aud_usd", "world", "AUD/USD", "intl_fred", metrics=["aud_usd"],
-       region_mode="fixed:global", noun="The Australian dollar"),
+       region_mode="fixed:global", noun="The Australian dollar",
+       source_name="FRED — AUD/USD (DEXUSAL)"),
     _c("ust10", "world", "US 10-year Treasury", "intl_fred",
        metrics=["us_10y_treasury"], region_mode="fixed:global", percent=True,
-       noun="The US 10-year yield"),
+       noun="The US 10-year yield",
+       source_name="FRED — US 10-year Treasury (DGS10)"),
     _c("iron_ore", "world", "Iron ore", "intl_commodities",
        metrics=["iron_ore"], region_mode="fixed:global", noun="Iron ore"),
     _c("copper", "world", "Copper", "intl_commodities", metrics=["copper"],
@@ -250,7 +289,7 @@ def _generic(chart: dict, load_series: Loader, load_meta: Loader) -> Optional[st
     return f"{noun} {verb} {abs(pct):.1f}% to {fmt_value(v, unit)} in {period}"
 
 
-def _hvi(chart, load_series, load_meta, place):
+def _hvi(chart, load_series, load_meta):
     df = load_series(chart["series_id"])
     if df is None or len(df) == 0:
         return None
@@ -263,6 +302,12 @@ def _hvi(chart, load_series, load_meta, place):
     mom = mom.sort_values("date")
     v = float(mom["value"].iloc[-1])
     period = fmt_period(mom["date"].iloc[-1], "monthly")
+    # Design review d1: the sentence's subject is the SAME canonical short
+    # name the hero tile/card caption use (SERIES_SHORT_NAMES, above) —
+    # "Melb dwelling values"/"AU dwelling values" — not a hand-written
+    # "Melbourne"/"Capital-city" + " dwelling values" phrase that could drift
+    # from what the rest of the UI calls this series.
+    subject = SERIES_SHORT_NAMES.get(chart["id"], chart["title"])
     verb = "rose" if v > 0 else ("fell" if v < 0 else "held flat,")
     yoy = df[(df["metric"] == "hvi_change_yoy") & (df["region"] == region)]
     tail = ""
@@ -270,8 +315,8 @@ def _hvi(chart, load_series, load_meta, place):
         y = float(yoy.sort_values("date")["value"].iloc[-1])
         tail = f" ({y:+.1f}% over the year)"
     if v == 0:
-        return f"{place} dwelling values held flat in {period}{tail}"
-    return f"{place} dwelling values {verb} {abs(v):.1f}% in {period}{tail}"
+        return f"{subject} held flat in {period}{tail}"
+    return f"{subject} {verb} {abs(v):.1f}% in {period}{tail}"
 
 
 def _cash_rate(chart, load_series, load_meta):
@@ -321,8 +366,8 @@ def _vacancy(chart, load_series, load_meta):
 
 
 _CUSTOM = {
-    "hvi_melbourne": lambda c, ls, lm: _hvi(c, ls, lm, "Melbourne"),
-    "hvi_australia": lambda c, ls, lm: _hvi(c, ls, lm, "Capital-city"),
+    "hvi_melbourne": _hvi,
+    "hvi_australia": _hvi,
     "cash_rate": _cash_rate,
     "accord": _accord,
     "vacancy": _vacancy,

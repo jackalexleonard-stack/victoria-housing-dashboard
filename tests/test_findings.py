@@ -61,7 +61,7 @@ def test_hvi_finding_uses_mom():
     ])}, {"vic_hvi": {"frequency": "daily"}})
     out = findings.build_findings(ls, lm)
     assert out["hvi_melbourne"] == \
-        "Melbourne dwelling values fell 1.0% in Jun 2026 (-0.9% over the year)"
+        "Melb dwelling values fell 1.0% in Jun 2026 (-0.9% over the year)"
 
 
 def test_accord_finding_vs_target():
@@ -103,6 +103,52 @@ def test_exactly_four_charts_carry_a_note():
         "slightly from pre-2026 snapshot figures.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
+
+
+def test_hvi_charts_use_the_canonical_short_name_everywhere():
+    """Design review d1: the Cotality HVI 'naming triple' — card caption
+    (chart.title), finding subject (_hvi), and hero tile label
+    (scoring.REGISTRY) must all read identically, not three different names
+    for the same two series."""
+    from pipeline import scoring
+    charts_by_id = {c["id"]: c for c in findings.CHARTS}
+    assert charts_by_id["hvi_melbourne"]["title"] == "Melb dwelling values"
+    assert charts_by_id["hvi_australia"]["title"] == "AU dwelling values"
+    # Independently re-derived from scoring.REGISTRY (cadence code stripped)
+    # rather than re-asserting the same literal — proves the two can't drift.
+    assert charts_by_id["hvi_melbourne"]["title"] == \
+        findings._strip_cadence_code(scoring.REGISTRY["melb_dwelling_values"]["label"])
+    assert charts_by_id["hvi_australia"]["title"] == \
+        findings._strip_cadence_code(scoring.REGISTRY["au_dwelling_values"]["label"])
+
+    ls, lm = _loaders({"vic_hvi": _df([
+        ("2026-06-30", "melbourne", "hvi_change_mom", 0.5, "percent"),
+        ("2026-06-30", "melbourne", "hvi_change_yoy", 2.1, "percent"),
+    ])}, {"vic_hvi": {"frequency": "daily"}})
+    assert findings.build_findings(ls, lm)["hvi_melbourne"].startswith("Melb dwelling values ")
+
+    ls2, lm2 = _loaders({"au_hvi": _df([
+        ("2026-06-30", "australia", "hvi_change_mom", -0.2, "percent"),
+        ("2026-06-30", "australia", "hvi_change_yoy", 1.0, "percent"),
+    ])}, {"au_hvi": {"frequency": "daily"}})
+    assert findings.build_findings(ls2, lm2)["hvi_australia"].startswith("AU dwelling values ")
+
+
+def test_fred_charts_carry_distinct_per_chart_source_names():
+    """Design review d2: the three FRED charts share one series_id
+    (intl_fred), and thus one shared meta.source_name — each chart cites its
+    own instrument via a per-chart source_name override instead of repeating
+    the combined feed string on every card's detail modal."""
+    charts_by_id = {c["id"]: c for c in findings.CHARTS}
+    assert charts_by_id["brent"]["source_name"] == "FRED — Brent crude (DCOILBRENTEU)"
+    assert charts_by_id["aud_usd"]["source_name"] == "FRED — AUD/USD (DEXUSAL)"
+    assert charts_by_id["ust10"]["source_name"] == "FRED — US 10-year Treasury (DGS10)"
+    names = {charts_by_id[c]["source_name"] for c in ("brent", "aud_usd", "ust10")}
+    assert len(names) == 3, "all three must be distinct, not the shared feed string"
+    # Everything else is untouched (None -> frontend falls back to the
+    # series' own shared meta.source_name).
+    assert charts_by_id["cash_rate"]["source_name"] is None
+    assert charts_by_id["iron_ore"]["source_name"] is None
 
 
 def test_fmt_value_units():

@@ -74,6 +74,11 @@ def test_new_scan_batch_fields_present_and_typed():
     assert isinstance(site["extra_tiles"], list)
     assert isinstance(site["section_summaries"], dict)
     charts_by_id = {c["id"]: c for c in site["charts"]}
+    # source_name (design review d2: per-chart FRED provenance override) is
+    # exported for every chart (None for charts happy with their series'
+    # shared meta.source_name), not silently dropped.
+    assert charts_by_id["cash_rate"]["source_name"] is None
+    assert charts_by_id["brent"]["source_name"] == "FRED — Brent crude (DCOILBRENTEU)"
     assert charts_by_id["cash_rate"]["modal_metrics"] is None
     assert charts_by_id["credit"]["modal_metrics"] == [
         "credit_housing_yoy", "credit_investor_yoy", "credit_owner_occupier_yoy",
