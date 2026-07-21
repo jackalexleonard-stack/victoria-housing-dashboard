@@ -108,6 +108,27 @@ test('the modal keeps the FULL annotation set (both cash-rate moves), unlike the
   expect(document.querySelectorAll('line[stroke-dasharray]').length).toBe(0)  // solid, not dashed
 })
 
+// Design review P1-touch: the action row (Download CSV / Copy link /
+// Source / Compare select) was px-3 py-1.5 (~30px tall), below the
+// project's 44px mandate. pointer-coarse: is a static CSS-variant class
+// (Tailwind's `pointer-coarse:` -> `@media (pointer: coarse)`) present in
+// the same markup for every device — no matchMedia branch to stub here, so
+// one render confirms both the coarse-pointer bump and that fine-pointer/
+// desktop sizing is untouched.
+test('the action row and compare select get a coarse-pointer touch-size bump; fine-pointer sizing is untouched', () => {
+  renderView()
+  const download = screen.getByRole('button', { name: /download csv/i })
+  const copy = screen.getByRole('button', { name: /copy link/i })
+  const source = screen.getByRole('link', { name: /source/i })
+  for (const el of [download, copy, source]) {
+    expect(el).toHaveClass('text-xs', 'border', 'border-line', 'rounded-md', 'px-3', 'py-1.5')  // unchanged
+    expect(el).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-3.5')
+  }
+  const select = screen.getByRole('combobox', { name: /compare/i })
+  expect(select).toHaveClass('border', 'border-line', 'rounded-md', 'px-2', 'py-1', 'bg-card')  // unchanged
+  expect(select).toHaveClass('pointer-coarse:px-3', 'pointer-coarse:py-3.5')
+})
+
 test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {
   // Same fixture quirk as ChartCard's test: vic_rents declares
   // rent_growth_annual (percent) before median_rent (aud) in its units map.

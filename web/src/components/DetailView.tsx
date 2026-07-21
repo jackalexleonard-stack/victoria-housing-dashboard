@@ -154,22 +154,31 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
         {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
       </p>
       {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
+      {/* Design review P1-touch: this row's actions were px-3 py-1.5
+          (~30px tall) — below the project's 44px mandate. pointer-coarse:
+          py-3.5 (28px top+bottom + the 16px text-xs line-height + the 2px
+          border = 46px) clears it with margin; fine-pointer sizing is
+          untouched. */}
       <div className="flex flex-wrap items-center gap-2 mt-4">
         <button type="button" onClick={download}
-                className="text-xs border border-line rounded-md px-3 py-1.5 hover:border-blue hover:text-blue">
+                className="text-xs border border-line rounded-md px-3 py-1.5
+                           pointer-coarse:px-4 pointer-coarse:py-3.5 hover:border-blue hover:text-blue">
           Download CSV</button>
         <button type="button" onClick={copy}
-                className="text-xs border border-line rounded-md px-3 py-1.5 hover:border-blue hover:text-blue">
+                className="text-xs border border-line rounded-md px-3 py-1.5
+                           pointer-coarse:px-4 pointer-coarse:py-3.5 hover:border-blue hover:text-blue">
           {copied ? 'Copied ✓' : 'Copy link'}</button>
         {entry?.meta.source_url &&
           <a href={entry.meta.source_url} target="_blank" rel="noreferrer"
-             className="text-xs border border-line rounded-md px-3 py-1.5 hover:border-blue hover:text-blue">
+             className="text-xs border border-line rounded-md px-3 py-1.5
+                        pointer-coarse:px-4 pointer-coarse:py-3.5 hover:border-blue hover:text-blue">
             Source</a>}
         <label className="text-xs text-muted ml-auto">
           Compare{' '}
           <select aria-label="Compare with" value={compare ?? ''}
                   onChange={e => onCompare(e.target.value || null)}
-                  className="border border-line rounded-md px-2 py-1 bg-card">
+                  className="border border-line rounded-md px-2 py-1
+                             pointer-coarse:px-3 pointer-coarse:py-3.5 bg-card">
             <option value="">—</option>
             {site.charts.filter(c => c.id !== chart.id).map(c =>
               <option key={c.id} value={c.id}>{c.title}</option>)}

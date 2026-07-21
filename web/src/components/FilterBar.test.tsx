@@ -48,3 +48,59 @@ test('roving tabindex: only the selected radio is in the tab order', () => {
   expect(tabbable).toHaveLength(1)
   expect(tabbable[0]).toHaveAttribute('aria-checked', 'true')
 })
+
+// Design review P1-touch ("Bring daily-touch controls up to touch size").
+// These size bumps are pure CSS media-variant classes — Tailwind's
+// `pointer-coarse:` prefix compiles to `@media (pointer: coarse)`, the same
+// media feature App.tsx/lib/sections.ts already gate the mobile
+// collapse-by-default behaviour on (via matchMedia('(pointer: coarse)')).
+// Unlike that JS branch, there's no matchMedia call to stub HERE: the exact
+// same markup ships to every device and the browser's CSS engine decides
+// which rules win at paint time, so "coarse-pointer" and "fine-pointer"
+// verification both read off the one render — the coarse assertions confirm
+// the `pointer-coarse:` classes are wired on, the fine-pointer assertions
+// confirm the plain classes fine-pointer/desktop users actually see are
+// untouched.
+describe('touch targets (design review P1-touch)', () => {
+  test('Filters/Done become bordered buttons on coarse pointers, never a solid fill; fine-pointer text-link styling is untouched', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+    // Done lives inside the (closed-by-default) <dialog>, invisible to the
+    // default accessibility-tree query — hidden:true reads its classes
+    // without needing to actually open the sheet.
+    const filters = screen.getByRole('button', { name: 'Filters' })
+    const done = screen.getByRole('button', { name: 'Done', hidden: true })
+    for (const btn of [filters, done]) {
+      expect(btn).toHaveClass('text-blue')   // fine-pointer look: unchanged
+      expect(btn).toHaveClass('pointer-coarse:border', 'pointer-coarse:border-line',
+                               'pointer-coarse:rounded-md', 'pointer-coarse:py-2.5',
+                               'pointer-coarse:px-4')
+      expect(btn.className).not.toMatch(/\bbg-blue\b/)   // never a solid fill
+    }
+  })
+
+  test('the bottom sheet\'s Segmented copy gets the 44px bump; the desktop toolbar copy is untouched', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+    // Document order: the always-visible toolbar row renders before the
+    // sm:hidden/dialog block, so [0] is the toolbar's radio, [1] the sheet's.
+    const [toolbarRadio, sheetRadio] =
+      screen.getAllByRole('radio', { name: '1y', hidden: true })
+    expect(sheetRadio).toHaveClass('pointer-coarse:px-3', 'pointer-coarse:py-3',
+                                    'pointer-coarse:text-sm')
+    expect(toolbarRadio.className).not.toMatch(/pointer-coarse:/)
+  })
+
+  test('section chips enlarge their hit area via padding/negative margin, keeping the visible pill unchanged', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+    const chip = screen.getByRole('button', { name: 'Jump to Prices' })
+    // The hit-box classes live on the button; visual sizing moved to the
+    // inner span, so the button itself carries no px-3/py-1 pill styling.
+    expect(chip).toHaveClass('pointer-coarse:p-1.5', 'pointer-coarse:-m-1.5')
+    expect(chip.className).not.toMatch(/\btext-xs\b/)
+    const pill = within(chip).getByText('Prices')
+    expect(pill).toHaveClass('px-3', 'py-1', 'text-xs', 'rounded-full', 'border-line')
+    expect(pill).toHaveClass('pointer-coarse:py-2')   // the only coarse-pointer growth
+  })
+})
