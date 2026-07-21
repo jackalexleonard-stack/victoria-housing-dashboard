@@ -82,6 +82,21 @@ function SecondaryCard({ site, tileKey, onOpen }: {
   )
 }
 
+// Design review P0-2 (complete): rank the "changed this week" strip by the
+// exported export-time notability score (scoring.score_metric, the same
+// signal pick_hero uses), not by recency alone — score desc, nulls last
+// (an unscoreable tile shouldn't out-rank a genuinely notable mover just
+// because its data happened to land more recently), ties/nulls broken by
+// changed_at (most recent first, the strip's old-and-only order).
+function sortWhatsNew(tiles: HeroTile[]): HeroTile[] {
+  return [...tiles].sort((a, b) => {
+    if (a.score != null && b.score != null && a.score !== b.score) return b.score - a.score
+    if (a.score != null && b.score == null) return -1
+    if (a.score == null && b.score != null) return 1
+    return (b.changed_at ?? '').localeCompare(a.changed_at ?? '')
+  })
+}
+
 export function TodaySection({ site, news, onOpen, now, filtersActive = false }: {
   site: SiteData; news: NewsData; onOpen: (chartId: string) => void
   now: Date; filtersActive?: boolean }) {
@@ -100,7 +115,7 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false }:
     : []
 
   const [expanded, setExpanded] = useState(false)
-  const whatsNew = site.whats_new
+  const whatsNew = sortWhatsNew(site.whats_new)
   const shownChanges = expanded ? whatsNew : whatsNew.slice(0, WHATS_NEW_CAP)
   const restCount = whatsNew.length - WHATS_NEW_CAP
 

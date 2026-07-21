@@ -61,10 +61,11 @@ function SectionHeading({ label, open, onToggle }: {
 // sentinel, an honest override — see lib/sections.collapsedSummaryText)
 // plus the section's worst staleness chip, always shown so outages stay
 // visible even while collapsed.
-function CollapsedRow({ id, label, charts, site, now }: {
-  id: string; label: string; charts: SiteData['charts']; site: SiteData; now: Date }) {
+function CollapsedRow({ id, charts, site, now }: {
+  id: string; charts: SiteData['charts']; site: SiteData; now: Date }) {
   const worst = worstStaleness(charts, site, now)
-  const summary = collapsedSummaryText(site.section_summaries?.[id], label, worst)
+  const quiet = site.section_summary_quiet?.[id] ?? false
+  const summary = collapsedSummaryText(site.section_summaries?.[id], quiet, worst)
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm mb-2">
       {summary && <span className="font-display">{summary}</span>}
@@ -258,7 +259,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
                 )}
               </>
             ) : (
-              <CollapsedRow id={id} label={label} charts={charts} site={site} now={now} />
+              <CollapsedRow id={id} charts={charts} site={site} now={now} />
             )}
           </section>
         )

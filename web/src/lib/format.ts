@@ -117,9 +117,18 @@ const SOURCE_TOKEN_RULES: [RegExp, string][] = [
   [/Urban Development Program/, 'DTP'],
 ]
 
+// A derived series' own source_name often leads with the DERIVED thing's
+// name, not the underlying data's provenance — e.g. au_accord's "Housing
+// Accord progress (derived from ABS Building Activity)" would otherwise
+// token to "Housing" via the first-word fallback below, hiding the real
+// source. Take the word right after "derived from" instead.
+const DERIVED_FROM_RE = /derived from (\S+)/i
+
 export function shortSource(name: string | null | undefined): string {
   if (!name) return ''
   for (const [re, token] of SOURCE_TOKEN_RULES) if (re.test(name)) return token
+  const derived = name.match(DERIVED_FROM_RE)
+  if (derived) return derived[1]
   return name.split(/\s+/)[0]
 }
 

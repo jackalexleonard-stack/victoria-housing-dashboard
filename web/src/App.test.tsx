@@ -240,6 +240,33 @@ describe('viewport-aware collapse defaults', () => {
     const world = screen.getByRole('region', { name: 'World' })
     expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'true')
   })
+
+  // T6 item 4: a coverage gap — every prior jump test drove the section
+  // closed via an explicit vh.collapsed/vh.sections override, never via the
+  // viewport (coarse-pointer) DEFAULT alone. Proves the jump chip's
+  // "expand, then scroll" path also fires when defaultSectionOpen (not a
+  // stored override) is the only reason the section starts closed.
+  test('jumping to a section that is closed only by the mobile viewport default expands it and scrolls', async () => {
+    stubPointer(true)
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const toggle = within(section).getByRole('button', { name: 'Money & credit' })
+    // No localStorage override at all — closed purely via the coarse-pointer
+    // viewport default (confirmed by the 'mobile (coarse pointer)' test above).
+    expect(localStorage.getItem('vh.sections')).toBeNull()
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    const nav = screen.getByRole('navigation', { name: /filters and sections/i })
+    const chip = within(nav).getByRole('button', { name: 'Jump to Money & credit' })
+    await userEvent.click(chip)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(await within(section).findByText(/held at 3.85%/)).toBeInTheDocument()
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
 })
 
 // --- P0-3: collapsed-row summary line + worst status chip ---
@@ -265,7 +292,9 @@ describe('collapsed section rows', () => {
       // 92-day cadence that its real outage actually trips the staleness gate.
       const mutated = { ...siteEdge as object,
         section_summaries: { ...(siteEdge as { section_summaries: object }).section_summaries,
-          rents: 'No notable moves in Rents & vacancy this week.' } }
+          rents: 'No notable moves in Rents & vacancy this week.' },
+        section_summary_quiet: { ...(siteEdge as { section_summary_quiet: object }).section_summary_quiet,
+          rents: true } }
       mockFetch(mutated)
       const stale = new Date('2027-01-01T00:00:00Z')
       render(<App now={stale} />)

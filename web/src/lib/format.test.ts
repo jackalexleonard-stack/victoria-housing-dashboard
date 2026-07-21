@@ -105,6 +105,10 @@ test('shortSource maps real source_name strings to compact provenance tokens', (
   expect(shortSource('Homes Victoria — Applications on the Victorian Housing Register'))
     .toBe('Homes Victoria')
   expect(shortSource('Urban Development Program — Greenfield Residential Land (DTP)')).toBe('DTP')
+  // Derived series (au_accord): the leading words name the DERIVED thing,
+  // not its provenance — "derived from X" must token to X, not the
+  // series' own first word ("Housing").
+  expect(shortSource('Housing Accord progress (derived from ABS Building Activity)')).toBe('ABS')
   // Fallback = first word, for anything not in the small map.
   expect(shortSource('REIV median house & unit prices')).toBe('REIV')
   expect(shortSource(null)).toBe('')

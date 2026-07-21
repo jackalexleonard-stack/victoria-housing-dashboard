@@ -25,15 +25,6 @@ export function worstStaleness(charts: ChartSpec[], site: SiteData, now: Date): 
   return worst
 }
 
-// True when `text` is one of the pipeline's own generic "nothing scoreable
-// happened" sentinels (pipeline/findings.py's _QUIET_SUMMARY /
-// WORLD_QUIET_SUMMARY) — i.e. reconstructed from the same inputs the
-// pipeline used, not a loose guess at phrasing.
-export function isQuietSummary(text: string, label: string): boolean {
-  return text === `No notable moves in ${label} this week.` ||
-         text === 'The world backdrop was quiet this week.'
-}
-
 // The honest replacement for a quiet-sentinel summary when the section is
 // actually sitting on stale/failed data (design review's controller
 // upgrade): "Data to {period} — source unavailable", derived from the
@@ -46,18 +37,20 @@ export function honestOverrideText(worst: WorstEntry): string {
 }
 
 // The text a collapsed section row should show: the pipeline's own
-// section_summaries sentence, UNLESS it's the generic quiet sentinel while
-// the section's worst series is actually stale/failed — in which case
-// claiming "no notable moves" would be dishonest, so the real status
-// replaces it. A section with a genuine finding (not the quiet sentinel)
-// keeps that finding even if some OTHER series in the section is stale —
-// the worst-status chip (rendered alongside, unconditionally) still surfaces
-// the outage without suppressing real news.
+// section_summaries sentence, UNLESS it's the generic quiet sentinel (per
+// the pipeline's own section_summary_quiet flag — T6: no longer a client-
+// side byte-match against the sentinel prose, which silently stopped firing
+// the moment the prose drifted from the two hardcoded strings) while the
+// section's worst series is actually stale/failed — in which case claiming
+// "no notable moves" would be dishonest, so the real status replaces it. A
+// section with a genuine finding (quiet=false) keeps that finding even if
+// some OTHER series in the section is stale — the worst-status chip
+// (rendered alongside, unconditionally) still surfaces the outage without
+// suppressing real news.
 export function collapsedSummaryText(
-  exported: string | null | undefined, label: string, worst: WorstEntry | null,
+  exported: string | null | undefined, quiet: boolean, worst: WorstEntry | null,
 ): string | null {
-  if (worst && (worst.st.kind === 'failed' || worst.st.kind === 'stale') &&
-      exported && isQuietSummary(exported, label)) {
+  if (worst && (worst.st.kind === 'failed' || worst.st.kind === 'stale') && quiet) {
     return honestOverrideText(worst)
   }
   return exported ?? null

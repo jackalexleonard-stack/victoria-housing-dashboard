@@ -129,6 +129,20 @@ test('the action row and compare select get a coarse-pointer touch-size bump; fi
   expect(select).toHaveClass('pointer-coarse:px-3', 'pointer-coarse:py-3.5')
 })
 
+// Design review P1-touch (T6 item 7): the inline range control (All/1Y/etc.)
+// gets the same coarse-pointer bump as this component's own action row,
+// using the identical classes for consistency. Same static-class rationale
+// as the action-row test above — no matchMedia stub needed.
+test('the inline range control gets the same coarse-pointer touch-size bump as the action row', () => {
+  renderView()
+  const radios = screen.getAllByRole('radio')
+  expect(radios.length).toBeGreaterThan(0)
+  for (const r of radios) {
+    expect(r).toHaveClass('px-2.5', 'py-1', 'text-xs', 'num')   // unchanged
+    expect(r).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-3.5')
+  }
+})
+
 test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {
   // Same fixture quirk as ChartCard's test: vic_rents declares
   // rent_growth_annual (percent) before median_rent (aud) in its units map.

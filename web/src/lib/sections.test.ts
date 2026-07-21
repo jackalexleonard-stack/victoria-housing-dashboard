@@ -1,6 +1,6 @@
 import type { ChartSpec, SeriesEntry, SiteData } from './types'
 import { collapsedSummaryText, defaultSectionOpen, honestOverrideText,
-         isQuietSummary, sectionOutageNotice, worstStaleness } from './sections'
+         sectionOutageNotice, worstStaleness } from './sections'
 
 const NOW = new Date('2026-07-21T00:00:00Z')
 
@@ -47,37 +47,37 @@ describe('worstStaleness', () => {
   })
 })
 
-describe('isQuietSummary / collapsedSummaryText', () => {
-  test('recognises the generic per-section quiet sentinel', () => {
-    expect(isQuietSummary('No notable moves in Rents & vacancy this week.', 'Rents & vacancy'))
-      .toBe(true)
-    expect(isQuietSummary('Median rent rose 1.2% to $580/wk', 'Rents & vacancy')).toBe(false)
-  })
-
-  test('recognises the World-specific quiet sentinel', () => {
-    expect(isQuietSummary('The world backdrop was quiet this week.', 'World')).toBe(true)
-  })
-
-  test('overrides a quiet sentinel when the worst series is stale/failed', () => {
+describe('collapsedSummaryText', () => {
+  // T6: the honesty override now keys off the pipeline's own
+  // section_summary_quiet boolean (derived in Python where the sentinel
+  // strings are authored), not a client-side byte-match against the
+  // rendered prose — so these tests drive it with the flag directly.
+  test('overrides a quiet-flagged summary when the worst series is stale/failed', () => {
     const worst = { entry: entry({ status: 'failed', last_data_date: '2025-09-30', frequency: 'monthly' }),
                     st: { kind: 'failed' as const, label: 'x' } }
     const text = collapsedSummaryText('No notable moves in Rents & vacancy this week.',
-      'Rents & vacancy', worst)
+      true, worst)
     expect(text).toBe('Data to Sep 2025 — source unavailable')
   })
 
-  test('keeps a REAL finding even when some series in the section is stale (does not suppress news)', () => {
+  test('keeps a REAL finding (quiet=false) even when some series in the section is stale (does not suppress news)', () => {
     const worst = { entry: entry({ status: 'failed', last_data_date: null }),
                     st: { kind: 'failed' as const, label: 'x' } }
-    const text = collapsedSummaryText('Dwelling values fell 0.6% in Jun 2026', 'Prices', worst)
+    const text = collapsedSummaryText('Dwelling values fell 0.6% in Jun 2026', false, worst)
     expect(text).toBe('Dwelling values fell 0.6% in Jun 2026')
   })
 
-  test('no override when the worst kind is merely ageing', () => {
+  test('no override when the worst kind is merely ageing, even if quiet is flagged', () => {
     const worst = { entry: entry(), st: { kind: 'ageing' as const, label: 'x' } }
-    const text = collapsedSummaryText('No notable moves in Money & credit this week.',
-      'Money & credit', worst)
+    const text = collapsedSummaryText('No notable moves in Money & credit this week.', true, worst)
     expect(text).toBe('No notable moves in Money & credit this week.')
+  })
+
+  test('no override when quiet is false, even if the worst series is stale/failed', () => {
+    const worst = { entry: entry({ status: 'failed', last_data_date: '2025-09-30' }),
+                    st: { kind: 'failed' as const, label: 'x' } }
+    const text = collapsedSummaryText('No notable moves in Rents & vacancy this week.', false, worst)
+    expect(text).toBe('No notable moves in Rents & vacancy this week.')
   })
 
   test('falls back to "No data" wording when the worst entry never had data', () => {

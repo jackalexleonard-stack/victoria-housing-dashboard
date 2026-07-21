@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
-import { assertSiteData, type NewsData } from '../lib/types'
+import { assertSiteData, type HeroTile, type NewsData } from '../lib/types'
 import { TodaySection } from './TodaySection'
 
 const site = assertSiteData(siteEdge)
@@ -105,6 +105,33 @@ test('changed-this-week caps at 6 chips with an "and N more" disclosure', async 
   await userEvent.click(more)
   expect(within(list).getAllByRole('listitem')).toHaveLength(8)
   expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument()
+})
+
+test('changed-this-week strip sorts by score desc, nulls last, recency tiebreak among nulls', () => {
+  // P0-2 (complete): recency alone used to decide order (changed_at desc).
+  // Deliberately scramble that recency order against score so the test only
+  // passes if score is actually driving the sort.
+  const customWhatsNew: HeroTile[] = [
+    { key: 'melb_vacancy', label: 'Rental vacancy — Melbourne', value: 2.51, delta: 0.0,
+      delta_color: 'off', last_date: '2026-06-30', changed_at: '2026-07-10', score: 0.2 },
+    { key: 'cash_rate', label: 'RBA cash rate', value: 3.85, delta: 0.0,
+      delta_color: 'inverse', last_date: '2026-06-30', changed_at: '2026-07-15', score: 0.9 },
+    { key: 'melb_rent', label: 'Median rent — Melbourne', value: 580, delta: 10,
+      delta_color: 'normal', last_date: '2026-03-31', changed_at: '2026-07-08', score: null },
+    { key: 'oo_lending', label: 'New loans — owner-occupier', value: 1020, delta: 2.0,
+      delta_color: 'normal', last_date: '2026-06-30', changed_at: '2026-07-14', score: null },
+  ]
+  render(<TodaySection site={{ ...site, whats_new: customWhatsNew }} news={news} now={NOW}
+                       onOpen={() => {}} />)
+  const list = screen.getByTestId('whats-new')
+  const rows = within(list).getAllByRole('listitem').map(li => li.textContent ?? '')
+  // score desc first (cash_rate 0.9 > vacancy 0.2), THEN the two null-score
+  // tiles, broken by changed_at desc (oo_lending 07-14 before melb_rent 07-08)
+  // — the opposite of their array-declaration order above.
+  expect(rows[0]).toMatch(/RBA cash rate/)
+  expect(rows[1]).toMatch(/Rental vacancy/)
+  expect(rows[2]).toMatch(/owner-occupier/)
+  expect(rows[3]).toMatch(/Median rent/)
 })
 
 test('a stale-source chip badges its vintage inline instead of being excluded', () => {

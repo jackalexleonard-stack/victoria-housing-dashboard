@@ -27,6 +27,10 @@ export interface HeroTile {
   key: string; label: string; value: number | null; delta: number | null
   delta_color: 'normal' | 'inverse' | 'off'; last_date: string | null
   changed_at?: string
+  // whats_new-only (design review P0-2): export-time notability, the same
+  // scoring.score_metric pick_hero itself uses — lets the "changed this
+  // week" strip rank by more-than-recency. Never set on plain hero tiles.
+  score?: number | null
 }
 
 // A small stat tile split out of a chart card for scale reasons (e.g. ERP
@@ -51,6 +55,10 @@ export interface SiteData {
   extra_tiles?: ExtraTile[]
   metric_labels?: Record<string, string>
   section_summaries?: Record<string, string>
+  // True when section_summaries[id] is the pipeline's own generic quiet/
+  // no-data sentinel (T6: derived in Python where the sentinel is authored,
+  // replacing sections.ts's old byte-match-the-prose approach).
+  section_summary_quiet?: Record<string, boolean>
 }
 
 export interface NewsItem {
@@ -93,6 +101,9 @@ export function assertSiteData(x: unknown): SiteData {
   if (s.metric_labels != null && typeof s.metric_labels !== 'object') bad('metric_labels')
   if (s.section_summaries != null && typeof s.section_summaries !== 'object') {
     bad('section_summaries')
+  }
+  if (s.section_summary_quiet != null && typeof s.section_summary_quiet !== 'object') {
+    bad('section_summary_quiet')
   }
   return s
 }

@@ -96,12 +96,20 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
         <button type="button" onClick={onClose} aria-label="Close"
                 className="text-muted hover:text-ink text-xl leading-none px-1">×</button>
       </div>
+      {/* Design review P1-touch: this inline range control was px-2.5 py-1
+          (~24px tall), below the project's 44px mandate — the same defect
+          class T5 already fixed on the action row below (Download CSV /
+          Copy link / Source / Compare) and on FilterBar's Segmented.
+          pointer-coarse:px-4 pointer-coarse:py-3.5 is the identical bump
+          used on this component's own action row, kept consistent rather
+          than inventing new sizing; fine-pointer sizing is untouched. */}
       <div role="radiogroup" aria-label="Range"
            className="inline-flex rounded-md border border-line overflow-hidden my-3">
         {RANGES.map(r => (
           <button key={r} role="radio" aria-checked={r === localRange} type="button"
                   onClick={() => setLocalRange(r)}
-                  className={`px-2.5 py-1 text-xs num ${r === localRange
+                  className={`px-2.5 py-1 text-xs num
+                    pointer-coarse:px-4 pointer-coarse:py-3.5 ${r === localRange
                     ? 'bg-blue/10 text-blue font-medium' : 'text-muted'}`}>{r}</button>
         ))}
       </div>
