@@ -138,6 +138,24 @@ def test_validate_news_rejects_health_feeds_ok_exceeding_total():
         export.validate_news(bad)
 
 
+def test_note_passes_through_charts_and_serialises_as_null_when_absent():
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)
+    charts_by_id = {c["id"]: c for c in site["charts"]}
+    assert charts_by_id["hvi_melbourne"]["note"] == (
+        "Daily index — the free Cotality feed covers a rolling year; "
+        "history accumulates from Jul 2025.")
+    assert charts_by_id["cash_rate"]["note"] is None
+    # A None note must serialise as JSON null, not be dropped or raise.
+    encoded = export.dumps(site)
+    assert '"cash_rate"' in encoded
+    decoded = json.loads(encoded)
+    decoded_by_id = {c["id"]: c for c in decoded["charts"]}
+    assert decoded_by_id["cash_rate"]["note"] is None
+    assert decoded_by_id["hvi_melbourne"]["note"] == charts_by_id["hvi_melbourne"]["note"]
+
+
 def test_validate_rejects_bad_status():
     ls, lm = _loaders()
     site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))

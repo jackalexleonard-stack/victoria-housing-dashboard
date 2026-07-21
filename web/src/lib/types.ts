@@ -16,6 +16,7 @@ export interface ChartSpec {
   id: string; section: string; title: string; series_id: string
   metrics: string[] | null; region_mode: string
   percent: boolean; markers: boolean; annotate: boolean
+  note?: string | null
 }
 
 export interface HeroTile {

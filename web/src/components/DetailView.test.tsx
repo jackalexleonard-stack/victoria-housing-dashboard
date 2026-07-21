@@ -75,6 +75,19 @@ test('failed series surfaces the raw source error', () => {
   expect(screen.getByText('HTTPError')).toBeInTheDocument()
 })
 
+test('chart note renders as a muted line near the provenance block', () => {
+  renderView()
+  expect(screen.getByText('Test note.')).toBeInTheDocument()
+})
+
+test('chart without a note renders no note line', () => {
+  const medianRentChart = site.charts.find(c => c.id === 'median_rent')!
+  render(<DetailView site={site} chart={medianRentChart} finding="f"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  expect(screen.queryByText('Test note.')).not.toBeInTheDocument()
+})
+
 test('compare series formats with its own unit, not the primary chart’s', async () => {
   renderView({ compare: 'median_rent' })
   await userEvent.click(screen.getByText(/view data table/i))

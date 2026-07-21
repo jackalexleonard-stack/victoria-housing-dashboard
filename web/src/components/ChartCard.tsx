@@ -64,6 +64,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
              onClick={e => e.stopPropagation()}>{entry.meta.source_name}</a>
         )}
       </p>
+      {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
     </article>
   )
 }

@@ -20,21 +20,33 @@ SECTIONS: list[tuple[str, str]] = [
 
 
 def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
-       percent=False, markers=False, annotate=False, noun=None, primary=None):
+       percent=False, markers=False, annotate=False, noun=None, primary=None,
+       note=None):
     """noun: subject of the generic finding sentence; primary: metric it uses
-    (defaults to metrics[0]); both ignored by charts with custom rules."""
+    (defaults to metrics[0]); both ignored by charts with custom rules.
+    note: optional short disclosure/methodology line shown under the chart
+    (source-window caveats, definition changes, etc.) — None for most charts."""
     return dict(id=id, section=section, title=title, series_id=series_id,
                 metrics=metrics, region_mode=region_mode, percent=percent,
                 markers=markers, annotate=annotate, noun=noun,
-                primary=primary or (metrics[0] if metrics else None))
+                primary=primary or (metrics[0] if metrics else None),
+                note=note)
+
+
+_HVI_NOTE = ("Daily index — the free Cotality feed covers a rolling year; "
+             "history accumulates from Jul 2025.")
+_MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
+                     "grouping differs slightly from pre-2026 snapshot figures.")
 
 
 CHARTS: list[dict] = [
     # --- prices ---
     _c("hvi_melbourne", "prices", "Cotality HVI — Melbourne", "vic_hvi",
-       metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True),
+       metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True,
+       note=_HVI_NOTE),
     _c("hvi_australia", "prices", "Cotality HVI — 5 capitals", "au_hvi",
-       metrics=["hvi_index"], region_mode="fixed:australia", annotate=True),
+       metrics=["hvi_index"], region_mode="fixed:australia", annotate=True,
+       note=_HVI_NOTE),
     _c("mean_price", "prices", "Mean dwelling price", "au_dwelling_stock",
        metrics=["mean_price"], region_mode="geo", noun="The mean dwelling price"),
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
@@ -49,7 +61,7 @@ CHARTS: list[dict] = [
        noun="Annual rent growth"),
     _c("median_rent", "rents", "Median weekly rent", "vic_rents",
        metrics=["median_rent"], region_mode="geo",
-       noun="The median rent"),
+       noun="The median rent", note=_MEDIAN_RENT_NOTE),
     _c("affordable_share", "rents", "Affordable lettings share", "vic_rents",
        metrics=["affordable_share"], region_mode="geo", percent=True,
        noun="The affordable share of new lettings"),
@@ -57,7 +69,7 @@ CHARTS: list[dict] = [
        metrics=["rent_1br_flat", "rent_2br_flat", "rent_3br_flat",
                 "rent_2br_house", "rent_3br_house", "rent_4br_house"],
        region_mode="geo", noun="The median 3-bedroom-house rent",
-       primary="rent_3br_house"),
+       primary="rent_3br_house", note=_MEDIAN_RENT_NOTE),
     _c("vacancy", "rents", "Rental vacancy rate", "vic_vacancy",
        metrics=["vacancy_rate"], region_mode="geo", percent=True),
     # --- supply ---

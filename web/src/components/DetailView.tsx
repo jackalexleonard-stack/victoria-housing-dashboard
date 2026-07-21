@@ -145,6 +145,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
         {entry && nextUpdate(entry, now) && <span>{nextUpdate(entry, now)}</span>}
         {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
       </p>
+      {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
       <div className="flex flex-wrap items-center gap-2 mt-4">
         <button type="button" onClick={download}
                 className="text-xs border border-line rounded-md px-3 py-1.5 hover:border-blue hover:text-blue">

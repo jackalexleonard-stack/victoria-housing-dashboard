@@ -91,6 +91,20 @@ def test_failed_series_gets_no_data_finding():
     assert out["auctions"] == "No recent data — source currently unavailable"
 
 
+def test_exactly_four_charts_carry_a_note():
+    noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
+    assert set(noted) == {"hvi_melbourne", "hvi_australia",
+                           "median_rent", "median_rent_by_type"}
+    assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
+        "Daily index — the free Cotality feed covers a rolling year; "
+        "history accumulates from Jul 2025.")
+    assert noted["median_rent"] == noted["median_rent_by_type"] == (
+        "Metro/Non-Metro medians from DFFH's LGA tables; grouping differs "
+        "slightly from pre-2026 snapshot figures.")
+    cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
+    assert cash_rate["note"] is None
+
+
 def test_fmt_value_units():
     assert findings.fmt_value(3.85, "percent") == "3.85%"
     assert findings.fmt_value(4400, "dwellings") == "4,400"

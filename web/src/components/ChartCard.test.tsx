@@ -46,6 +46,18 @@ test('scope chip appears when geo falls back', () => {
   expect(screen.getByText('Melbourne', { selector: 'span' })).toBeInTheDocument()
 })
 
+test('chart note renders as a muted line below the caption row', () => {
+  render(<ChartCard site={site} chart={chart('cash_rate')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.getByText('Test note.')).toBeInTheDocument()
+})
+
+test('chart without a note renders no note line', () => {
+  render(<ChartCard site={site} chart={chart('auctions')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.queryByText('Test note.')).not.toBeInTheDocument()
+})
+
 test('mixed-unit series formats each line with its own metric unit, not the series-wide first one', async () => {
   // vic_rents carries rent_growth_annual (percent) FIRST in units and
   // median_rent (aud) second — the old single-scalar-unit code picked

@@ -3,7 +3,7 @@
   "generated_at": "2026-07-18T04:00:00Z",
   "sections": [["today","Today"],["prices","Prices"],["rents","Rents & vacancy"],["supply","Supply & construction"],["money","Money & credit"],["people","People"],["social","Social housing"],["world","World"],["news","News"]],
   "charts": [
-    {"id":"cash_rate","section":"money","title":"RBA cash rate target","series_id":"au_cash_rate","metrics":["cash_rate"],"region_mode":"fixed:australia","percent":true,"markers":false,"annotate":true},
+    {"id":"cash_rate","section":"money","title":"RBA cash rate target","series_id":"au_cash_rate","metrics":["cash_rate"],"region_mode":"fixed:australia","percent":true,"markers":false,"annotate":true,"note":"Test note."},
     {"id":"auctions","section":"prices","title":"Auction clearance — Melbourne","series_id":"vic_auctions","metrics":["clearance_rate"],"region_mode":"fixed:melbourne","percent":true,"markers":false,"annotate":false},
     {"id":"median_rent","section":"rents","title":"Median weekly rent","series_id":"vic_rents","metrics":["median_rent"],"region_mode":"geo","percent":false,"markers":true,"annotate":false}
   ],
