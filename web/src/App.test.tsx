@@ -322,6 +322,108 @@ describe('collapsed section rows', () => {
     })
 })
 
+// --- D1(f): World KPI tile row when expanded ---
+
+function worldChart(id: string, title: string, seriesId: string, metric: string, percent = false) {
+  return { id, section: 'world', title, series_id: seriesId, metrics: [metric],
+           region_mode: 'fixed:global', percent, markers: false, annotate: false }
+}
+
+function withWorldTiles(base: object) {
+  const mutated = JSON.parse(JSON.stringify(base))
+  mutated.charts.push(
+    worldChart('brent', 'Brent crude', 'intl_fred', 'brent_crude'),
+    worldChart('aud_usd', 'AUD/USD', 'intl_fred', 'aud_usd'),
+    worldChart('ust10', 'US 10-year Treasury', 'intl_fred', 'us_10y_treasury', true),
+    worldChart('iron_ore', 'Iron ore', 'intl_commodities', 'iron_ore'),
+    worldChart('copper', 'Copper', 'intl_commodities', 'copper'),
+    worldChart('sawnwood', 'Sawnwood', 'intl_commodities', 'sawnwood'),
+  )
+  mutated.series.intl_fred = {
+    status: 'ok',
+    meta: { source_name: 'FRED', source_url: 'https://fred.stlouisfed.org', frequency: 'daily',
+            last_fetched: '2026-07-18T00:00:00Z', last_changed: null,
+            last_data_date: '2026-07-17', error: null, cadence_days: 1 },
+    units: { brent_crude: 'usd_per_barrel', aud_usd: 'usd_per_aud', us_10y_treasury: 'percent' },
+    points: [
+      { date: '2026-07-10', region: 'global', metric: 'brent_crude', value: 80 },
+      { date: '2026-07-17', region: 'global', metric: 'brent_crude', value: 82 },
+      { date: '2026-07-10', region: 'global', metric: 'aud_usd', value: 0.65 },
+      { date: '2026-07-17', region: 'global', metric: 'aud_usd', value: 0.66 },
+      { date: '2026-07-10', region: 'global', metric: 'us_10y_treasury', value: 4.2 },
+      { date: '2026-07-17', region: 'global', metric: 'us_10y_treasury', value: 4.35 },
+    ],
+  }
+  mutated.series.intl_commodities = {
+    status: 'ok',
+    meta: { source_name: 'World Bank', source_url: 'https://wb', frequency: 'monthly',
+            last_fetched: '2026-07-18T00:00:00Z', last_changed: null,
+            last_data_date: '2026-06-30', error: null, cadence_days: 31 },
+    units: { iron_ore: 'USD/dmtu', copper: 'USD/tonne', sawnwood: 'USD/m3' },
+    points: [
+      { date: '2026-05-31', region: 'global', metric: 'iron_ore', value: 100 },
+      { date: '2026-06-30', region: 'global', metric: 'iron_ore', value: 105 },
+      { date: '2026-05-31', region: 'global', metric: 'copper', value: 9000 },
+      { date: '2026-06-30', region: 'global', metric: 'copper', value: 9500 },
+      { date: '2026-05-31', region: 'global', metric: 'sawnwood', value: 400 },
+      { date: '2026-06-30', region: 'global', metric: 'sawnwood', value: 420 },
+    ],
+  }
+  for (const id of ['brent', 'aud_usd', 'ust10', 'iron_ore', 'copper', 'sawnwood']) {
+    mutated.findings[id] = 'f'
+  }
+  mutated.section_summaries = { ...mutated.section_summaries,
+    world: 'Brent crude rose 9.8% to US$82 in Jul 2026' }
+  return mutated
+}
+
+describe('World KPI tile row (D1f)', () => {
+  beforeEach(() => localStorage.clear())
+
+  test('World collapsed by default (unchanged) shows the existing one-line collapsed summary, not the tile row', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch(withWorldTiles(siteEdge))
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const world = screen.getByRole('region', { name: 'World' })
+    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'false')
+    // CollapsedRow's pre-existing one-line status (unrelated to D1f) is
+    // unaffected and still shows — this proves the tile row/grid itself
+    // (individual series tiles, tap targets) is what's absent while
+    // collapsed, not that the section renders nothing at all.
+    expect(within(world).getByText('Brent crude rose 9.8% to US$82 in Jul 2026')).toBeInTheDocument()
+    for (const label of ['AUD/USD', 'US 10-year Treasury', 'Iron ore', 'Copper', 'Sawnwood']) {
+      expect(within(world).queryByText(label)).not.toBeInTheDocument()
+    }
+  })
+
+  test('World expanded renders the compact 6-tile KPI row led by the section summary, not six chart cards', async () => {
+    history.replaceState(null, '', '/')
+    localStorage.setItem('vh.sections', JSON.stringify({ world: 'open' }))
+    mockFetch(withWorldTiles(siteEdge))
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const world = screen.getByRole('region', { name: 'World' })
+    expect(within(world).getByText('Brent crude rose 9.8% to US$82 in Jul 2026')).toBeInTheDocument()
+    for (const label of ['Brent crude', 'AUD/USD', 'US 10-year Treasury', 'Iron ore', 'Copper', 'Sawnwood']) {
+      expect(within(world).getByText(label)).toBeInTheDocument()
+    }
+    // No full-height single-series LineChart cards left in World.
+    expect(within(world).queryAllByRole('img').length).toBe(0)
+  })
+
+  test('tapping a World tile opens the same detail modal used everywhere else', async () => {
+    history.replaceState(null, '', '/')
+    localStorage.setItem('vh.sections', JSON.stringify({ world: 'open' }))
+    mockFetch(withWorldTiles(siteEdge))
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const world = screen.getByRole('region', { name: 'World' })
+    await userEvent.click(within(world).getByText('Copper').closest('button')!)
+    expect(location.search).toContain('s=copper')
+  })
+})
+
 // --- P1-outage: hoisted section notice + quiet per-card chips ---
 
 describe('shared-outage section notice', () => {

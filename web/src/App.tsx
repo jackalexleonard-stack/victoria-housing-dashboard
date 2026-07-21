@@ -13,6 +13,7 @@ import { TodaySection } from './components/TodaySection'
 import { ChartCard } from './components/ChartCard'
 import { Chip } from './components/Chip'
 import { NewsSection } from './components/NewsSection'
+import { WorldTiles } from './components/WorldTiles'
 import { DetailView } from './components/DetailView'
 
 const DATA_URL =
@@ -246,6 +247,12 @@ export default function App({ now = new Date() }: { now?: Date }) {
                 )}
                 {id === 'news' ? (
                   <NewsSection news={news} now={now} />
+                ) : id === 'world' ? (
+                  // D1(f): the expanded World section renders one compact
+                  // KPI tile row instead of six full-height chart cards —
+                  // each tile still opens the same detail modal (full line +
+                  // provenance) on tap, unchanged from before.
+                  <WorldTiles site={site} charts={charts} now={now} onOpen={openDetail} />
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-4">
                     {charts.map((c, i) => (

@@ -40,13 +40,23 @@ export function deltaColor(t: { delta: number | null
   return good ? PALETTE.up : PALETTE.down
 }
 
-function Tile({ tileKey, rawLabel, value, delta, color, chartId, onOpen }: {
-  tileKey: string; rawLabel: string; value: number | null; delta: number | null
-  color: string; chartId: string | undefined; onOpen: (chartId: string) => void }) {
-  const fmt = TILE_FMT[tileKey]
-  const { label, code } = splitCadenceCode(rawLabel)
-  const valueText = value != null && fmt ? fmt.value(value) : '—'
-  const deltaText = delta != null && fmt ? fmt.delta(delta) : null
+// Design review P0-1 / D1(f): the low-level tile shell — label, big numeral
+// value, an optional delta line, an optional trailing slot (e.g. a
+// staleness chip) — shared by BOTH the hero/whats-new strip (HeroTiles
+// below, which looks its value/delta up via the TILE_FMT registry) and the
+// World KPI row (WorldTiles.tsx: six chart-only series with no hero-registry
+// entry, whose value/delta are instead derived directly from the series'
+// own points). Callers pre-format everything (valueText/deltaText/color) so
+// this component owns ONLY the shell, not a formatting policy — the two
+// callers' formatting sources differ enough (registry lookup vs. live point
+// arithmetic) that sharing just the shell, rather than forking a
+// near-identical renderer per caller, is what keeps this in one place.
+export function Tile({ label, code, valueText, deltaText, color, chip, hasValue,
+                       chartId, onOpen }: {
+  label: string; code?: string | null
+  valueText: string; deltaText: string | null; color: string
+  chip?: React.ReactNode
+  hasValue: boolean; chartId: string | undefined; onOpen: (chartId: string) => void }) {
   const body = (
     <>
       <div className="text-xs text-muted font-medium truncate">{label}</div>
@@ -56,9 +66,10 @@ function Tile({ tileKey, rawLabel, value, delta, color, chartId, onOpen }: {
           {deltaText}{code ? ` (${code})` : ''}
         </div>
       )}
+      {chip && <div className="mt-1">{chip}</div>}
     </>
   )
-  return chartId && value != null ? (
+  return chartId && hasValue ? (
     <button type="button" onClick={() => onOpen(chartId)}
             className="text-left bg-card border border-line rounded-lg p-2.5 hover:border-blue">
       {body}
@@ -76,17 +87,20 @@ function Tile({ tileKey, rawLabel, value, delta, color, chartId, onOpen }: {
 // order — no reordering logic needed here.
 export function HeroTiles({ tiles, extraTiles = [], onOpen }: {
   tiles: HeroTile[]; extraTiles?: ExtraTile[]; onOpen: (chartId: string) => void }) {
+  const registryTile = (t: HeroTile | ExtraTile, chartId: string | undefined, key: string) => {
+    const fmt = TILE_FMT[t.key]
+    const { label, code } = splitCadenceCode(t.label)
+    const valueText = t.value != null && fmt ? fmt.value(t.value) : '—'
+    const deltaText = t.delta != null && fmt ? fmt.delta(t.delta) : null
+    return (
+      <Tile key={key} label={label} code={code} valueText={valueText} deltaText={deltaText}
+            color={deltaColor(t)} hasValue={t.value != null} chartId={chartId} onOpen={onOpen} />
+    )
+  }
   return (
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-      {tiles.map((t, i) => (
-        <Tile key={`${t.key}-${i}`} tileKey={t.key} rawLabel={t.label} value={t.value}
-              delta={t.delta} color={deltaColor(t)} chartId={TILE_CHART[t.key]}
-              onOpen={onOpen} />
-      ))}
-      {extraTiles.map(t => (
-        <Tile key={t.key} tileKey={t.key} rawLabel={t.label} value={t.value}
-              delta={t.delta} color={deltaColor(t)} chartId={t.chart} onOpen={onOpen} />
-      ))}
+      {tiles.map((t, i) => registryTile(t, TILE_CHART[t.key], `${t.key}-${i}`))}
+      {extraTiles.map(t => registryTile(t, t.chart, t.key))}
     </div>
   )
 }
