@@ -115,7 +115,15 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
                      annotations={chart.annotate
                        ? site.annotations.cash_rate_moves.map(m => ({
                            date: m.date, label: `${m.delta > 0 ? '+' : ''}${m.delta}` }))
-                       : []} />
+                       : []}
+                     // The detail modal always gets the complete, fully
+                     // labelled annotation set (design review P0-4) — the
+                     // card-level 'band'/'latest-label' compaction is
+                     // ChartCard-only. Also deliberately never passes
+                     // `emphasize`: the modal is the deep-dive, so every
+                     // line stays full-colour even on charts that
+                     // de-emphasise at card size (design review P1-emphasis).
+                     annotationMode="full" />
         : <p className="text-sm text-muted py-10 text-center">
             No recent data — source currently unavailable
             {entry?.meta.error && <span className="block text-xs mt-1">{entry.meta.error}</span>}

@@ -6,6 +6,7 @@
   --up: #00824D; --down: #AF3029; --warn: #7A5900;
   --chip-up: #DDF7CE; --chip-down: #FFE0E0; --chip-warn: #FFEECC;
   --zeroline: #B7B5AC;
+  --deemphasis: #878580;
   --font-ui: 'Inter Variable', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Newsreader Variable', Georgia, serif;
 }

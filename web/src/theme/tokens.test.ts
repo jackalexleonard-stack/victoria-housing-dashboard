@@ -9,12 +9,22 @@ test('palette matches the approved spec exactly', () => {
     up: '#00824D', down: '#AF3029', warn: '#7A5900',
     chip_up: '#DDF7CE', chip_down: '#FFE0E0', chip_warn: '#FFEECC',
     zeroline: '#B7B5AC',
+    deemphasis: '#878580',
   })
 })
 
-test('colorway matches the approved spec', () => {
+// Deliberate behaviour change (design review P1-emphasis): grey is no
+// longer a rotating data colour — it moved from COLORWAY's 6th slot to the
+// dedicated `PALETTE.deemphasis` role, replaced in rotation by Flexoki
+// magenta. Both facts are asserted explicitly so a future edit can't
+// silently reintroduce grey into the data rotation.
+test('colorway matches the approved spec (grey replaced by magenta — see PALETTE.deemphasis)', () => {
   expect(COLORWAY).toEqual(['#205EA6', '#BC5215', '#24837B',
-                            '#66800B', '#5E409D', '#878580'])
+                            '#66800B', '#5E409D', '#A02F6F'])
+})
+
+test('the de-emphasis grey is reserved and no longer appears in the data colorway rotation', () => {
+  expect(COLORWAY).not.toContain(PALETTE.deemphasis)
 })
 
 test('font stacks', () => {

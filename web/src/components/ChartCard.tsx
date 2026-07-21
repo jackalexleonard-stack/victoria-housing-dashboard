@@ -6,6 +6,25 @@ import { staleness } from '../lib/staleness'
 import type { ChartSpec, SiteData } from '../lib/types'
 import type { Geo, Range } from '../lib/urlState'
 
+// Design review P1-emphasis: on a ≥4-line card, the line matching the
+// chart's own finding gets the emphasis treatment; everything else
+// de-emphasises to grey. The finding's actual analytical "primary" metric
+// (pipeline/findings.py's `primary=`) isn't exported to the frontend chart
+// spec — only `metrics` (display order) is — so metrics[0] is a correct
+// fallback EXCEPT where display order deliberately differs from the
+// analytical primary. Currently only median_rent_by_type does (its metrics
+// are ordered by bedroom count; the finding is specifically about the
+// 3-bed house).
+const EMPHASIS_PRIMARY: Record<string, string> = {
+  median_rent_by_type: 'rent_3br_house',
+}
+
+// Design review P0-4: the per-move annotation "picket fence" is replaced,
+// card-side, by either a single pale cycle-band (lending/credit/HVI) or a
+// single latest-move label (cash rate) — see LineChart's `annotationMode`.
+// The band's meaning is spelled out once here rather than per chart.
+const BAND_CAPTION = 'Shaded: cash-rate cycle'
+
 export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
   site: SiteData; chart: ChartSpec; finding: string; range: Range; geo: Geo
   now: Date; onOpen: (id: string) => void }) {
@@ -31,6 +50,27 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
     ? site.annotations.cash_rate_moves.map(m => ({
         date: m.date, label: `${m.delta > 0 ? '+' : ''}${m.delta}` }))
     : []
+  // Cash rate keeps just the latest-move label (its own step line already
+  // shows every move); the other annotated charts (lending, credit, both
+  // HVI cards) get one shaded cycle-band instead of a per-move fence.
+  const annotationMode: 'band' | 'latest-label' | undefined = !chart.annotate
+    ? undefined
+    : chart.id === 'cash_rate' ? 'latest-label' : 'band'
+  const isMortgage = chart.id === 'mortgage_rates'
+  // The mortgage-rates card small-multiples into New vs Outstanding minis
+  // (design review P1-emphasis) instead of taking the emphasize treatment,
+  // so it's excluded from the general ≥4-line emphasis rule below.
+  const emphasize = (!isMortgage && lines.length >= 4)
+    ? lineName(EMPHASIS_PRIMARY[chart.id] ?? primaryMetric)
+    : undefined
+  // mortgage_rates' chart spec has no explicit `metrics` list (the whole
+  // series is new+outstanding x fixed+variable), so `lines` already carries
+  // all six — split by the lineName prefix ("mortgage new..." vs "mortgage
+  // outstanding...") into two ≤3-line, full-colour minis sharing the same
+  // x-range (both come from this one already-filtered `lines`).
+  const newLines = isMortgage ? lines.filter(l => l.name.startsWith('mortgage new')) : []
+  const outstandingLines = isMortgage
+    ? lines.filter(l => l.name.startsWith('mortgage outstanding')) : []
   const failedEmpty = !lines.length
 
   return (
@@ -45,9 +85,25 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
           <p className="text-sm text-muted py-8 text-center">
             No recent data — source currently unavailable
           </p>
+        ) : isMortgage ? (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted mb-1">New</p>
+              <LineChart lines={newLines} percent={chart.percent} unit={unit}
+                         markers={chart.markers} unitByName={unitByName}
+                         label={`${finding} — new lending rates`} height={140} />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted mb-1">Outstanding</p>
+              <LineChart lines={outstandingLines} percent={chart.percent} unit={unit}
+                         markers={chart.markers} unitByName={unitByName}
+                         label={`${finding} — outstanding lending rates`} height={140} />
+            </div>
+          </div>
         ) : (
           <LineChart lines={lines} percent={chart.percent} unit={unit}
                      markers={chart.markers} annotations={annotations}
+                     annotationMode={annotationMode} emphasize={emphasize}
                      label={finding} unitByName={unitByName} />
         )}
       </button>
@@ -64,6 +120,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen }: {
              onClick={e => e.stopPropagation()}>{entry.meta.source_name}</a>
         )}
       </p>
+      {annotationMode === 'band' && <p className="text-xs text-faint mt-1">{BAND_CAPTION}</p>}
       {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
     </article>
   )

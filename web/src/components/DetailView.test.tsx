@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from '../lib/types'
+import { PALETTE } from '../theme/tokens'
 import { DetailView } from './DetailView'
 
 const site = assertSiteData(siteEdge)
@@ -93,6 +94,18 @@ test('compare series formats with its own unit, not the primary chart’s', asyn
   await userEvent.click(screen.getByText(/view data table/i))
   expect(screen.getByText('$580')).toBeInTheDocument()
   expect(screen.queryByText('580.00%')).not.toBeInTheDocument()
+})
+
+test('the modal keeps the FULL annotation set (both cash-rate moves), unlike the card\'s single latest-move label', () => {
+  // Fixture's cash_rate_moves is [2026-02-28 +0.25, 2026-04-30 -0.25] — the
+  // modal (annotationMode="full") must show BOTH as solid clay marker
+  // lines, in contrast to ChartCard's 'latest-label' mode (see
+  // ChartCard.test.tsx), which shows only the most recent one.
+  renderView()
+  const clayLines = [...document.querySelectorAll('line')]
+    .filter(l => l.getAttribute('stroke') === PALETTE.clay)
+  expect(clayLines.length).toBe(2)
+  expect(document.querySelectorAll('line[stroke-dasharray]').length).toBe(0)  // solid, not dashed
 })
 
 test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {

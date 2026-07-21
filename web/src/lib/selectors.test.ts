@@ -9,7 +9,12 @@ const chart = (id: string) => site.charts.find(c => c.id === id)!
 test('fixed region mode ignores the geo filter', () => {
   const { lines, scopeNote } = chartPoints(site, chart('cash_rate'), 'all', 'melbourne', NOW)
   expect(lines).toHaveLength(1)
-  expect(lines[0].pts).toHaveLength(2)
+  // T2 (chart-internals scan batch) extended the fixture's au_cash_rate
+  // series from 2 to 5 points so its date range actually covers the
+  // fixture's cash_rate_moves annotation dates (Feb/Apr 2026) — needed for
+  // the new ChartCard 'latest-label' annotation test to have a visible
+  // annotation to assert on. 5, not the old 2.
+  expect(lines[0].pts).toHaveLength(5)
   expect(scopeNote).toBeNull()
 })
 

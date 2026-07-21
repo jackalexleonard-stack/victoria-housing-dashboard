@@ -7,6 +7,11 @@ export interface FlatPt { t: number; date: string; value: number; name: string }
 export interface Built {
   x: ScaleTime<number, number>; y: ScaleLinear<number, number>
   y2: ScaleLinear<number, number> | null
+  // Whether the axis's OWN underlying data (not the padded/nice-d domain)
+  // genuinely straddles zero — drives whether LineChart draws the
+  // #B7B5AC zeroline reference (design review P1-axes: "keep zero baseline
+  // ONLY when data genuinely spans zero").
+  yZero: boolean; y2Zero: boolean
   paths: { name: string; d: string; color: string; axis: 'y' | 'y2' }[]
   xTicks: { x: number; label: string }[]
   yTicks: { y: number; label: string }[]
@@ -34,10 +39,65 @@ export function fmtTickLabel(v: number, percent: boolean): string {
   return v.toLocaleString('en-AU')
 }
 
-function fitY(pts: FlatPt[], range: [number, number]) {
+// Fraction of the data span added as headroom on EACH side of the domain
+// (design review P1-axes: "~10-15% padding" — 12% chosen, matching the
+// task spec's own worked example). This is also what fixes the HVI
+// top-edge clipping: the old domain topped out at exactly the data's own
+// max (nice() might round it only fractionally, or not at all, if the max
+// already sits near a round number), so the highest points rendered flush
+// against the plot's top edge. Padding guarantees genuine headroom above
+// v1 (and below v0) before nice() gets a chance to round further.
+const Y_PAD_FRACTION = 0.12
+
+// MIN-SPAN guard (design review P1-axes): a near-flat series (e.g. the cash
+// rate literally unchanged for months, or a level series that moved only a
+// trivial amount) must not have its axis auto-zoomed onto that tiny real
+// span — doing so would render an unremarkable (or nonexistent) move as a
+// dramatic full-height swing. The floor scales with the series' OWN
+// magnitude rather than a single fixed number, since a fixed floor can't
+// work across units that differ by orders of magnitude (AUD/USD ~0.65 vs
+// mean dwelling price ~$950,000) — 1% of the series' own max keeps the
+// floor proportionate. Percent-unit charts (cash rate, credit growth, ...)
+// get a flat one-percentage-point floor instead: "1%" of a value that's
+// itself already a small percentage (e.g. 1% of 3.85% ~= 0.04pp) would be
+// far too tight to prevent the over-dramatization this guard exists for,
+// whereas one whole percentage point is a consistent, legible "smallest
+// meaningful move" regardless of whether the series sits near 1% or 90%.
+function minSpanFloor(percent: boolean, maxAbs: number): number {
+  if (percent) return 1
+  return maxAbs > 0 ? maxAbs * 0.01 : 1
+}
+
+// True when the axis's raw data extent straddles zero (strictly on both
+// sides — not just touching it at one edge). Used both to decide whether
+// LineChart draws the zeroline reference and, implicitly, by fitY: because
+// fitY always pads outward from the full [v0, v1] extent, a domain that
+// contains zero in the source data is guaranteed to still contain zero
+// after padding — no special-casing needed in fitY itself.
+function spansZero(pts: FlatPt[]): boolean {
   const [v0, v1] = extent(pts, p => p.value)
-  return scaleLinear([Math.min(v0 ?? 0, 0) === 0 && (v0 ?? 0) >= 0 ? 0 : (v0 ?? 0), v1 ?? 1],
-                     range).nice()
+  return v0 !== undefined && v1 !== undefined && v0 < 0 && v1 > 0
+}
+
+// Data extent + padding, with a minimum-span floor for near-flat series.
+// Deliberately DROPS the old "always start non-negative domains at 0"
+// behaviour (design review P1-axes): a zero baseline flattened genuinely
+// level series like mean dwelling price into a barely-visible line over
+// mostly-dead whitespace. The new domain is centred on the data's own
+// midpoint and grown by max(dataSpan, floor)/2 + padding each way — when
+// the floor doesn't bind, that reduces exactly to "data extent + padding"
+// (mid ± dataSpan/2 == [v0, v1]); when it does bind (near-flat data), the
+// axis widens symmetrically around the data instead.
+function fitY(pts: FlatPt[], range: [number, number], percent: boolean) {
+  const [v0, v1] = extent(pts, p => p.value)
+  if (v0 === undefined || v1 === undefined) return scaleLinear([0, 1], range).nice()
+  const dataSpan = v1 - v0
+  const maxAbs = Math.max(Math.abs(v0), Math.abs(v1))
+  const span = Math.max(dataSpan, minSpanFloor(percent, maxAbs))
+  const pad = span * Y_PAD_FRACTION
+  const mid = (v0 + v1) / 2
+  const half = span / 2 + pad
+  return scaleLinear([mid - half, mid + half], range).nice()
 }
 
 export function buildChart(
@@ -66,8 +126,10 @@ export function buildChart(
   const range: [number, number] = [height - margin.b, margin.t]
   const y1Pts = y2Names.size ? flat.filter(p => !y2Names.has(p.name)) : flat
   const y2Pts = y2Names.size ? flat.filter(p => y2Names.has(p.name)) : []
-  const y = fitY(y1Pts, range)
-  const y2 = y2Pts.length ? fitY(y2Pts, range) : null
+  const y = fitY(y1Pts, range, opts.percent)
+  const y2 = y2Pts.length ? fitY(y2Pts, range, !!opts.y2Percent) : null
+  const yZero = spansZero(y1Pts)
+  const y2Zero = y2 ? spansZero(y2Pts) : false
 
   const scaleFor = (name: string) => (y2 && y2Names.has(name)) ? y2 : y
   const paths = lines.map((l, i) => {
@@ -86,14 +148,17 @@ export function buildChart(
   const xTicks = x.ticks(4).map(d => ({
     x: x(d), label: `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}` }))
   flat.sort((a, b) => a.t - b.t)
-  return { x, y, y2, paths, xTicks, yTicks, y2Ticks, flat, margin }
+  return { x, y, y2, yZero, y2Zero, paths, xTicks, yTicks, y2Ticks, flat, margin }
 }
 
 // Decides which of two label rows (0 or 1) each annotation's text should
 // render in, given its pixel x position — or null when it should be skipped
-// entirely (the dashed marker line still always renders; only the text is
-// best-effort). Dense clusters (e.g. the 2022-23 cash-rate cycle) would
-// otherwise pile every label onto one row at the same height.
+// entirely (the solid marker line still always renders in 'full' mode; only
+// the text is best-effort). Dense clusters (e.g. the 2022-23 cash-rate
+// cycle) would otherwise pile every label onto one row at the same height.
+// Only used by LineChart's annotationMode 'full' (the detail modal) — the
+// card-level 'band'/'latest-label' modes render at most one label and don't
+// need row placement.
 //
 // Annotations are visited in x-sorted order. Each gets a "primary" row that
 // simply alternates by sorted position (0, 1, 0, 1, ...), so neighbours

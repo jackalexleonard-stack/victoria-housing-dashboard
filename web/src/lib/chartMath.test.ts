@@ -144,6 +144,78 @@ test('atTime snaps to the nearest date before grouping', () => {
   expect(r.points[0].value).toBe(20)
 })
 
+// --- P1-axes: data-extent + padding, min-span guard, spans-zero (deliberate
+// behaviour change — the axis no longer always anchors non-negative domains
+// at 0; see chartMath.ts's fitY/minSpanFloor/spansZero for the rationale). ---
+
+test('fitY: level series (all positive, far from zero) gets extent + padding, NOT a zero-anchored domain', () => {
+  // Stand-in for the "mean dwelling price" bug: ~900k-1M data on the old
+  // always-include-0 axis rendered as a flat line over ~90% dead
+  // whitespace. The new domain must hug the data instead.
+  const highLevel = [{ name: 'a', pts: [
+    { date: '2026-01-31', region: 'vic', metric: 'm', value: 900_000 },
+    { date: '2026-02-28', region: 'vic', metric: 'm', value: 950_000 },
+  ] }]
+  const b = buildChart(highLevel, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const [lo, hi] = b.y.domain()
+  expect(lo).toBeGreaterThan(700_000)   // nowhere near the old 0 floor
+  expect(lo).toBeLessThan(900_000)      // some headroom BELOW the data min
+  expect(hi).toBeGreaterThan(950_000)   // and headroom above the data max
+  expect(b.yZero).toBe(false)           // data never goes anywhere near 0
+})
+
+test('fitY: HVI-style near-top-of-range data gets real headroom above its max (no top-edge clipping)', () => {
+  // Reproduces the reported clip: a cluster of points sitting close to a
+  // round number used to render flush against the plot's top edge because
+  // the old domain's max WAS the data's own max, un-padded.
+  const nearTop = [{ name: 'hvi', pts: [
+    { date: '2026-01-31', region: 'melbourne', metric: 'hvi_index', value: 180.1 },
+    { date: '2026-02-28', region: 'melbourne', metric: 'hvi_index', value: 180.4 },
+    { date: '2026-03-31', region: 'melbourne', metric: 'hvi_index', value: 180.62 },
+  ] }]
+  const b = buildChart(nearTop, 400, 200, { colorway: ['#205EA6'], percent: false })
+  expect(b.y.domain()[1]).toBeGreaterThan(181.5)   // genuine headroom above 180.62
+})
+
+test('fitY: MIN-SPAN guard widens a near-flat percent series instead of auto-zooming on noise', () => {
+  // A held-flat cash rate: dataSpan is 0, so without the guard the domain
+  // would collapse to essentially nothing around 3.85.
+  const flatCashRate = [{ name: 'cash rate', pts: [
+    { date: '2026-01-31', region: 'australia', metric: 'cash_rate', value: 3.85 },
+    { date: '2026-02-28', region: 'australia', metric: 'cash_rate', value: 3.85 },
+    { date: '2026-03-31', region: 'australia', metric: 'cash_rate', value: 3.85 },
+  ] }]
+  const b = buildChart(flatCashRate, 400, 200, { colorway: ['#205EA6'], percent: true })
+  const [lo, hi] = b.y.domain()
+  expect(hi - lo).toBeGreaterThan(0.8)     // the 1pp floor engaged, not a ~0 span
+  expect(lo).toBeLessThan(3.85)
+  expect(hi).toBeGreaterThan(3.85)
+})
+
+test('fitY: MIN-SPAN guard scales with magnitude for non-percent near-flat series (no fixed absolute floor)', () => {
+  // AUD/USD-style small-magnitude series: a fixed absolute floor (e.g. "1")
+  // would swallow its entire real ~0.1 variation. The floor must instead be
+  // relative to the series' own scale.
+  const audUsd = [{ name: 'aud_usd', pts: [
+    { date: '2026-01-31', region: 'global', metric: 'aud_usd', value: 0.655 },
+    { date: '2026-02-28', region: 'global', metric: 'aud_usd', value: 0.658 },
+  ] }]
+  const b = buildChart(audUsd, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const [lo, hi] = b.y.domain()
+  expect(hi - lo).toBeLessThan(0.1)   // stayed tight to the real (tiny) scale
+})
+
+test('fitY/spansZero: a series that genuinely straddles zero keeps zero inside its domain and flags yZero', () => {
+  const deltas = [{ name: 'delta', pts: [
+    { date: '2026-01-31', region: 'vic', metric: 'd', value: -5 },
+    { date: '2026-02-28', region: 'vic', metric: 'd', value: 10 },
+  ] }]
+  const b = buildChart(deltas, 400, 200, { colorway: ['#205EA6'], percent: false })
+  expect(b.yZero).toBe(true)
+  expect(b.y.domain()[0]).toBeLessThan(0)
+  expect(b.y.domain()[1]).toBeGreaterThan(0)
+})
+
 test('atTime: when all lines share exact dates, every returned point matches the header date (no offset, no suffix needed)', () => {
   const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
   const jan = Date.parse('2026-01-31T00:00:00Z')

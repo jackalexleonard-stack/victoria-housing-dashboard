@@ -11,6 +11,20 @@ export interface LineChartProps {
   label: string
   markers?: boolean
   annotations?: { date: string; label: string }[]
+  // How `annotations` render (design review P0-4 — the annotation "picket
+  // fence"): 'band' shades one pale cycle-band from the earliest to the
+  // latest annotation date (card-level, non-cash-rate annotated charts:
+  // lending, credit, both HVI cards); 'latest-label' drops the fence
+  // entirely and keeps just one small label on the most recent move (the
+  // cash-rate card, where the plotted step line already shows every move);
+  // 'full' (default) is the complete labelled set with collision-avoiding
+  // stagger — the detail modal only.
+  annotationMode?: 'band' | 'latest-label' | 'full'
+  // Name of the one line to keep at full colour/weight; every other line
+  // renders in the de-emphasis grey at reduced width/opacity (design review
+  // P1-emphasis — six-series tangles where only one series is the finding).
+  // Undefined (default) renders every line at full, distinct colour.
+  emphasize?: string
   interactive?: boolean
   touchScrub?: boolean   // false on cards (tap opens detail); true in DetailView
   height?: number
@@ -24,7 +38,8 @@ const reduced = () =>
   matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export function LineChart({ lines, percent, unit, label, markers = false,
-                            annotations = [], interactive = true,
+                            annotations = [], annotationMode = 'full', emphasize,
+                            interactive = true,
                             touchScrub = false, height = 220,
                             y2Lines, y2Percent, unitByName }: LineChartProps) {
   const wrap = useRef<HTMLDivElement>(null)
@@ -68,16 +83,39 @@ export function LineChart({ lines, percent, unit, label, markers = false,
   const y2Color = b.paths.find(p => p.axis === 'y2')?.color ?? PALETTE.clay
   const y2Name = b.y2Ticks.length ? y2Lines?.[0] : undefined
 
-  // Annotation lines always render (best-effort labels only) — filter to
-  // those actually on the visible plot, then stagger their text between two
-  // rows so a dense cluster (e.g. the 2022-23 rate-hike cycle) doesn't pile
-  // every label at the same height. `annotationRows[i]` is null when even
-  // the second row was too crowded, in which case only the dashed marker
-  // line renders for that annotation.
+  // Emphasis (design review P1-emphasis): when `emphasize` names a line, it
+  // keeps its own colorway hue at full weight; every OTHER line drops to
+  // the reserved de-emphasis grey at reduced width/opacity. `undefined`
+  // (the common case) leaves every line at full, distinct colour.
+  const isDeemph = (name: string) => !!emphasize && name !== emphasize
+  const colorFor = (name: string, base: string) => isDeemph(name) ? PALETTE.deemphasis : base
+  const widthFor = (name: string) => isDeemph(name) ? '1.25' : '2.25'
+  const markerOpacityFor = (name: string) => isDeemph(name) ? 0.5 : 1
+
+  // Annotation rendering is density-aware and mode-dependent (design review
+  // P0-4 — the per-move "picket fence" out-inked the data on five charts):
+  //  - 'band' (card-level, non-cash-rate annotated charts): one pale
+  //    clay-tint band spanning earliest→latest annotation date. No per-move
+  //    lines or labels — the cycle is the story at card size, not each move.
+  //  - 'latest-label' (the cash-rate card): the fence is dropped entirely —
+  //    the plotted step line already shows every move — keeping only one
+  //    small label on the MOST RECENT move (the array is chronologically
+  //    ascending, so its last entry is that move).
+  //  - 'full' (the detail modal): the complete labelled set, staggered
+  //    across two rows via placeAnnotationLabels so a dense cluster (e.g.
+  //    the 2022-23 rate-hike cycle) doesn't pile every label at one height.
   const visibleAnnotations = annotations
     .map(a => ({ ...a, ax: b.x(Date.parse(`${a.date}T00:00:00Z`)) }))
-    .filter(a => Number.isFinite(a.ax) && a.ax >= b.margin.l)
-  const annotationRows = placeAnnotationLabels(visibleAnnotations.map(a => a.ax), 36)
+    .filter(a => Number.isFinite(a.ax) && a.ax >= b.margin.l && a.ax <= width - b.margin.r)
+  const annotationRows = annotationMode === 'full'
+    ? placeAnnotationLabels(visibleAnnotations.map(a => a.ax), 36)
+    : []
+  const annotationBand = annotationMode === 'band' && visibleAnnotations.length
+    ? { x0: Math.min(...visibleAnnotations.map(a => a.ax)),
+        x1: Math.max(...visibleAnnotations.map(a => a.ax)) }
+    : null
+  const latestAnnotation = annotationMode === 'latest-label'
+    ? (visibleAnnotations.at(-1) ?? null) : null
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!interactive) return
@@ -107,6 +145,19 @@ export function LineChart({ lines, percent, unit, label, markers = false,
           <text key={t.x} x={t.x} y={height - 6} textAnchor="middle" fontSize="11"
                 fill={PALETTE.muted} className="num">{t.label}</text>
         ))}
+        {/* Zeroline (design review P1-axes): drawn ONLY when the axis's own
+            data genuinely straddles zero (b.yZero/b.y2Zero — computed from
+            the raw extent, not just a domain that happens to touch 0) —
+            distinct from the regular grid ticks so it reads as a meaningful
+            reference, not just another gridline. */}
+        {b.yZero && (
+          <line x1={b.margin.l} x2={width - b.margin.r} y1={b.y(0)} y2={b.y(0)}
+                stroke={PALETTE.zeroline} strokeWidth="1.5" />
+        )}
+        {b.y2 && b.y2Zero && (
+          <line x1={b.margin.l} x2={width - b.margin.r} y1={b.y2(0)} y2={b.y2(0)}
+                stroke={PALETTE.zeroline} strokeWidth="1.5" />
+        )}
         {b.y2Ticks.length > 0 && (
           <>
             {/* Thin colour-matched rail anchors the right axis to its line,
@@ -129,22 +180,36 @@ export function LineChart({ lines, percent, unit, label, markers = false,
             )}
           </>
         )}
-        {visibleAnnotations.map((a, i) => {
+        {annotationBand && (
+          <rect x={annotationBand.x0} y={b.margin.t}
+                width={Math.max(annotationBand.x1 - annotationBand.x0, 1)}
+                height={height - b.margin.t - b.margin.b}
+                fill={PALETTE.clay} fillOpacity={0.1} />
+        )}
+        {latestAnnotation && (
+          <text x={latestAnnotation.ax + 3} y={b.margin.t + 9} fontSize="10"
+                fill={PALETTE.clay}>
+            {fmtDate(latestAnnotation.date)} {latestAnnotation.label}
+          </text>
+        )}
+        {annotationMode === 'full' && visibleAnnotations.map((a, i) => {
           const row = annotationRows[i]
           return (
             <g key={a.date}>
+              {/* Thin SOLID clay line — restyled from the old dashed
+                  orange per the design review's explicit restyle note. */}
               <line x1={a.ax} x2={a.ax} y1={b.margin.t} y2={height - b.margin.b}
-                    stroke={PALETTE.clay} strokeWidth="1" strokeDasharray="2 3" />
+                    stroke={PALETTE.clay} strokeWidth="1" />
               {row !== null && (
-                <text x={a.ax + 3} y={b.margin.t + (row === 0 ? 9 : 21)} fontSize="10"
+                <text x={a.ax + 3} y={b.margin.t + (row === 0 ? 13 : 27)} fontSize="12"
                       fill={PALETTE.clay}>{a.label}</text>
               )}
             </g>
           )
         })}
         {b.paths.map(p => (
-          <path key={p.name} d={p.d} fill="none" stroke={p.color}
-                strokeWidth="2.25" strokeLinejoin="round"
+          <path key={p.name} d={p.d} fill="none" stroke={colorFor(p.name, p.color)}
+                strokeWidth={widthFor(p.name)} strokeLinejoin="round"
                 className={drawn && !reduced() ? 'draw-in' : undefined}
                 pathLength={1} />
         ))}
@@ -164,15 +229,16 @@ export function LineChart({ lines, percent, unit, label, markers = false,
           .map((p, i) => {
             const onY2 = !!(b.y2 && y2Lines?.includes(p.name))
             const cx = b.x(p.t); const cy = yFor(p.name)(p.value)
-            const fill = colorByName.get(p.name) ?? COLORWAY[0]
+            const fill = colorFor(p.name, colorByName.get(p.name) ?? COLORWAY[0])
             // A square marker (vs. the default circle) is the second visual
             // cue — alongside its own colour and axis — that a point belongs
             // to the right-hand (compare) scale, not the primary one.
             return onY2
               ? <rect key={i} className="pt-marker" x={cx - 3} y={cy - 3}
-                      width="6" height="6" fill={fill} />
+                      width="6" height="6" fill={fill}
+                      fillOpacity={markerOpacityFor(p.name)} />
               : <circle key={i} className="pt-marker" cx={cx} cy={cy}
-                        r="3.5" fill={fill} />
+                        r="3.5" fill={fill} fillOpacity={markerOpacityFor(p.name)} />
           })}
         {hover && (
           <g>
@@ -234,10 +300,17 @@ export function LineChart({ lines, percent, unit, label, markers = false,
       })()}
       {lines.length > 1 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted mt-1">
-          {lines.map(l => (
+          {/* Emphasis reflected in the legend too: the emphasized line
+              sorts first, and every other swatch matches its de-emphasised
+              path colour rather than its "true" colorway hue. */}
+          {(emphasize
+            ? [...lines].sort((a, c) => (a.name === emphasize ? -1 : c.name === emphasize ? 1 : 0))
+            : lines
+          ).map(l => (
             <span key={l.name} className="inline-flex items-center gap-1">
               <span style={{ display: 'inline-block', width: 8, height: 8,
-                             borderRadius: 2, background: colorByName.get(l.name) }} />
+                             borderRadius: 2,
+                             background: colorFor(l.name, colorByName.get(l.name) ?? '') }} />
               {l.name}{y2Lines?.includes(l.name) ? ' (right axis)' : ''}
             </span>
           ))}
