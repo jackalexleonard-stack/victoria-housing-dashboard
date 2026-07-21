@@ -34,7 +34,12 @@ test('renders masthead, sections and a chart finding after load', async () => {
   mockFetch()
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
   expect(await screen.findByText('Victorian Housing')).toBeInTheDocument()
-  expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+  // The cash-rate finding now also appears in Today (T3 lead/secondary
+  // finding cards intentionally repeat hero-pick sentences — same rationale
+  // as the "changed this week" chips duplicating hero tiles), so scope this
+  // to the Money & credit section's own chart card.
+  const money = screen.getByRole('region', { name: 'Money & credit' })
+  expect(within(money).getByText(/held at 3.85%/)).toBeInTheDocument()
   expect(screen.queryByText(/data may be stale/i)).not.toBeInTheDocument()
 })
 
@@ -108,12 +113,15 @@ describe('collapsible sections', () => {
     const section = screen.getByRole('region', { name: 'Money & credit' })
     const toggle = within(section).getByRole('button', { name: 'Money & credit' })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+    // Scoped to the section: Today's own lead/secondary finding cards
+    // legitimately repeat this same sentence and aren't affected by this
+    // section's collapse state.
+    expect(within(section).getByText(/held at 3.85%/)).toBeInTheDocument()
 
     await userEvent.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+    expect(within(section).queryByText(/held at 3.85%/)).not.toBeInTheDocument()
   })
 
   test('collapsed state persists in localStorage across remounts', async () => {
@@ -125,7 +133,7 @@ describe('collapsible sections', () => {
     const section = screen.getByRole('region', { name: 'Money & credit' })
     const toggle = within(section).getByRole('button', { name: 'Money & credit' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+    expect(within(section).queryByText(/held at 3.85%/)).not.toBeInTheDocument()
   })
 
   test('jumping to a collapsed section expands it and then scrolls', async () => {
@@ -147,7 +155,7 @@ describe('collapsible sections', () => {
     const section = screen.getByRole('region', { name: 'Money & credit' })
     const toggle = within(section).getByRole('button', { name: 'Money & credit' })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(await screen.findByText(/held at 3.85%/)).toBeInTheDocument()
+    expect(await within(section).findByText(/held at 3.85%/)).toBeInTheDocument()
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
@@ -159,8 +167,8 @@ describe('collapsible sections', () => {
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
     const section = screen.getByRole('region', { name: 'Money & credit' })
+    expect(within(section).getByText(/held at 3.85%/)).toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Money & credit' }))
       .toHaveAttribute('aria-expanded', 'true')
     spy.mockRestore()

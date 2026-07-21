@@ -31,9 +31,13 @@ test('guard fails loudly on wrong shapes', () => {
 })
 
 test('scan-batch fields (hero_lead, extra_tiles, metric_labels, section_summaries) are optional', () => {
-  // Older fixtures without the new scan-batch fields must still pass — the
-  // fields are additive, not a schema bump.
-  expect(() => assertSiteData(siteEdge)).not.toThrow()
+  // Older fixtures/exports without the new scan-batch fields must still
+  // pass — the fields are additive, not a schema bump. siteEdge itself now
+  // carries them (T3 needs real values to exercise the lead-finding card),
+  // so strip them back off here to cover the genuinely-absent case.
+  const { hero_lead: _hl, extra_tiles: _et, metric_labels: _ml,
+          section_summaries: _ss, ...withoutNewFields } = siteEdge as Record<string, unknown>
+  expect(() => assertSiteData(withoutNewFields)).not.toThrow()
   // When present, a well-typed site with the new fields still passes.
   const withNewFields = {
     ...siteEdge as object, hero_lead: 'cash_rate', extra_tiles: [],

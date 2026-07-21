@@ -38,6 +38,10 @@ export const TILE_FMT: Record<string, Fmt> = {
   melb_median_house: f(v => `$${n0(v / 1000)}k`, d => sign(d, `${Math.abs(d).toFixed(1)}% qtr`)),
   melb_clearance: f(v => `${roundHalfEven(v)}%`, d => sign(d, `${roundHalfEven(Math.abs(d))} pp`)),
   oo_lending: f(v => `$${n0(v)}m`, d => sign(d, `${Math.abs(d).toFixed(1)}% qtr`)),
+  // extra_tiles' ERP population stat (design review P0-5) — a raw persons
+  // count/delta, same "count" shape as nom's format (no millions abbreviation,
+  // matches fmtUnit's 'persons' handling below).
+  erp: f(v => n0(v), d => sign(d, n0(Math.abs(d)))),
 }
 
 // Normalise a unit string for matching, e.g. 'AUD/week' -> 'aud_per_week'.

@@ -156,6 +156,29 @@ test('keyboard/motion: reduced motion suppresses the draw-in', async ({ page }) 
   expect(drawInCount).toBe(0)   // JS gate suppressed the animation entirely
 })
 
+// T3 acceptance test (design review P0-1): the approved lead-finding card
+// must actually reach the fold. 393×852 is the owner's own phone size cited
+// in the design review's evidence (offsetTop 1687 on the old build); the
+// "mobile" project's Pixel 7 default (412×839) is close but not that exact
+// figure, so this test pins the viewport explicitly rather than trusting
+// the project default, and only runs once (under the mobile project) since
+// the check is about a touch-device fold, not a breakpoint sweep.
+test.describe('mobile fold: lead-finding card', () => {
+  test.use({ viewport: { width: 393, height: 852 } })
+
+  test('one full finding sentence is visible at scroll 0', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'phone-fold check, not a breakpoint sweep')
+    await page.goto('/')
+    const lead = page.getByTestId('lead-finding')
+    await lead.waitFor()
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+    const box = await lead.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(852)
+  })
+})
+
 // Companion to the reduced-motion test above: proves the draw-in class
 // actually ships by default when motion IS allowed, so the assertion above
 // can't pass simply because the feature was deleted.

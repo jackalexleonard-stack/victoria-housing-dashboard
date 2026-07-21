@@ -3,7 +3,7 @@ import { loadAll } from './lib/load'
 import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate } from './lib/format'
-import { useUrlState } from './lib/urlState'
+import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
@@ -127,6 +127,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
   if (!data) return <main className="max-w-5xl mx-auto px-4"><Skeleton /></main>
 
   const { site, news } = data
+  const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
   const failedCount = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed').length
   const toggleSection = (id: string) => {
@@ -161,7 +162,8 @@ export default function App({ now = new Date() }: { now?: Date }) {
                  activeSection={active} onFilters={setFilters} onJump={jump} />
       <div ref={el => { sectionsRef.current.today = el }} id="today"
            className="pt-6 scroll-mt-28">
-        <TodaySection site={site} news={news} onOpen={openDetail} />
+        <TodaySection site={site} news={news} onOpen={openDetail} now={now}
+                      filtersActive={filtersActive} />
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)

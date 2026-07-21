@@ -16,7 +16,8 @@
     "median_rent": "The median rent held at $580/wk in Mar qtr 2026",
     "median_rent_by_type": "The median 3-bedroom-house rent held at $580/wk in Mar qtr 2026",
     "lending": "Owner-occupier lending rose 2.0% to $1,020m in Jun 2026",
-    "mortgage_rates": "The average new mortgage rate held at 6.10% in Jun 2026"
+    "mortgage_rates": "The average new mortgage rate held at 6.10% in Jun 2026",
+    "hvi_melbourne": "Melbourne dwelling values rose 0.3% in Jun 2026 (+2.1% over the year)"
   },
   "series": {
     "au_cash_rate": {"status":"ok","meta":{"source_name":"RBA F1.1","source_url":"https://rba.gov.au","frequency":"monthly","last_fetched":"2026-07-17T06:00:00Z","last_changed":"2026-07-15T00:00:00Z","last_data_date":"2026-06-30","error":null,"cadence_days":31},"units":{"cash_rate":"percent"},"points":[{"date":"2026-02-28","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-03-31","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-04-30","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-05-31","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-06-30","region":"australia","metric":"cash_rate","value":3.85}]},
@@ -27,11 +28,26 @@
   },
   "hero": [
     {"key":"cash_rate","label":"RBA cash rate","value":3.85,"delta":0.0,"delta_color":"inverse","last_date":"2026-06-30"},
+    {"key":"melb_dwelling_values","label":"Melb dwelling values (MoM)","value":0.3,"delta":2.1,"delta_color":"normal","last_date":"2026-06-30"},
     {"key":"melb_rent","label":"Median rent — Melbourne","value":580,"delta":10,"delta_color":"normal","last_date":"2026-03-31"},
-    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null},
-    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null},
-    {"key":"empty","label":"—","value":null,"delta":null,"delta_color":"normal","last_date":null}
+    {"key":"oo_lending","label":"New loans — owner-occupier","value":1020,"delta":2.0,"delta_color":"normal","last_date":"2026-06-30"},
+    {"key":"mortgage_new","label":"New mortgage rate (OO)","value":6.10,"delta":0.05,"delta_color":"inverse","last_date":"2026-06-30"}
   ],
-  "whats_new": [],
+  "hero_lead": "melb_rent",
+  "whats_new": [
+    {"key":"cash_rate","label":"RBA cash rate","value":3.85,"delta":0.0,"delta_color":"inverse","last_date":"2026-06-30","changed_at":"2026-07-15"},
+    {"key":"melb_rent","label":"Median rent — Melbourne","value":580,"delta":10,"delta_color":"normal","last_date":"2026-03-31","changed_at":"2026-07-14"},
+    {"key":"melb_dwelling_values","label":"Melb dwelling values (MoM)","value":0.3,"delta":2.1,"delta_color":"normal","last_date":"2026-06-30","changed_at":"2026-07-13"},
+    {"key":"oo_lending","label":"New loans — owner-occupier","value":1020,"delta":2.0,"delta_color":"normal","last_date":"2026-06-30","changed_at":"2026-07-12"},
+    {"key":"mortgage_new","label":"New mortgage rate (OO)","value":6.10,"delta":0.05,"delta_color":"inverse","last_date":"2026-06-30","changed_at":"2026-07-11"},
+    {"key":"melb_vacancy","label":"Rental vacancy — Melbourne","value":2.51,"delta":0.0,"delta_color":"off","last_date":"2026-06-30","changed_at":"2026-07-10"},
+    {"key":"greenfield_supply","label":"Greenfield years of supply","value":18.0,"delta":-0.5,"delta_color":"normal","last_date":"2024-12-31","changed_at":"2026-07-09"},
+    {"key":"melb_median_house","label":"Melb median house (REIV)","value":900000,"delta":1.2,"delta_color":"normal","last_date":"2026-03-31","changed_at":"2026-07-08"}
+  ],
+  "extra_tiles": [
+    {"key":"erp","label":"Resident population","value":27801000,"delta":78600,"delta_color":"off","last_date":"2025-12-31","chart":"population"}
+  ],
+  "metric_labels": {"cash_rate": "Cash rate", "median_rent": "Median rent"},
+  "section_summaries": {"prices": "Prices were broadly steady this week.", "money": "The cash rate held steady this week."},
   "annotations": {"cash_rate_moves":[{"date":"2026-02-28","delta":0.25},{"date":"2026-04-30","delta":-0.25}],"accord_start":"2024-07-01"}
 }

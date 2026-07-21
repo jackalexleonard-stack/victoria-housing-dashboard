@@ -1,33 +1,163 @@
-import { HeroTiles, TILE_CHART } from './HeroTiles'
-import { TILE_FMT, fmtDate } from '../lib/format'
-import type { NewsData, SiteData } from '../lib/types'
+import { useState } from 'react'
+import { deltaColor, HeroTiles, splitCadenceCode, TILE_CHART } from './HeroTiles'
+import { TILE_FMT, fmtDate, fmtPeriod } from '../lib/format'
+import { staleness } from '../lib/staleness'
+import { PALETTE } from '../theme/tokens'
+import type { HeroTile, NewsData, SiteData } from '../lib/types'
 
-export function TodaySection({ site, news, onOpen }: {
-  site: SiteData; news: NewsData; onOpen: (chartId: string) => void }) {
+const WHATS_NEW_CAP = 6
+
+// Stale-source vintage for a "changed this week" chip (design review
+// P1-stale) — badges the chip with its data's own vintage rather than
+// excluding it (rent/vacancy stay core daily metrics even mid-outage).
+// Returns null when the chip's chart/series can't be resolved (older
+// exports without a matching chart) or when the source is actually fresh.
+function whatsNewVintage(t: HeroTile, site: SiteData, now: Date):
+    { text: string; kind: 'stale' | 'ageing' | 'failed' } | null {
+  const chart = site.charts.find(c => c.id === TILE_CHART[t.key])
+  const entry = chart ? site.series[chart.series_id] : undefined
+  if (!entry || !t.last_date) return null
+  const st = staleness(entry, now)
+  if (st.kind === 'fresh') return null
+  return { text: fmtPeriod(t.last_date, entry.meta.frequency), kind: st.kind }
+}
+
+// The lead-finding card [P0-1]: site.hero_lead names a hero registry key —
+// look up its chart via the existing TILE_CHART map and its sentence via
+// site.findings, exactly the contract T1 exported this field for. Renders
+// nothing (not a broken card) when any link in that chain is missing, e.g.
+// hero_lead is absent (older export) or resolves to the "empty" sentinel.
+function LeadCard({ site, leadKey, onOpen }: {
+  site: SiteData; leadKey: string; onOpen: (id: string) => void }) {
+  const tile = site.hero.find(t => t.key === leadKey)
+  const chartId = TILE_CHART[leadKey]
+  const finding = chartId ? site.findings[chartId] : undefined
+  if (!tile || !chartId || !finding) return null
+  const fmt = TILE_FMT[leadKey]
+  const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
+  const deltaText = tile.delta != null && fmt ? fmt.delta(tile.delta) : null
+  return (
+    <article data-testid="lead-finding-card"
+              className="sm:col-span-2 bg-card border border-line rounded-lg p-5">
+      <button type="button" onClick={() => onOpen(chartId)}
+              className="block w-full text-left group">
+        <h2 data-testid="lead-finding"
+            className="font-display text-2xl sm:text-3xl leading-snug group-hover:text-blue">
+          {finding}
+        </h2>
+        {(valueText || deltaText) && (
+          <p className="num text-sm text-muted mt-2">
+            {valueText}
+            {deltaText && (
+              <span className="ml-1.5 font-medium" style={{ color: deltaColor(tile) }}>
+                {deltaText}</span>
+            )}
+          </p>
+        )}
+      </button>
+    </article>
+  )
+}
+
+// Secondary finding cards [P0-1]: the next two hero picks (by the exported
+// tile order — no client-side re-scoring), excluding whichever key is
+// leading. In production those two are almost always the cash-rate/Melb-
+// values pins (they sit earliest in `hero`), which also satisfies "keep the
+// pins visually first".
+function SecondaryCard({ site, tileKey, onOpen }: {
+  site: SiteData; tileKey: string; onOpen: (id: string) => void }) {
+  const tile = site.hero.find(t => t.key === tileKey)
+  const chartId = TILE_CHART[tileKey]
+  const finding = chartId ? site.findings[chartId] : undefined
+  if (!tile || !chartId || !finding) return null
+  const fmt = TILE_FMT[tileKey]
+  const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
+  return (
+    <article className="bg-card border border-line rounded-lg p-3">
+      <button type="button" onClick={() => onOpen(chartId)} className="block w-full text-left group">
+        <h3 className="font-display text-base leading-snug group-hover:text-blue">{finding}</h3>
+        {valueText && <p className="num text-xs text-muted mt-1.5">{valueText}</p>}
+      </button>
+    </article>
+  )
+}
+
+export function TodaySection({ site, news, onOpen, now, filtersActive = false }: {
+  site: SiteData; news: NewsData; onOpen: (chartId: string) => void
+  now: Date; filtersActive?: boolean }) {
   const top = news.top_story_urls
     .map(u => news.items.find(i => i.url === u))
     .filter(i => i != null)
+
+  // Findings are computed for the exported default view only — a filtered
+  // range/geo would make the lead sentence's specific numbers misleading,
+  // so filters-active reverts to the strip alone (the strip's own numbers
+  // already only ever reflected the default view, filtered or not).
+  const leadKey = !filtersActive && site.hero_lead && site.hero_lead !== 'empty'
+    ? site.hero_lead : null
+  const secondaryKeys = leadKey
+    ? site.hero.map(t => t.key).filter(k => k !== leadKey && k !== 'empty').slice(0, 2)
+    : []
+
+  const [expanded, setExpanded] = useState(false)
+  const whatsNew = site.whats_new
+  const shownChanges = expanded ? whatsNew : whatsNew.slice(0, WHATS_NEW_CAP)
+  const restCount = whatsNew.length - WHATS_NEW_CAP
+
   return (
     <section aria-label="Today">
-      <div title="Today's most notable movements">
-        <HeroTiles tiles={site.hero} onOpen={onOpen} />
+      {leadKey && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
+          {secondaryKeys.length > 0 && (
+            <div data-testid="secondary-findings" className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+              {secondaryKeys.map(k => <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
+            </div>
+          )}
+        </div>
+      )}
+      <div className={leadKey ? 'mt-4' : ''} title="Today's most notable movements"
+           data-testid="hero-strip">
+        <HeroTiles tiles={site.hero} extraTiles={site.extra_tiles} onOpen={onOpen} />
       </div>
-      {site.whats_new.length > 0 && (
-        <div className="mt-4">
+      {whatsNew.length > 0 && (
+        <div className="mt-4" data-testid="whats-new">
           <h3 className="font-display text-lg mb-2">Changed this week</h3>
           <ul className="flex flex-wrap gap-2">
-            {site.whats_new.map(t => (
-              <li key={t.key}>
-                <button type="button" onClick={() => onOpen(TILE_CHART[t.key])}
-                        className="text-xs bg-card border border-line rounded-full px-3 py-1.5 hover:border-blue num">
-                  <span className="text-muted">{t.label}</span>{' '}
-                  <span className="font-medium">
-                    {t.value != null && TILE_FMT[t.key]
-                      ? TILE_FMT[t.key].value(t.value) : '—'}</span>
-                </button>
-              </li>
-            ))}
+            {shownChanges.map(t => {
+              const fmt = TILE_FMT[t.key]
+              const { label, code } = splitCadenceCode(t.label)
+              const deltaText = t.delta != null && fmt ? fmt.delta(t.delta) : null
+              const vintage = whatsNewVintage(t, site, now)
+              return (
+                <li key={t.key}>
+                  <button type="button" onClick={() => onOpen(TILE_CHART[t.key])}
+                          className="text-xs bg-card border border-line rounded-full px-3 py-1.5 hover:border-blue num">
+                    <span className="text-muted">{label}</span>{' '}
+                    <span className="font-medium">
+                      {t.value != null && fmt ? fmt.value(t.value) : '—'}</span>
+                    {deltaText && (
+                      <span className="font-medium ml-1" style={{ color: deltaColor(t) }}>
+                        {deltaText}{code ? ` (${code})` : ''}
+                      </span>
+                    )}
+                    {vintage && (
+                      <span className="ml-1"
+                            style={{ color: vintage.kind === 'failed' ? PALETTE.down : PALETTE.warn }}>
+                        · {vintage.text}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
+          {restCount > 0 && (
+            <button type="button" onClick={() => setExpanded(x => !x)} aria-expanded={expanded}
+                    className="text-xs text-blue mt-2">
+              {expanded ? 'Show fewer' : `and ${restCount} more changes`}
+            </button>
+          )}
         </div>
       )}
       {top.length > 0 && (

@@ -4,6 +4,8 @@ export const RANGES = ['1y', '3y', '5y', '10y', 'all'] as const
 export const GEOS = ['melbourne', 'regional_vic', 'vic', 'australia'] as const
 export type Range = (typeof RANGES)[number]
 export type Geo = (typeof GEOS)[number]
+export const DEFAULT_RANGE: Range = '5y'
+export const DEFAULT_GEO: Geo = 'melbourne'
 
 export interface UrlState {
   range: Range; geo: Geo
@@ -12,8 +14,8 @@ export interface UrlState {
 
 export function parseUrl(search: string): UrlState {
   const q = new URLSearchParams(search)
-  const range = RANGES.includes(q.get('range') as Range) ? (q.get('range') as Range) : '5y'
-  const geo = GEOS.includes(q.get('geo') as Geo) ? (q.get('geo') as Geo) : 'melbourne'
+  const range = RANGES.includes(q.get('range') as Range) ? (q.get('range') as Range) : DEFAULT_RANGE
+  const geo = GEOS.includes(q.get('geo') as Geo) ? (q.get('geo') as Geo) : DEFAULT_GEO
   return { range, geo, detail: q.get('s'), compare: q.get('vs'),
            detailPushed: history.state?.detailPushed === true }
 }
@@ -21,8 +23,8 @@ export function parseUrl(search: string): UrlState {
 function writeUrl(next: Partial<UrlState>, prev: UrlState, push: boolean) {
   const merged = { ...prev, ...next }
   const q = new URLSearchParams()
-  if (merged.range !== '5y') q.set('range', merged.range)
-  if (merged.geo !== 'melbourne') q.set('geo', merged.geo)
+  if (merged.range !== DEFAULT_RANGE) q.set('range', merged.range)
+  if (merged.geo !== DEFAULT_GEO) q.set('geo', merged.geo)
   if (merged.detail) q.set('s', merged.detail)
   if (merged.compare) q.set('vs', merged.compare)
   const url = q.toString() ? `?${q}` : location.pathname
