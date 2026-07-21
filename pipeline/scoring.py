@@ -270,6 +270,23 @@ WHATS_NEW_TILE = {
     "au_lending": "oo_lending",
 }
 
+# Registry key -> the chart id whose card the key's finding belongs to. Mirror
+# of web/src/components/HeroTiles.tsx's TILE_CHART, kept in sync by hand —
+# lets the pipeline (section summaries, lead pick) reuse the exact same
+# key<->chart association the front-end uses to route hero-tile taps.
+TILE_CHART: dict[str, str] = {
+    "cash_rate": "cash_rate", "melb_dwelling_values": "hvi_melbourne",
+    "au_dwelling_values": "hvi_australia", "vic_mean_price": "mean_price",
+    "vic_approvals": "approvals", "accord_runrate": "accord",
+    "melb_vacancy": "vacancy", "melb_rent_growth": "rent_growth",
+    "credit_growth": "credit", "mortgage_new": "mortgage_rates",
+    "vic_commencements": "activity", "vhr_waitlist": "waitlist",
+    "nom": "population", "input_costs": "input_costs", "iron_ore": "iron_ore",
+    "melb_rent": "median_rent", "greenfield_supply": "land",
+    "melb_median_house": "reiv_median", "melb_clearance": "auctions",
+    "oo_lending": "lending",
+}
+
 Loader = Callable[[str], object]  # load_series(id) -> DataFrame; load_meta(id) -> dict
 
 
@@ -330,6 +347,13 @@ MIN_HISTORY = 8      # prior changes needed before Z is meaningful
 TRAIL_WINDOW = 20    # trailing changes the Z distribution uses
 RARITY = {"daily": 0.2, "weekly": 0.4, "monthly": 0.7,
           "per_decision": 1.0, "quarterly": 1.0, "annual": 1.0}
+
+# World/global series (region == "global") are context, not the Victorian
+# housing story — they were crowding out rent/vacancy for hero slots (iron
+# ore held a hero tile while no rental series did; design review P1-World).
+# Halving their notability lets local series compete on equal footing without
+# hand-picking tiles.
+WORLD_NOTABILITY_WEIGHT = 0.5
 
 
 def _robust_sigma(prior: pd.Series) -> float:
@@ -406,6 +430,8 @@ def score_metric(key: str, load_series: Loader, load_meta: Loader,
     r = RARITY.get(freq, 0.7) * max(0.0, 1 - days_new / 14)
 
     n = round(0.5 * z_norm + 0.3 * f + 0.2 * r, 4)
+    if spec["region"] == "global":
+        n = round(n * WORLD_NOTABILITY_WEIGHT, 4)
     return {"n": n, "z": z_norm, "f": f, "r": r, "last_date": last_date}
 
 
@@ -467,3 +493,26 @@ def pick_hero(load_series: Loader, load_meta: Loader, today: date) -> list[dict]
         chosen.append({"key": "empty", "label": "—", "value": "—",
                        "delta": None, "delta_color": "normal", "help": None})
     return chosen[:HERO_SLOTS]
+
+
+def pick_lead(load_series: Loader, load_meta: Loader, today: date) -> str:
+    """The single most notable NON-pinned metric this run — the one Today's
+    lead-finding card leads with. Reuses pick_hero's own scoring loop (same
+    QUALIFY gate, same score_metric), not a new ranking rule. Falls back to
+    the first pin, then the first tile that actually renders, so Today always
+    has a lead even during a near-total data outage."""
+    scored = []
+    for idx, (key, spec) in enumerate(REGISTRY.items()):
+        if not spec["hero"] or key in PINNED:
+            continue
+        result = score_metric(key, load_series, load_meta, today)
+        if result is not None and result["n"] >= QUALIFY:
+            scored.append((-result["n"], idx, key))
+    scored.sort()
+    for _, _, key in scored:
+        if _build_tile(key, load_series) is not None:
+            return key
+    for key in PINNED + DEFAULT_ORDER + list(REGISTRY):
+        if _build_tile(key, load_series) is not None:
+            return key
+    return "empty"

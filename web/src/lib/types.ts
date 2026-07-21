@@ -17,12 +17,25 @@ export interface ChartSpec {
   metrics: string[] | null; region_mode: string
   percent: boolean; markers: boolean; annotate: boolean
   note?: string | null
+  // Extra series shown only in the detail modal — mixed-scale split charts
+  // (credit, Accord) keep a secondary series set there. Optional: older
+  // fixtures/exports without it stay valid.
+  modal_metrics?: string[] | null
 }
 
 export interface HeroTile {
   key: string; label: string; value: number | null; delta: number | null
   delta_color: 'normal' | 'inverse' | 'off'; last_date: string | null
   changed_at?: string
+}
+
+// A small stat tile split out of a chart card for scale reasons (e.g. ERP
+// population level, split from the People chart's NOM/natural-increase
+// lines). `chart` names the card this tile's "view chart" action opens.
+export interface ExtraTile {
+  key: string; label: string; value: number | null; delta: number | null
+  delta_color: 'normal' | 'inverse' | 'off'; last_date: string | null
+  chart: string
 }
 
 export interface SiteData {
@@ -32,6 +45,12 @@ export interface SiteData {
   series: Record<string, SeriesEntry>
   hero: HeroTile[]; whats_new: HeroTile[]
   annotations: { cash_rate_moves: { date: string; delta: number }[]; accord_start: string }
+  // Scan-batch additions (design review 2026-07-21) — all optional so the
+  // current web build/runtime stay green until later tasks wire them in.
+  hero_lead?: string
+  extra_tiles?: ExtraTile[]
+  metric_labels?: Record<string, string>
+  section_summaries?: Record<string, string>
 }
 
 export interface NewsItem {
@@ -66,6 +85,14 @@ export function assertSiteData(x: unknown): SiteData {
     if (e.status !== 'ok' && e.status !== 'failed') bad(`status of ${sid}`)
     if (!Array.isArray(e.points)) bad(`points of ${sid}`)
     if (typeof e.meta?.cadence_days !== 'number') bad(`cadence of ${sid}`)
+  }
+  // Scan-batch fields are all optional — only type-check when present, so
+  // older exports/fixtures without them stay valid.
+  if (s.hero_lead != null && typeof s.hero_lead !== 'string') bad('hero_lead')
+  if (s.extra_tiles != null && !Array.isArray(s.extra_tiles)) bad('extra_tiles')
+  if (s.metric_labels != null && typeof s.metric_labels !== 'object') bad('metric_labels')
+  if (s.section_summaries != null && typeof s.section_summaries !== 'object') {
+    bad('section_summaries')
   }
   return s
 }

@@ -179,3 +179,52 @@ def test_pick_hero_survives_total_outage():
     tiles = scoring.pick_hero(ls, lm, TODAY)
     assert len(tiles) == 5
     assert all(t["value"] == "—" for t in tiles)
+
+
+# ---------------------------------------------------------------------------
+# World down-weight (design review P1-World) + lead pick (feeds P0-1)
+# ---------------------------------------------------------------------------
+def test_world_series_notability_is_downweighted():
+    """Same shape of surprise move, scored under a non-global and a global
+    (region='global') registry key, must differ by exactly the named
+    down-weight factor — World series shouldn't out-compete local ones just
+    because they're daily-fresh."""
+    vals = [100.0] * 21 + [110.0]
+    ls, lm = _loaders({
+        "au_dwelling_stock": _df(_monthly(vals, "mean_price", "vic")),
+        "intl_commodities": _df(_monthly(vals, "iron_ore", "global")),
+    })
+    non_global = scoring.score_metric("vic_mean_price", ls, lm, TODAY)
+    world = scoring.score_metric("iron_ore", ls, lm, TODAY)
+    assert non_global is not None and world is not None
+    assert non_global["z"] == world["z"]
+    assert non_global["f"] == world["f"]
+    assert world["n"] == round(non_global["n"] * scoring.WORLD_NOTABILITY_WEIGHT, 4)
+
+
+def test_pick_lead_returns_most_notable_non_pinned():
+    frames = _full_frames()
+    vals = [5.0] * 21 + [5.5]                                    # surprise move
+    frames["au_credit"] = _df(_monthly(vals, "credit_housing_yoy", "australia"))
+    ls, lm = _loaders(frames)
+    assert scoring.pick_lead(ls, lm, TODAY) == "credit_growth"
+
+
+def test_pick_lead_falls_back_to_first_pin_when_nothing_qualifies():
+    ls, lm = _loaders(_full_frames())      # all flat, nothing qualifies
+    assert scoring.pick_lead(ls, lm, TODAY) == "cash_rate"        # first pin
+
+
+def test_pick_lead_deterministic():
+    ls, lm = _loaders(_full_frames())
+    assert scoring.pick_lead(ls, lm, TODAY) == scoring.pick_lead(ls, lm, TODAY)
+
+
+def test_tile_chart_mirrors_registry_and_known_chart_ids():
+    """TILE_CHART is a hand-kept mirror of web/src/components/HeroTiles.tsx's
+    own TILE_CHART — every key must be a real registry entry (hero-eligible
+    or what's-new-only, both route taps), and every value a real chart id."""
+    from pipeline import findings
+    chart_ids = {c["id"] for c in findings.CHARTS}
+    assert set(scoring.TILE_CHART) <= set(scoring.REGISTRY)
+    assert set(scoring.TILE_CHART.values()) <= chart_ids

@@ -7,9 +7,12 @@ so the SPA stays presentational and the daily run refreshes them.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Callable, Optional
 
 import pandas as pd
+
+from pipeline import scoring
 
 SECTIONS: list[tuple[str, str]] = [
     ("today", "Today"), ("prices", "Prices"), ("rents", "Rents & vacancy"),
@@ -21,16 +24,19 @@ SECTIONS: list[tuple[str, str]] = [
 
 def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
        percent=False, markers=False, annotate=False, noun=None, primary=None,
-       note=None):
+       note=None, modal_metrics=None):
     """noun: subject of the generic finding sentence; primary: metric it uses
     (defaults to metrics[0]); both ignored by charts with custom rules.
     note: optional short disclosure/methodology line shown under the chart
-    (source-window caveats, definition changes, etc.) — None for most charts."""
+    (source-window caveats, definition changes, etc.) — None for most charts.
+    modal_metrics: optional extra metric list shown only in the detail modal
+    (mixed-scale split charts keep a secondary series set there — e.g.
+    credit's mom trio, Accord's quarterly pair) — None for most charts."""
     return dict(id=id, section=section, title=title, series_id=series_id,
                 metrics=metrics, region_mode=region_mode, percent=percent,
                 markers=markers, annotate=annotate, noun=noun,
                 primary=primary or (metrics[0] if metrics else None),
-                note=note)
+                note=note, modal_metrics=modal_metrics)
 
 
 _HVI_NOTE = ("Daily index — the free Cotality feed covers a rolling year; "
@@ -82,7 +88,9 @@ CHARTS: list[dict] = [
        "vic_activity", region_mode="fixed:vic", noun="Dwellings commenced",
        primary="dwellings_commenced"),
     _c("accord", "supply", "Housing Accord tracker", "au_accord",
-       region_mode="fixed:australia"),
+       metrics=["accord_cumulative_actual", "accord_cumulative_target"],
+       region_mode="fixed:australia",
+       modal_metrics=["accord_quarterly_actual", "accord_quarterly_target"]),
     _c("land", "supply", "Greenfield land supply", "vic_land",
        region_mode="fixed:melbourne", noun="Greenfield years of supply",
        primary="greenfield_years_of_supply"),
@@ -100,10 +108,19 @@ CHARTS: list[dict] = [
        region_mode="geo", annotate=True, noun="Owner-occupier lending",
        primary="lending_owner_occupier"),
     _c("credit", "money", "Housing credit growth", "au_credit",
+       metrics=["credit_housing_yoy", "credit_investor_yoy",
+                "credit_owner_occupier_yoy"],
        region_mode="fixed:australia", percent=True, annotate=True,
-       noun="Housing credit growth", primary="credit_housing_yoy"),
+       noun="Housing credit growth", primary="credit_housing_yoy",
+       modal_metrics=["credit_housing_yoy", "credit_investor_yoy",
+                      "credit_owner_occupier_yoy", "credit_housing_mom",
+                      "credit_investor_mom", "credit_owner_occupier_mom"]),
     # --- people ---
+    # ERP (population level) is deliberately excluded here — mixed-scale with
+    # NOM/natural increase flattens the section's own finding to invisible
+    # (design review P0-5); it gets its own stat tile (extra_tiles) instead.
     _c("population", "people", "Population & migration", "au_population",
+       metrics=["net_overseas_migration", "natural_increase"],
        region_mode="geo", noun="Net overseas migration",
        primary="net_overseas_migration"),
     # --- social ---
@@ -197,6 +214,15 @@ def _primary_frame(chart: dict, load_series: Loader) -> pd.DataFrame:
     return df.sort_values("date")
 
 
+# Both branches below route |delta| smaller than half the *displayed*
+# precision to "held at" — otherwise rounding-to-display can show "rose 0.0
+# pp"/"fell 0.0%", a factually-wrong move on a brand built on precision
+# (design review P1-copy). Display precision is 1dp in both branches, so the
+# cutoff is half of 0.1.
+HELD_THRESHOLD_PP = 0.05     # percent-unit (pp) branch — was 0.005, too tight
+HELD_THRESHOLD_PCT = 0.05    # percent-of-value branch — already aligned
+
+
 def _generic(chart: dict, load_series: Loader, load_meta: Loader) -> Optional[str]:
     df = _primary_frame(chart, load_series)
     if df.empty:
@@ -207,18 +233,18 @@ def _generic(chart: dict, load_series: Loader, load_meta: Loader) -> Optional[st
     period = fmt_period(df["date"].iloc[-1], freq)
     noun = chart["noun"] or chart["title"]
     if len(df) < 2:
-        return f"{noun} is {fmt_value(v, unit)} in {period}"
+        return f"{noun} was {fmt_value(v, unit)} in {period}"
     p = float(df["value"].iloc[-2])
     if unit == "percent":  # level series in pp
         d = v - p
-        if abs(d) < 0.005:
+        if abs(d) < HELD_THRESHOLD_PP:
             return f"{noun} held at {fmt_value(v, unit)} in {period}"
         verb = "rose" if d > 0 else "fell"
         return f"{noun} {verb} {abs(d):.1f} pp to {fmt_value(v, unit)} in {period}"
     if p == 0:
-        return f"{noun} is {fmt_value(v, unit)} in {period}"
+        return f"{noun} was {fmt_value(v, unit)} in {period}"
     pct = (v / p - 1) * 100
-    if abs(pct) < 0.05:
+    if abs(pct) < HELD_THRESHOLD_PCT:
         return f"{noun} held at {fmt_value(v, unit)} in {period}"
     verb = "rose" if pct > 0 else "fell"
     return f"{noun} {verb} {abs(pct):.1f}% to {fmt_value(v, unit)} in {period}"
@@ -312,4 +338,183 @@ def build_findings(load_series: Loader, load_meta: Loader) -> dict[str, str]:
         text = fn(chart, load_series, load_meta) if fn \
             else _generic(chart, load_series, load_meta)
         out[chart["id"]] = text or NO_DATA_FINDING
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Per-metric display labels (design review P1-labels) — translates raw column
+# identifiers ("credit_housing_mom") into sentence-case, prefix-stripped,
+# abbreviation-expanded legend/table text. Hand-picked for every metric
+# actually present in the committed data; anything new falls back to a plain
+# humanisation rather than crashing.
+# ---------------------------------------------------------------------------
+METRIC_LABELS: dict[str, str] = {
+    # credit — three series, mom/yoy cadence (card shows yoy, modal both)
+    "credit_housing_mom": "Housing, monthly", "credit_housing_yoy": "Housing, annual",
+    "credit_investor_mom": "Investor, monthly", "credit_investor_yoy": "Investor, annual",
+    "credit_owner_occupier_mom": "Owner-occupier, monthly",
+    "credit_owner_occupier_yoy": "Owner-occupier, annual",
+    # rents
+    "median_rent": "Median rent", "affordable_share": "Affordable share",
+    "rent_growth_annual": "Annual rent growth",
+    "rent_1br_flat": "1-bed flat", "rent_2br_flat": "2-bed flat",
+    "rent_3br_flat": "3-bed flat", "rent_2br_house": "2-bed house",
+    "rent_3br_house": "3-bed house", "rent_4br_house": "4-bed house",
+    "vacancy_rate": "Vacancy rate",
+    # mortgage rates — new/outstanding x fixed/variable
+    "mortgage_new": "New (average)", "mortgage_new_fixed": "New — fixed",
+    "mortgage_new_variable": "New — variable",
+    "mortgage_outstanding": "Outstanding (average)",
+    "mortgage_outstanding_fixed": "Outstanding — fixed",
+    "mortgage_outstanding_variable": "Outstanding — variable",
+    # accord — cumulative (card) vs quarterly (modal)
+    "accord_cumulative_actual": "Actual (cumulative)",
+    "accord_cumulative_target": "Target (cumulative)",
+    "accord_quarterly_actual": "Actual (quarterly)",
+    "accord_quarterly_target": "Target (quarterly)",
+    # population & migration
+    "net_overseas_migration": "Net overseas migration",
+    "natural_increase": "Natural increase",
+    "population_erp": "Resident population",
+    "population_growth_qtr": "Quarterly growth",
+    # social housing register
+    "vhr_total": "Total applications", "vhr_priority": "Priority applications",
+    "vhr_register_of_interest": "Register of interest",
+    # greenfield land supply
+    "greenfield_lot_supply": "Lot supply", "greenfield_lots_titled": "Lots titled",
+    "greenfield_years_of_supply": "Years of supply",
+    # construction input costs
+    "input_all_groups": "All groups", "input_cement": "Cement",
+    "input_steel": "Steel", "input_timber": "Timber",
+    # dwelling activity
+    "dwellings_commenced": "Commenced", "dwellings_completed": "Completed",
+    "dwellings_under_construction": "Under construction",
+    # approvals
+    "approvals_dwellings_total": "Total dwellings", "approvals_houses": "Houses",
+    "approvals_other_residential": "Other residential",
+    # lending
+    "lending_owner_occupier": "Owner-occupier", "lending_investor": "Investor",
+    "lending_first_home_buyer": "First home buyer", "lending_total": "Total",
+    # HVI
+    "hvi_index": "Index level", "hvi_change_mom": "Monthly change",
+    "hvi_change_yoy": "Annual change",
+    # prices
+    "mean_price": "Mean price", "dwelling_count": "Dwelling count",
+    "clearance_rate": "Clearance rate", "median_house_price": "Median house price",
+    # cash rate
+    "cash_rate": "Cash rate",
+    # world
+    "brent_crude": "Brent crude", "aud_usd": "AUD/USD",
+    "us_10y_treasury": "US 10-year yield",
+    "copper": "Copper", "iron_ore": "Iron ore", "sawnwood": "Sawnwood",
+}
+
+
+def _humanize_metric(metric: str) -> str:
+    """Defensive fallback for any metric not yet in METRIC_LABELS — plain
+    sentence case, no abbreviation expansion. Keeps build_metric_labels total
+    over whatever the data happens to contain, rather than raising."""
+    s = metric.replace("_", " ").strip()
+    return s[:1].upper() + s[1:] if s else s
+
+
+def build_metric_labels(load_series: Loader) -> dict[str, str]:
+    """{metric: display label} for every metric present in every charted
+    series (not just the ones a split card plots — the modal/table can show
+    more), plus every metric a chart *declares* (metrics/modal_metrics) even
+    when its source currently has no data — e.g. auctions' clearance_rate,
+    a never-succeeded source (design review P1-outage) — so the label is
+    ready the day the source recovers rather than appearing only once it
+    already has data."""
+    out: dict[str, str] = {}
+    for chart in CHARTS:
+        wanted = set(chart["metrics"] or []) | set(chart["modal_metrics"] or [])
+        df = load_series(chart["series_id"])
+        if df is not None and len(df):
+            wanted |= {str(m) for m in df["metric"].dropna().unique()}
+        for m in wanted:
+            if m not in out:
+                out[m] = METRIC_LABELS.get(m) or _humanize_metric(m)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Section summaries (feeds design review P0-3 collapsed rows, and P1-World's
+# synthesized lead line) — one Newsreader-ready sentence per content section.
+# Reuses existing finding machinery: the winning chart is whichever maps to
+# the most notable REGISTRY key (scoring.score_metric — the same notability
+# hero picks use), and its sentence is build_findings' own output verbatim
+# (no prefix). Quiet/unscoreable sections get honest quiet phrasing rather
+# than silently repeating whichever chart happens to be first.
+# ---------------------------------------------------------------------------
+_CHART_TILE_KEY: dict[str, str] = {v: k for k, v in scoring.TILE_CHART.items()}
+
+_QUIET_SUMMARY = "No notable moves in {title} this week."
+
+# World gets a bespoke rule (not the generic mover-lookup above) because five
+# of its six charts (brent, AUD/USD, US 10-yr, copper, sawnwood) have no
+# REGISTRY key at all — only iron_ore does — so the generic path could never
+# consider them. "Quiet" here means the move is too small to be worth naming
+# (design review: "a third of World's findings say nothing happened").
+WORLD_QUIET_PCT = 1.0   # abs %-change floor for non-percent-unit World series
+WORLD_QUIET_PP = 0.15   # abs pp-change floor for the one percent-unit series (UST 10yr)
+WORLD_QUIET_SUMMARY = "The world backdrop was quiet this week."
+
+
+def _section_mover_chart_id(section_id: str, load_series: Loader, load_meta: Loader,
+                            today: date) -> Optional[str]:
+    best_id, best_n = None, -1.0
+    for chart in CHARTS:
+        if chart["section"] != section_id:
+            continue
+        reg_key = _CHART_TILE_KEY.get(chart["id"])
+        if reg_key is None:
+            continue
+        result = scoring.score_metric(reg_key, load_series, load_meta, today)
+        if result is not None and result["n"] > best_n:
+            best_n, best_id = result["n"], chart["id"]
+    return best_id
+
+
+def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> str:
+    best = None  # (magnitude, chart_id)
+    for chart in CHARTS:
+        if chart["section"] != "world":
+            continue
+        df = _primary_frame(chart, load_series)
+        if len(df) < 2:
+            continue
+        v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
+        unit = str(df["unit"].iloc[-1])
+        if unit == "percent":
+            mag, floor = abs(v - p), WORLD_QUIET_PP
+        else:
+            if p == 0:
+                continue
+            mag, floor = abs((v / p - 1) * 100), WORLD_QUIET_PCT
+        if mag < floor:
+            continue
+        if best is None or mag > best[0]:
+            best = (mag, chart["id"])
+    if best is None:
+        return WORLD_QUIET_SUMMARY
+    return findings_out.get(best[1]) or WORLD_QUIET_SUMMARY
+
+
+_SUMMARY_SECTIONS = ("prices", "rents", "supply", "money", "people", "social", "world")
+
+
+def build_section_summaries(load_series: Loader, load_meta: Loader,
+                            today: date) -> dict[str, str]:
+    findings_out = build_findings(load_series, load_meta)
+    titles = dict(SECTIONS)
+    out: dict[str, str] = {}
+    for section_id in _SUMMARY_SECTIONS:
+        if section_id == "world":
+            out[section_id] = _world_summary(load_series, findings_out)
+            continue
+        mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
+        text = findings_out.get(mover) if mover else None
+        out[section_id] = text if text and text != NO_DATA_FINDING \
+            else _QUIET_SUMMARY.format(title=titles[section_id])
     return out

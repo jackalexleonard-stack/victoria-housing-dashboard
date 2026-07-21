@@ -63,6 +63,64 @@ def test_site_shape_and_failed_series():
                for t in site["hero"])
 
 
+def test_new_scan_batch_fields_present_and_typed():
+    """Contract check for the scan-batch export additions: all optional on
+    the TS side, but always emitted and well-typed by the pipeline."""
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)
+    assert isinstance(site["hero_lead"], str) and site["hero_lead"]
+    assert isinstance(site["metric_labels"], dict)
+    assert isinstance(site["extra_tiles"], list)
+    assert isinstance(site["section_summaries"], dict)
+    charts_by_id = {c["id"]: c for c in site["charts"]}
+    assert charts_by_id["cash_rate"]["modal_metrics"] is None
+    assert charts_by_id["credit"]["modal_metrics"] == [
+        "credit_housing_yoy", "credit_investor_yoy", "credit_owner_occupier_yoy",
+        "credit_housing_mom", "credit_investor_mom", "credit_owner_occupier_mom"]
+    assert charts_by_id["accord"]["metrics"] == \
+        ["accord_cumulative_actual", "accord_cumulative_target"]
+    encoded = json.loads(export.dumps(site))
+    assert encoded["hero_lead"] == site["hero_lead"]
+
+
+def test_extra_tiles_carries_the_erp_population_stat_tile():
+    frames = dict(FRAMES)
+    frames["au_population"] = _df([
+        ("2025-09-30", "australia", "population_erp", 27722400.0, "persons"),
+        ("2025-12-31", "australia", "population_erp", 27801000.0, "persons"),
+    ])
+    ls = lambda sid: frames.get(sid, _df([]))
+    site = export.build_site(ls, lambda sid: METAS.get(sid, {}),
+                             date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)
+    assert site["extra_tiles"] == [{
+        "key": "erp", "label": "Resident population", "value": 27801000.0,
+        "delta": pytest.approx(78600.0), "delta_color": "off",
+        "last_date": "2025-12-31", "chart": "population",
+    }]
+
+
+def test_section_summaries_news_uses_top_story_tag_and_count():
+    ls, lm = _loaders()
+    items = [
+        {"title": "RBA cuts cash rate", "url": "https://a/1", "source": "RBA",
+         "published": "2026-07-17", "tags": ["policy"]},
+        {"title": "Other market wrap", "url": "https://a/2", "source": "Google News",
+         "published": "2026-07-17", "tags": ["prices"]},
+    ]
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS),
+                             news_items=items)
+    export.validate_site(site)
+    assert site["section_summaries"]["news"] == "2 stories this week — Policy leads"
+
+
+def test_section_summaries_news_no_stories():
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    assert site["section_summaries"]["news"] == "No stories this week."
+
+
 def test_nan_is_rejected_not_serialized():
     ls, lm = _loaders()
     site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))

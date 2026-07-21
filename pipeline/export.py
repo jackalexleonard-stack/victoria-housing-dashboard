@@ -15,7 +15,8 @@ from typing import Callable, Optional
 import pandas as pd
 
 from pipeline import scoring
-from pipeline.findings import CHARTS, SECTIONS, build_findings
+from pipeline.findings import (CHARTS, SECTIONS, build_findings,
+                               build_metric_labels, build_section_summaries)
 
 SCHEMA_VERSION = 1
 DATA = Path("data")
@@ -108,6 +109,59 @@ def _whats_new(ls: Loader, lm: Loader, today: date, window_days: int = 7) -> lis
     return out
 
 
+def _erp_tile(ls: Loader) -> Optional[dict]:
+    """Population level (ERP) stat tile — split out of the 'population' chart
+    card (design review P0-5: mixed-scale with NOM/natural increase flattened
+    the section's own finding to invisible). No REGISTRY key covers a
+    population level metric, so this is the small dedicated field the task
+    calls for rather than registry-style scoring machinery."""
+    df = ls("au_population")
+    if df is None or len(df) == 0:
+        return None
+    df = df[(df["metric"] == "population_erp") & (df["region"] == "australia")]
+    df = df.dropna(subset=["value"]).copy()
+    if df.empty:
+        return None
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
+    v = float(df["value"].iloc[-1])
+    d = float(v - df["value"].iloc[-2]) if len(df) > 1 else None
+    last_date = df["date"].iloc[-1]
+    return {"key": "erp", "label": "Resident population", "value": v,
+            "delta": d, "delta_color": "off",
+            "last_date": last_date.date().isoformat(), "chart": "population"}
+
+
+def _extra_tiles(ls: Loader) -> list[dict]:
+    return [t for t in (_erp_tile(ls),) if t is not None]
+
+
+# Tag -> display label, in the priority order used to pick which one "leads"
+# a news section summary (matches scoring.TAG_VALUE's own emphasis).
+_NEWS_TAG_LABEL = [
+    ("policy", "Policy"), ("prices", "Prices"), ("rents", "Rents"),
+    ("supply_construction", "Supply"), ("construction_costs", "Costs"),
+    ("international", "International"),
+]
+
+
+def _news_section_summary(items: list[dict], today: date) -> str:
+    """News summary = top story count ('148 stories this week — Policy
+    leads') — the tag is the top-ranked story's, so it names what's actually
+    driving today's front page rather than the busiest tag overall."""
+    n = len(items)
+    if n == 0:
+        return "No stories this week."
+    top = scoring.top_stories(items, today, n=4)
+    if not top:
+        return f"{n} stories this week"
+    tags = top[0].get("tags") or []
+    for tag, label in _NEWS_TAG_LABEL:
+        if tag in tags:
+            return f"{n} stories this week — {label} leads"
+    return f"{n} stories this week"
+
+
 def _cash_rate_moves(ls: Loader) -> list[dict]:
     df = ls("au_cash_rate")
     if df is None or len(df) == 0:
@@ -127,21 +181,29 @@ def _cash_rate_moves(ls: Loader) -> list[dict]:
 
 
 def build_site(ls: Loader, lm: Loader, today: date,
-               series_ids: Optional[list[str]] = None) -> dict:
+               series_ids: Optional[list[str]] = None,
+               news_items: Optional[list[dict]] = None) -> dict:
     sids = series_ids if series_ids is not None else repo_series_ids()
+    section_summaries = build_section_summaries(ls, lm, today)
+    section_summaries["news"] = _news_section_summary(news_items or [], today)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sections": [list(s) for s in SECTIONS],
         "charts": [{k: c[k] for k in ("id", "section", "title", "series_id",
                                       "metrics", "region_mode", "percent",
-                                      "markers", "annotate", "note")} for c in CHARTS],
+                                      "markers", "annotate", "note",
+                                      "modal_metrics")} for c in CHARTS],
         "findings": build_findings(ls, lm),
         "series": {sid: _series_entry(sid, ls, lm) for sid in sids},
         "hero": _hero(ls, lm, today),
+        "hero_lead": scoring.pick_lead(ls, lm, today),
         "whats_new": _whats_new(ls, lm, today),
         "annotations": {"cash_rate_moves": _cash_rate_moves(ls),
                         "accord_start": ACCORD_START},
+        "extra_tiles": _extra_tiles(ls),
+        "metric_labels": build_metric_labels(ls),
+        "section_summaries": section_summaries,
     }
 
 
@@ -214,6 +276,25 @@ def validate_site(site: dict) -> None:
             _fail(f"missing cadence for {sid}")
     if len(site.get("hero", [])) != 5:
         _fail("hero must have exactly 5 tiles")
+    if not isinstance(site.get("hero_lead"), str) or not site["hero_lead"]:
+        _fail("hero_lead")
+    if not isinstance(site.get("metric_labels"), dict):
+        _fail("metric_labels")
+    section_summaries = site.get("section_summaries")
+    if not isinstance(section_summaries, dict) or not section_summaries:
+        _fail("section_summaries")
+    for sec_id, text in section_summaries.items():
+        if not isinstance(text, str) or not text:
+            _fail(f"empty section_summary for {sec_id}")
+    extra_tiles = site.get("extra_tiles")
+    if not isinstance(extra_tiles, list):
+        _fail("extra_tiles")
+    for t in extra_tiles:
+        if not isinstance(t.get("key"), str) or not isinstance(t.get("label"), str) \
+           or not isinstance(t.get("chart"), str):
+            _fail("malformed extra_tile")
+        if not isinstance(t.get("value"), (int, float)):
+            _fail("extra_tile value must be numeric")
 
 
 def validate_news(news: dict) -> None:
@@ -253,8 +334,9 @@ def _load_news_meta() -> dict:
 
 def export_all(out_dir: Path = OUT, today: Optional[date] = None):
     today = today or datetime.now(timezone.utc).date()
-    site = build_site(load_series, load_meta, today)
-    news = build_news(_load_news_items(), today, _load_digest(), _load_news_meta())
+    news_items = _load_news_items()
+    site = build_site(load_series, load_meta, today, news_items=news_items)
+    news = build_news(news_items, today, _load_digest(), _load_news_meta())
     validate_site(site)
     validate_news(news)
     out_dir = Path(out_dir)

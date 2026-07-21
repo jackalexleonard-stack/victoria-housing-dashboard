@@ -26,3 +26,26 @@ test('guard fails loudly on wrong shapes', () => {
   expect(() => assertSiteData({ ...siteEdge as object, series: null })).toThrow(/unexpected data shape/)
   expect(() => assertNewsData({ schema_version: 1 })).toThrow(/unexpected data shape/)
 })
+
+test('scan-batch fields (hero_lead, extra_tiles, metric_labels, section_summaries) are optional', () => {
+  // Older fixtures without the new scan-batch fields must still pass — the
+  // fields are additive, not a schema bump.
+  expect(() => assertSiteData(siteEdge)).not.toThrow()
+  // When present, a well-typed site with the new fields still passes.
+  const withNewFields = {
+    ...siteEdge as object, hero_lead: 'cash_rate', extra_tiles: [],
+    metric_labels: { cash_rate: 'Cash rate' }, section_summaries: { prices: 'Quiet.' },
+  }
+  expect(() => assertSiteData(withNewFields)).not.toThrow()
+})
+
+test('guard rejects wrongly-typed scan-batch fields when present', () => {
+  expect(() => assertSiteData({ ...siteEdge as object, hero_lead: 42 }))
+    .toThrow(/unexpected data shape/)
+  expect(() => assertSiteData({ ...siteEdge as object, extra_tiles: 'nope' }))
+    .toThrow(/unexpected data shape/)
+  expect(() => assertSiteData({ ...siteEdge as object, metric_labels: 'nope' }))
+    .toThrow(/unexpected data shape/)
+  expect(() => assertSiteData({ ...siteEdge as object, section_summaries: 'nope' }))
+    .toThrow(/unexpected data shape/)
+})

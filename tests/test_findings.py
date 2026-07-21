@@ -112,6 +112,171 @@ def test_fmt_value_units():
     assert findings.fmt_value(820000, "aud") == "$820,000"
 
 
+def test_population_credit_accord_chart_splits_and_modal_metrics():
+    """Design review P0-5: mixed-scale charts split by measure — the
+    dominant-scale series moves to its own tile/modal so the card's plotted
+    lines all share a comparable scale."""
+    charts_by_id = {c["id"]: c for c in findings.CHARTS}
+    population = charts_by_id["population"]
+    assert population["metrics"] == ["net_overseas_migration", "natural_increase"]
+    assert population["modal_metrics"] is None
+    credit = charts_by_id["credit"]
+    assert credit["metrics"] == ["credit_housing_yoy", "credit_investor_yoy",
+                                 "credit_owner_occupier_yoy"]
+    assert credit["modal_metrics"] == [
+        "credit_housing_yoy", "credit_investor_yoy", "credit_owner_occupier_yoy",
+        "credit_housing_mom", "credit_investor_mom", "credit_owner_occupier_mom"]
+    accord = charts_by_id["accord"]
+    assert accord["metrics"] == ["accord_cumulative_actual", "accord_cumulative_target"]
+    assert accord["modal_metrics"] == ["accord_quarterly_actual", "accord_quarterly_target"]
+
+
+def test_split_chart_findings_describe_a_plotted_series():
+    """A split chart's headline must name a series actually plotted on the
+    card, not one relegated to the modal/a stat tile."""
+    for chart_id in ("population", "credit", "accord"):
+        chart = next(c for c in findings.CHARTS if c["id"] == chart_id)
+        if chart["primary"] is not None:
+            assert chart["primary"] in chart["metrics"], chart_id
+
+
+def test_every_chart_primary_is_among_its_own_metrics_when_both_set():
+    for c in findings.CHARTS:
+        if c["metrics"] and c["primary"]:
+            assert c["primary"] in c["metrics"], c["id"]
+
+
+def test_held_threshold_aligned_to_display_precision():
+    """A 0.02 pp wobble must read as 'held', not 'rose 0.0 pp' (design review
+    P1-copy) — the held branch's cutoff must match the 1dp display precision."""
+    ls, lm = _loaders({"au_credit": _df([
+        ("2026-04-30", "australia", "credit_housing_yoy", 7.50, "percent"),
+        ("2026-05-31", "australia", "credit_housing_yoy", 7.52, "percent"),
+    ])}, {"au_credit": {"frequency": "monthly"}})
+    out = findings.build_findings(ls, lm)
+    assert out["credit"] == "Housing credit growth held at 7.52% in May 2026"
+
+
+def test_level_only_finding_uses_was_not_is():
+    """Design review P1-copy: 'is X in YEAR' is wrong for two-year-old data —
+    always use 'was', single point or zero-baseline alike."""
+    ls, lm = _loaders({"vic_land": _df([
+        ("2024-12-31", "melbourne", "greenfield_years_of_supply", 18.0, "years"),
+    ])}, {"vic_land": {"frequency": "annual"}})
+    out = findings.build_findings(ls, lm)
+    assert out["land"] == "Greenfield years of supply was 18.0 yrs in 2024"
+
+    ls2, lm2 = _loaders({"vic_approvals": _df([
+        ("2026-04-30", "vic", "approvals_dwellings_total", 0, "dwellings"),
+        ("2026-05-31", "vic", "approvals_dwellings_total", 4400, "dwellings"),
+    ])})
+    out2 = findings.build_findings(ls2, lm2)
+    assert out2["approvals"] == "Dwelling approvals was 4,400 in May 2026"
+
+
+def test_metric_labels_spot_checks():
+    ls, _ = _loaders({
+        "au_credit": _df([
+            ("2026-05-31", "australia", "credit_owner_occupier_mom", 0.4, "percent"),
+        ]),
+        "vic_rents": _df([
+            ("2025-09-30", "melbourne", "rent_1br_flat", 500, "AUD/week"),
+        ]),
+        "au_mortgage_rates": _df([
+            ("2026-05-31", "australia", "mortgage_new_fixed", 5.5, "percent"),
+            ("2026-05-31", "australia", "mortgage_outstanding_fixed", 5.8, "percent"),
+        ]),
+        "au_accord": _df([
+            ("2026-03-31", "australia", "accord_cumulative_actual", 133455, "dwellings"),
+            ("2026-03-31", "australia", "accord_quarterly_actual", 40000, "dwellings"),
+        ]),
+        "vic_input_costs": _df([
+            ("2026-03-31", "melbourne", "input_cement", 120.0, "index"),
+        ]),
+    })
+    labels = findings.build_metric_labels(ls)
+    assert labels["credit_owner_occupier_mom"] == "Owner-occupier, monthly"
+    assert labels["rent_1br_flat"] == "1-bed flat"
+    assert labels["mortgage_new_fixed"] == "New — fixed"
+    assert labels["mortgage_outstanding_fixed"] == "Outstanding — fixed"
+    assert labels["accord_cumulative_actual"] == "Actual (cumulative)"
+    assert labels["accord_quarterly_actual"] == "Actual (quarterly)"
+    assert labels["input_cement"] == "Cement"
+
+
+def test_metric_labels_covers_declared_metrics_even_with_no_data():
+    """auctions' vic_auctions source has never succeeded (design review
+    P1-outage), so its metric never appears in real data — but the chart
+    still declares it, and the label must be ready for when the source
+    recovers rather than only appearing once data exists."""
+    ls, _ = _loaders({})  # no series data anywhere
+    labels = findings.build_metric_labels(ls)
+    assert labels["clearance_rate"] == "Clearance rate"
+
+
+def test_metric_labels_fallback_humanizes_unknown_metric():
+    ls, _ = _loaders({
+        "vic_approvals": _df([
+            ("2026-05-31", "vic", "brand_new_metric_xyz", 10, "number"),
+        ]),
+    })
+    labels = findings.build_metric_labels(ls)
+    assert labels["brand_new_metric_xyz"] == "Brand new metric xyz"
+
+
+def test_section_summaries_all_quiet_when_no_data():
+    ls, lm = _loaders({})
+    out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
+    assert set(out) == {"prices", "rents", "supply", "money", "people",
+                        "social", "world"}
+    assert all(isinstance(v, str) and v for v in out.values())
+    assert out["world"] == findings.WORLD_QUIET_SUMMARY
+    assert out["prices"] == "No notable moves in Prices this week."
+    assert out["people"] == "No notable moves in People this week."
+
+
+def test_section_summaries_uses_the_sections_scoreable_chart():
+    rows_cash = [(f"2026-0{m}-28", "australia", "cash_rate", 3.85, "percent")
+                for m in range(1, 6)]
+    rows_cash.append(("2026-06-28", "australia", "cash_rate", 3.60, "percent"))
+    ls, lm = _loaders({"au_cash_rate": _df(rows_cash)},
+                      {"au_cash_rate": {"frequency": "monthly"}})
+    out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
+    assert out["money"] == findings.build_findings(ls, lm)["cash_rate"]
+
+
+def test_section_summaries_world_quiet_state():
+    ls, lm = _loaders({
+        "intl_fred": _df([
+            ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
+            ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
+            ("2026-06-30", "global", "us_10y_treasury", 4.20, "percent"),
+            ("2026-07-31", "global", "us_10y_treasury", 4.21, "percent"),
+        ]),
+        "intl_commodities": _df([
+            ("2026-06-30", "global", "iron_ore", 95.0, "USD/tonne"),
+            ("2026-07-31", "global", "iron_ore", 95.3, "USD/tonne"),
+        ]),
+    })
+    out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
+    assert out["world"] == findings.WORLD_QUIET_SUMMARY
+
+
+def test_section_summaries_world_names_the_biggest_mover():
+    ls, lm = _loaders({
+        "intl_fred": _df([
+            ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
+            ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
+        ]),
+        "intl_commodities": _df([
+            ("2026-06-30", "global", "iron_ore", 95.0, "USD/tonne"),
+            ("2026-07-31", "global", "iron_ore", 115.0, "USD/tonne"),
+        ]),
+    })
+    out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
+    assert out["world"] == findings.build_findings(ls, lm)["iron_ore"]
+
+
 def test_fmt_value_full_unit_vocabulary():
     # Regressions observed live on real data.
     assert findings.fmt_value(3.52655, "percent") == "3.53%"
