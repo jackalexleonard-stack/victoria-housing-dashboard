@@ -97,6 +97,32 @@ export function fmtPeriod(iso: string, freq: string | null): string {
   return fmtDate(iso)
 }
 
+// Design review P1-metadata: the card caption keeps provenance visible but
+// compact — a short token ("DFFH") rather than the full source title (which
+// moves to the detail modal). A small ordered rule list handles the sources
+// whose short form isn't just their first word (e.g. the vacancy series is
+// credited to "Rental vacancy rate — SQM Research (via DFFH Rental
+// Report)", whose first word is "Rental"); everything else falls back to
+// its own first word, per the spec's explicit "fallback = first word".
+const SOURCE_TOKEN_RULES: [RegExp, string][] = [
+  [/^RBA\b/, 'RBA'],
+  [/^ABS\b/, 'ABS'],
+  [/^Cotality\b/, 'Cotality'],
+  [/Cotality\/Domain/, 'Cotality'],
+  [/^World Bank\b/, 'World Bank'],
+  [/^FRED\b/, 'FRED'],
+  [/^DFFH\b/, 'DFFH'],
+  [/Homes Victoria/, 'Homes Victoria'],
+  [/SQM Research/, 'SQM'],
+  [/Urban Development Program/, 'DTP'],
+]
+
+export function shortSource(name: string | null | undefined): string {
+  if (!name) return ''
+  for (const [re, token] of SOURCE_TOKEN_RULES) if (re.test(name)) return token
+  return name.split(/\s+/)[0]
+}
+
 export function ago(iso: string | null, now: Date): string {
   if (!iso) return 'unknown'
   const t = Date.parse(iso)

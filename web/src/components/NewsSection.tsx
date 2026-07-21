@@ -61,8 +61,14 @@ function NewsGroup({ id, items }: { id: GroupId; items: NewsItem[] }) {
   )
 }
 
+// Design review P0-3: News stays open (not collapsible-by-default's
+// summary-line treatment other sections get) but is truncated to its own
+// top-story cards by default, with the existing "Show all N" expander
+// pattern (mirrored from NewsGroup's per-group cap above) revealing the
+// full, filterable, grouped list on demand.
 export function NewsSection({ news, now }: { news: NewsData; now: Date }) {
   const [source, setSource] = useState('')
+  const [expanded, setExpanded] = useState(false)
   const allSources = [...new Set(news.items.map(i => i.source))].sort()
   const filtering = source !== ''
   const items = news.items.filter(i =>
@@ -79,6 +85,39 @@ export function NewsSection({ news, now }: { news: NewsData; now: Date }) {
     .map(id => ({ id, items: (byGroup.get(id) ?? [])
       .sort((a, b) => b.published.localeCompare(a.published)) }))
     .filter(g => g.items.length > 0)
+
+  if (!expanded) {
+    const top = news.top_story_urls
+      .map(u => news.items.find(i => i.url === u))
+      .filter((i): i is NewsItem => i != null)
+    return (
+      <div>
+        {news.health && (
+          <p className="text-xs text-faint mb-3">
+            {news.health.feeds_ok} of {news.health.feeds_total} feeds
+            {' '}· fetched {ago(news.health.last_fetched, now)}
+          </p>
+        )}
+        {top.length > 0 ? (
+          <ul className="divide-y divide-line">
+            {top.map(i => (
+              <li key={i.url} className="py-2.5">
+                <a href={i.url} target="_blank" rel="noreferrer"
+                   className="text-sm font-medium leading-snug hover:text-blue">{i.title}</a>
+                <p className="text-xs text-faint mt-0.5">{i.source} · {fmtDate(i.published)}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-2 text-sm text-muted">No standout stories this week.</p>
+        )}
+        <button type="button" onClick={() => setExpanded(true)} aria-expanded={false}
+                className="text-xs text-blue mt-2">
+          Show all {news.items.length} stories
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -104,6 +143,10 @@ export function NewsSection({ news, now }: { news: NewsData; now: Date }) {
       <div className="space-y-6">
         {groups.map(g => <NewsGroup key={g.id} id={g.id} items={g.items} />)}
       </div>
+      <button type="button" onClick={() => setExpanded(false)} aria-expanded={true}
+              className="text-xs text-blue mt-4">
+        Show fewer
+      </button>
     </div>
   )
 }

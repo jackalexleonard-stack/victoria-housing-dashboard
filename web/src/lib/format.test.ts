@@ -1,4 +1,4 @@
-import { TILE_FMT, fmtUnit, fmtPeriod, fmtDate, fmtDayMonth, ago } from './format'
+import { TILE_FMT, fmtUnit, fmtPeriod, fmtDate, fmtDayMonth, ago, shortSource } from './format'
 
 test('tile formatters port the python lambdas exactly', () => {
   expect(TILE_FMT.cash_rate.value(3.85)).toBe('3.85%')
@@ -90,4 +90,23 @@ test('fmtDate zero-pads single-digit days', () => {
 test('fmtDayMonth: compact day+month, no year, zero-padded day', () => {
   expect(fmtDayMonth('2026-06-30')).toBe('30 Jun')
   expect(fmtDayMonth('2026-06-05')).toBe('05 Jun')
+})
+
+test('shortSource maps real source_name strings to compact provenance tokens', () => {
+  expect(shortSource('RBA Cash Rate Target (F1.1)')).toBe('RBA')
+  expect(shortSource('RBA Growth in Financial Aggregates — Housing credit (D1)')).toBe('RBA')
+  expect(shortSource('ABS Total Value of Dwellings (RES_DWELL_ST)')).toBe('ABS')
+  expect(shortSource('Cotality Home Value Index — Melbourne')).toBe('Cotality')
+  expect(shortSource('Melbourne auction clearance rate (Cotality/Domain)')).toBe('Cotality')
+  expect(shortSource('World Bank Commodity Price Data (The Pink Sheet)')).toBe('World Bank')
+  expect(shortSource('FRED — Brent crude, US 10yr Treasury, AUD/USD')).toBe('FRED')
+  expect(shortSource('DFFH / Homes Victoria Rental Report')).toBe('DFFH')
+  expect(shortSource('Rental vacancy rate — SQM Research (via DFFH Rental Report)')).toBe('SQM')
+  expect(shortSource('Homes Victoria — Applications on the Victorian Housing Register'))
+    .toBe('Homes Victoria')
+  expect(shortSource('Urban Development Program — Greenfield Residential Land (DTP)')).toBe('DTP')
+  // Fallback = first word, for anything not in the small map.
+  expect(shortSource('REIV median house & unit prices')).toBe('REIV')
+  expect(shortSource(null)).toBe('')
+  expect(shortSource(undefined)).toBe('')
 })

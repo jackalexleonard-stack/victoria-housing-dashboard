@@ -173,4 +173,154 @@ describe('collapsible sections', () => {
       .toHaveAttribute('aria-expanded', 'true')
     spy.mockRestore()
   })
+
+  test('migrates the old vh.collapsed array into vh.sections overrides, then removes the old key', async () => {
+    history.replaceState(null, '', '/')
+    localStorage.setItem('vh.collapsed', JSON.stringify(['money']))
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(JSON.parse(localStorage.getItem('vh.sections')!)).toEqual({ money: 'closed' })
+    expect(localStorage.getItem('vh.collapsed')).toBeNull()
+    // The migrated override actually took effect, not just the storage shape.
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    expect(within(section).getByRole('button', { name: 'Money & credit' }))
+      .toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
+// --- P0-3: viewport-aware collapse defaults ---
+
+function stubPointer(coarse: boolean) {
+  vi.stubGlobal('matchMedia', (q: string) => ({
+    matches: q.includes('prefers-reduced-motion') || (coarse && q.includes('pointer: coarse')),
+    media: q, addEventListener: () => {}, removeEventListener: () => {},
+  }))
+}
+
+describe('viewport-aware collapse defaults', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(() => stubPointer(false))   // restore the fine-pointer default for later tests
+
+  test('desktop (fine pointer): only World starts collapsed — News stays open', async () => {
+    stubPointer(false)
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const world = screen.getByRole('region', { name: 'World' })
+    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'false')
+    const news = screen.getByRole('region', { name: 'News' })
+    expect(within(news).getByRole('button', { name: 'News' })).toHaveAttribute('aria-expanded', 'true')
+    const prices = screen.getByRole('region', { name: 'Prices' })
+    expect(within(prices).getByRole('button', { name: 'Prices' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('mobile (coarse pointer): every section after Today starts collapsed, World and News included', async () => {
+    stubPointer(true)
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    for (const name of ['World', 'News', 'Prices', 'Money & credit']) {
+      const section = screen.getByRole('region', { name })
+      expect(within(section).getByRole('button', { name })).toHaveAttribute('aria-expanded', 'false')
+    }
+    // Today itself is never collapsible, regardless of viewport.
+    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+  })
+
+  test('an explicit override beats the viewport default in either direction', async () => {
+    stubPointer(true)   // mobile default would close World
+    localStorage.setItem('vh.sections', JSON.stringify({ world: 'open' }))
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const world = screen.getByRole('region', { name: 'World' })
+    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+// --- P0-3: collapsed-row summary line + worst status chip ---
+
+describe('collapsed section rows', () => {
+  beforeEach(() => localStorage.clear())
+
+  test('a collapsed row shows the section summary and its worst status chip', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()   // au_cash_rate is fresh -> Money's summary shows with a plain (non-chip) status
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    await userEvent.click(within(section).getByRole('button', { name: 'Money & credit' }))
+    expect(within(section).getByText('The cash rate held steady this week.')).toBeInTheDocument()
+  })
+
+  test('honesty override: a quiet-sentinel summary is replaced when the section is actually stale/failed',
+    async () => {
+      history.replaceState(null, '', '/')
+      // vic_rents (the fixture's only Rents series) is 'failed' status but reads
+      // as 'fresh' at the fixture's usual NOW — push `now` far enough past its
+      // 92-day cadence that its real outage actually trips the staleness gate.
+      const mutated = { ...siteEdge as object,
+        section_summaries: { ...(siteEdge as { section_summaries: object }).section_summaries,
+          rents: 'No notable moves in Rents & vacancy this week.' } }
+      mockFetch(mutated)
+      const stale = new Date('2027-01-01T00:00:00Z')
+      render(<App now={stale} />)
+      await screen.findByText('Victorian Housing')
+      const section = screen.getByRole('region', { name: 'Rents & vacancy' })
+      await userEvent.click(within(section).getByRole('button', { name: 'Rents & vacancy' }))
+      expect(within(section).queryByText('No notable moves in Rents & vacancy this week.'))
+        .not.toBeInTheDocument()
+      expect(within(section).getByText(/Data to Mar qtr 2026 — source unavailable/)).toBeInTheDocument()
+    })
+
+  test('a genuine finding survives even when some series in the section is stale (not suppressed)',
+    async () => {
+      history.replaceState(null, '', '/')
+      mockFetch()
+      render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+      await screen.findByText('Victorian Housing')
+      const section = screen.getByRole('region', { name: 'Prices' })
+      await userEvent.click(within(section).getByRole('button', { name: 'Prices' }))
+      // vic_auctions is failed with no vintage at all, yet Prices' real
+      // summary sentence still shows, with the failure surfaced via the
+      // worst-status chip alongside it rather than by suppressing the news.
+      expect(within(section).getByText('Prices were broadly steady this week.')).toBeInTheDocument()
+      expect(within(section).getByText(/source unavailable/i)).toBeInTheDocument()
+    })
+})
+
+// --- P1-outage: hoisted section notice + quiet per-card chips ---
+
+describe('shared-outage section notice', () => {
+  beforeEach(() => localStorage.clear())
+
+  test('hoists one notice under the h2 when every series in the section shares one source + vintage',
+    async () => {
+      history.replaceState(null, '', '/')
+      mockFetch()
+      const stale = new Date('2027-01-01T00:00:00Z')   // trips vic_rents' failed gate
+      render(<App now={stale} />)
+      await screen.findByText('Victorian Housing')
+      const section = screen.getByRole('region', { name: 'Rents & vacancy' })
+      expect(within(section).getByText(/DFFH source unavailable — data to Mar qtr 2026/))
+        .toBeInTheDocument()
+      // The per-card chip drops to the quiet form instead of repeating the
+      // full staleness sentence at full strength (two cards share vic_rents
+      // in the fixture, so both carry the quiet chip).
+      expect(within(section).getAllByText(/Mar qtr 2026 · unavailable/).length).toBeGreaterThan(0)
+    })
+
+  test('no shared-outage notice when the section is not uniformly stale/failed (e.g. Money, at the default NOW)',
+    async () => {
+      history.replaceState(null, '', '/')
+      mockFetch()
+      render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+      await screen.findByText('Victorian Housing')
+      const section = screen.getByRole('region', { name: 'Money & credit' })
+      expect(within(section).queryByText(/source unavailable — data to/)).not.toBeInTheDocument()
+    })
 })

@@ -2,13 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAll } from './lib/load'
 import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
-import { fmtDate } from './lib/format'
+import { fmtDate, fmtPeriod } from './lib/format'
+import { collapsedSummaryText, defaultSectionOpen, sectionOutageNotice,
+         worstStaleness, type SectionState } from './lib/sections'
 import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
-import { Masthead } from './components/Masthead'
+import { Masthead, type FailedSource } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
 import { TodaySection } from './components/TodaySection'
 import { ChartCard } from './components/ChartCard'
+import { Chip } from './components/Chip'
 import { NewsSection } from './components/NewsSection'
 import { DetailView } from './components/DetailView'
 
@@ -52,22 +55,57 @@ function SectionHeading({ label, open, onToggle }: {
   )
 }
 
-const COLLAPSED_KEY = 'vh.collapsed'
+// Design review P0-3: a collapsed section row keeps the header but gains a
+// one-line status: the pipeline's own section summary (or, when the
+// section is genuinely sitting on stale/failed data behind a "quiet"
+// sentinel, an honest override — see lib/sections.collapsedSummaryText)
+// plus the section's worst staleness chip, always shown so outages stay
+// visible even while collapsed.
+function CollapsedRow({ id, label, charts, site, now }: {
+  id: string; label: string; charts: SiteData['charts']; site: SiteData; now: Date }) {
+  const worst = worstStaleness(charts, site, now)
+  const summary = collapsedSummaryText(site.section_summaries?.[id], label, worst)
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm mb-2">
+      {summary && <span className="font-display">{summary}</span>}
+      {worst && (worst.st.kind === 'fresh'
+        ? <span className="text-xs text-faint">{worst.st.label}</span>
+        : <Chip kind={worst.st.kind === 'ageing' ? 'warn' : 'bad'}>{worst.st.label}</Chip>)}
+    </p>
+  )
+}
+
+const SECTIONS_KEY = 'vh.sections'
+// Superseded by SECTIONS_KEY (viewport-dependent defaults don't survive a
+// flat "these ids are collapsed" array) — read once for migration, then
+// removed.
+const OLD_COLLAPSED_KEY = 'vh.collapsed'
 
 // Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
-// to "everything expanded" rather than crash the app over a persistence nicety.
-function readCollapsed(): Set<string> {
+// to "everything at its viewport default" rather than crash the app over a
+// persistence nicety. Migrates the old vh.collapsed array (viewport-
+// independent: "closed, full stop") into explicit 'closed' overrides under
+// the new key — sections that were open under the old scheme carry no
+// override at all, so the new viewport-aware default decides them.
+function readSectionOverrides(): Record<string, SectionState> {
   try {
-    const raw = localStorage.getItem(COLLAPSED_KEY)
-    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+    const raw = localStorage.getItem(SECTIONS_KEY)
+    if (raw) return JSON.parse(raw) as Record<string, SectionState>
+    const old = localStorage.getItem(OLD_COLLAPSED_KEY)
+    if (!old) return {}
+    const ids = JSON.parse(old) as string[]
+    const migrated = Object.fromEntries(ids.map(id => [id, 'closed' as const]))
+    localStorage.setItem(SECTIONS_KEY, JSON.stringify(migrated))
+    localStorage.removeItem(OLD_COLLAPSED_KEY)
+    return migrated
   } catch {
-    return new Set()
+    return {}
   }
 }
 
-function writeCollapsed(ids: Set<string>) {
+function writeSectionOverrides(overrides: Record<string, SectionState>) {
   try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...ids]))
+    localStorage.setItem(SECTIONS_KEY, JSON.stringify(overrides))
   } catch {
     // ignore — collapse state just won't persist this session
   }
@@ -78,7 +116,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
   const [error, setError] = useState<string | null>(null)
   const { state, setFilters, openDetail, closeDetail, setCompare } = useUrlState()
   const [active, setActive] = useState('today')
-  const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed)
+  const [overrides, setOverrides] = useState<Record<string, SectionState>>(readSectionOverrides)
   // Set by jump() when the target section was collapsed: the section body
   // must mount before scrollIntoView measures anything, so the actual scroll
   // happens in an effect that runs after that render commits.
@@ -128,16 +166,35 @@ export default function App({ now = new Date() }: { now?: Date }) {
 
   const { site, news } = data
   const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
-  const failedCount = Object.values(site.series)
-    .filter(s => staleness(s, now).kind === 'failed').length
+  const failedSources: FailedSource[] = Object.values(site.series)
+    .filter(s => staleness(s, now).kind === 'failed')
+    .map(s => ({
+      source: s.meta.source_name ?? 'Unknown source',
+      vintage: s.meta.last_data_date
+        ? fmtPeriod(s.meta.last_data_date, s.meta.frequency) : 'No data',
+    }))
+  // Mobile (coarse pointer, e.g. touch-primary phones/tablets) starts every
+  // section after Today collapsed — the daily scan's tightest-budget device
+  // (design review P0-3). Not width-based: a touch device stays "mobile"
+  // regardless of how wide its viewport happens to be.
+  const coarsePointer = matchMedia('(pointer: coarse)').matches
+  // Today never collapses (it isn't part of this system at all); every
+  // other section (World, Rents, ... and now News too) resolves an explicit
+  // override first, falling back to the viewport-aware default.
+  const sectionOpen = (id: string): boolean => {
+    if (id === 'today') return true
+    const ov = overrides[id]
+    if (ov === 'open') return true
+    if (ov === 'closed') return false
+    return defaultSectionOpen(id, coarsePointer)
+  }
   const toggleSection = (id: string) => {
-    const next = new Set(collapsed)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    setCollapsed(next)
-    writeCollapsed(next)
+    const next = { ...overrides, [id]: sectionOpen(id) ? 'closed' as const : 'open' as const }
+    setOverrides(next)
+    writeSectionOverrides(next)
   }
   const jump = (id: string) => {
-    if (collapsed.has(id)) {
+    if (!sectionOpen(id)) {
       // Expand first — the scroll itself happens once the body has mounted
       // (see the scrollTarget effect above), not synchronously here.
       toggleSection(id)
@@ -147,11 +204,11 @@ export default function App({ now = new Date() }: { now?: Date }) {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     sectionsRef.current[id]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
   }
-  const contentSections = site.sections.filter(([id]) => !['today', 'news'].includes(id))
+  const contentSections = site.sections.filter(([id]) => id !== 'today')
 
   return (
     <main className="max-w-5xl mx-auto px-4 pb-16">
-      <Masthead generatedAt={site.generated_at} failedCount={failedCount} />
+      <Masthead generatedAt={site.generated_at} failedSources={failedSources} />
       {siteIsStale(site.generated_at, now) && (
         <p role="alert" className="text-sm rounded-md px-3 py-2 mb-3"
            style={{ background: PALETTE.chip_warn, color: PALETTE.warn }}>
@@ -167,31 +224,45 @@ export default function App({ now = new Date() }: { now?: Date }) {
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
-        const open = !collapsed.has(id)
+        const open = sectionOpen(id)
+        const outageNotice = id !== 'news' ? sectionOutageNotice(charts, site, now) : null
         return (
           <section key={id} id={id} ref={el => { sectionsRef.current[id] = el }}
                    className="pt-10 scroll-mt-28" aria-label={label}>
             <SectionHeading label={label} open={open} onToggle={() => toggleSection(id)} />
-            {open && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {charts.map((c, i) => (
-                  <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
-                    <ChartCard site={site} chart={c} finding={site.findings[c.id]}
-                               range={state.range} geo={state.geo} now={now}
-                               onOpen={openDetail} />
+            {open ? (
+              <>
+                {/* Design review P1-outage: Rents' five failed/stale cards
+                    all trace back to one DFFH outage — say so once, here,
+                    instead of five identical red chips (each card's own
+                    chip still shows, just downgraded to a quiet pill via
+                    ChartCard's `quietOutage`). */}
+                {outageNotice && (
+                  <p role="status" className="text-sm rounded-md px-3 py-2 mb-3"
+                     style={{ background: PALETTE.chip_warn, color: PALETTE.warn }}>
+                    {outageNotice.token} source unavailable — data to {outageNotice.period}
+                  </p>
+                )}
+                {id === 'news' ? (
+                  <NewsSection news={news} now={now} />
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {charts.map((c, i) => (
+                      <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
+                        <ChartCard site={site} chart={c} finding={site.findings[c.id]}
+                                   range={state.range} geo={state.geo} now={now}
+                                   onOpen={openDetail} quietOutage={!!outageNotice} />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
+            ) : (
+              <CollapsedRow id={id} label={label} charts={charts} site={site} now={now} />
             )}
           </section>
         )
       })}
-      <section id="news" ref={el => { sectionsRef.current.news = el }}
-               className="pt-10 scroll-mt-28" aria-label="News">
-        <SectionHeading label="News" open={!collapsed.has('news')}
-                         onToggle={() => toggleSection('news')} />
-        {!collapsed.has('news') && <NewsSection news={news} now={now} />}
-      </section>
       <footer className="text-xs text-faint border-t border-line mt-12 pt-4">
         Free public sources, updated daily by GitHub Actions ·{' '}
         <a className="underline" href={DATA_URL}>data & methodology</a>

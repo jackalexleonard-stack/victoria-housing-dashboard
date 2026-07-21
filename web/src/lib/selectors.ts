@@ -17,9 +17,14 @@ const YEARS: Record<Exclude<Range, 'all'>, number> = { '1y': 1, '3y': 3, '5y': 5
 
 // Single source of truth for turning a raw metric key into a display-ready
 // line name — used both to build chart lines and to key per-metric unit
-// lookups (unitByName), so the two always agree on naming.
-export function lineName(metric: string): string {
-  return metric.replaceAll('_', ' ')
+// lookups (unitByName), so the two always agree on naming. `labels` is
+// site.metric_labels (design review P1-labels/ux-copy: an export-time
+// display map that kills machine-vocabulary legends like "credit housing
+// mom") — falls back to the old underscore-stripping humanisation for any
+// metric the map doesn't cover (or when no map is supplied at all, e.g.
+// older fixtures without metric_labels).
+export function lineName(metric: string, labels?: Record<string, string>): string {
+  return labels?.[metric] ?? metric.replaceAll('_', ' ')
 }
 
 function cutoff(range: Range, now: Date): number {
@@ -56,7 +61,7 @@ export function chartPoints(site: SiteData, chart: ChartSpec, range: Range,
                    pts: pts.filter(p => p.region === region) })
   } else {
     for (const metric of [...new Set(pts.map(p => p.metric))])
-      lines.push({ name: lineName(metric),
+      lines.push({ name: lineName(metric, site.metric_labels),
                    pts: pts.filter(p => p.metric === metric)
                           .sort((a, b) => a.date.localeCompare(b.date)) })
   }

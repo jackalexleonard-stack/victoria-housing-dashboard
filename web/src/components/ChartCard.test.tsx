@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from '../lib/types'
@@ -25,13 +25,28 @@ test('leads with the finding and opens on click', async () => {
   expect(onOpen).toHaveBeenCalledWith('cash_rate')
 })
 
-test('failed source renders an honest card, not a blank', () => {
+// --- P1-outage: dead-card compact stubs (no triple-repeated placeholder) ---
+
+test('a dead card (failed, zero points) headlines the series name, not the generic finding sentence', () => {
   render(<ChartCard site={site} chart={chart('auctions')}
                     finding="No recent data — source currently unavailable"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getByText(/source currently unavailable/i, { selector: 'p' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Auction clearance — Melbourne')
+  expect(screen.queryByText('No recent data — source currently unavailable')).not.toBeInTheDocument()
   expect(screen.queryByRole('img')).not.toBeInTheDocument()
+})
+
+test('a dead card shows one honest, source-specific body line — not the generic sentence repeated', () => {
+  render(<ChartCard site={site} chart={chart('auctions')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.getByText(/auction results aren.t reachable/i, { selector: 'p' })).toBeInTheDocument()
+})
+
+test('a dead card still surfaces a failure chip and its short source token, but no table toggle', () => {
+  render(<ChartCard site={site} chart={chart('auctions')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
   expect(screen.getByText(/source unavailable/i, { selector: 'span' })).toBeInTheDocument()
+  expect(screen.queryByText(/view data table/i)).not.toBeInTheDocument()
 })
 
 test('data table disclosure exposes the values', async () => {
@@ -47,16 +62,49 @@ test('scope chip appears when geo falls back', () => {
   expect(screen.getByText('Melbourne', { selector: 'span' })).toBeInTheDocument()
 })
 
-test('chart note renders as a muted line below the caption row', () => {
+// P1-metadata: the methodology note moves card -> modal only now (still
+// present in DetailView.test.tsx) — the card itself never renders it,
+// regardless of whether the chart carries one.
+test('a chart note does NOT render on the card — it moved to the detail modal', () => {
   render(<ChartCard site={site} chart={chart('cash_rate')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getByText('Test note.')).toBeInTheDocument()
+  expect(screen.queryByText('Test note.')).not.toBeInTheDocument()
 })
 
-test('chart without a note renders no note line', () => {
-  render(<ChartCard site={site} chart={chart('auctions')} finding="f"
+// --- P1-metadata: one caption line (name · short source token · chip · toggle) ---
+
+test('the caption row carries a short source token, not the full source title', () => {
+  render(<ChartCard site={site} chart={chart('cash_rate')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.queryByText('Test note.')).not.toBeInTheDocument()
+  expect(screen.getByText('RBA')).toBeInTheDocument()
+  expect(screen.queryByText('RBA F1.1')).not.toBeInTheDocument()
+})
+
+test('title, source token, status and table toggle all sit in one row', () => {
+  const { container } = render(
+    <ChartCard site={site} chart={chart('cash_rate')} finding="f"
+              range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const row = screen.getByText('RBA cash rate target').closest('div')!
+  expect(within(row).getByText('RBA')).toBeInTheDocument()
+  expect(within(row).getByText(/view data table/i)).toBeInTheDocument()
+  expect(container.querySelectorAll('article > div.flex').length).toBeGreaterThan(0)
+})
+
+test('quietOutage downgrades a stale/failed chip to the quiet "{period} · unavailable" form', () => {
+  render(<ChartCard site={site} chart={chart('median_rent')} finding="f" quietOutage
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  // vic_rents in the fixture is fresh at NOW, so this only proves the prop
+  // is wired through without throwing when the underlying status is fine —
+  // the real downgrade is covered against real stale data below.
+  expect(screen.getByText(/Mar qtr 2026/)).toBeInTheDocument()
+})
+
+test('quietOutage renders the compact "period · unavailable" chip for a genuinely stale card', () => {
+  const stale = new Date('2027-01-01T00:00:00Z')   // well past vic_rents' cadence
+  render(<ChartCard site={site} chart={chart('median_rent')} finding="f" quietOutage
+                    range="all" geo="melbourne" now={stale} onOpen={() => {}} />)
+  expect(screen.getByText(/Mar qtr 2026 · unavailable/)).toBeInTheDocument()
+  expect(screen.queryByText(/source unavailable/i)).not.toBeInTheDocument()
 })
 
 // --- P0-4 (annotation picket fence -> band/latest-label) and P1-emphasis ---

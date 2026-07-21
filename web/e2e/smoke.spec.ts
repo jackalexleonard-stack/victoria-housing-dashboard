@@ -1,12 +1,57 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+
+// Design review P0-3: World starts collapsed on desktop, and EVERY section
+// after Today starts collapsed on mobile (coarse pointer) — several tests
+// below just need *some* chart DOM to exist/be clickable regardless of
+// viewport, so they expand every collapsed section first rather than
+// assuming the old "everything expanded by default" behaviour.
+async function expandAllSections(page: Page) {
+  await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+  const collapsed = page.locator('h2 button[aria-expanded="false"]')
+  while (await collapsed.count() > 0) await collapsed.first().click()
+}
 
 test('loads the briefing with real fixture data', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Victorian Housing' })).toBeVisible()
+  await expandAllSections(page)
   const charts = page.locator('article svg[role="img"]')
   expect(await charts.count()).toBeGreaterThan(10)      // chart-DOM invariant
   await expect(page.locator('article h3').first()).not.toBeEmpty() // findings non-empty
+})
+
+// --- P0-3: collapse defaults ---
+
+test.describe('collapse defaults', () => {
+  test('desktop: World starts collapsed, other sections stay open', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'desktop-only default')
+    await page.goto('/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    const world = page.locator('section[aria-label="World"] h2 button')
+    await expect(world).toHaveAttribute('aria-expanded', 'false')
+    const prices = page.locator('section[aria-label="Prices"] h2 button')
+    await expect(prices).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('desktop: News stays open by default but is truncated to its top stories', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'desktop-only default')
+    await page.goto('/')
+    const news = page.locator('section[aria-label="News"] h2 button')
+    await expect(news).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('section[aria-label="News"]').getByRole('button', { name: /show all \d+ stories/i }))
+      .toBeVisible()
+  })
+
+  test('mobile: every section after Today starts collapsed, World included', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'phone-fold default, not a breakpoint sweep')
+    await page.goto('/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    for (const name of ['World', 'Prices', 'Money & credit', 'News']) {
+      const toggle = page.locator(`section[aria-label="${name}"] h2 button`)
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
 })
 
 test('filters update the url and the charts', async ({ page }) => {
@@ -62,6 +107,7 @@ test('section jump lands with the heading visible below the sticky bar', async (
 
 test('detail opens, deep-links and closes via back', async ({ page }) => {
   await page.goto('/')
+  await expandAllSections(page)   // mobile starts every section collapsed
   await page.getByRole('button', { name: /open details/ }).first().click()
   await expect(page).toHaveURL(/s=/)
   await expect(page.getByRole('dialog')).toBeVisible()
@@ -119,6 +165,7 @@ test('keyboard: modal traps focus and escape closes it', async ({ page }) => {
 
 test('keyboard: charts are reachable as accessible images', async ({ page }) => {
   await page.goto('/')
+  await expandAllSections(page)   // mobile starts every section collapsed
   const first = page.locator('article button').first()
   await first.focus()
   expect(await first.evaluate(el => el === document.activeElement)).toBe(true)
@@ -136,6 +183,7 @@ test('keyboard/motion: reduced motion suppresses the draw-in', async ({ page }) 
   // on is actually real, not assumed from config.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await expandAllSections(page)   // mobile starts every section collapsed
   const first = page.locator('article svg[role="img"]').first()
   await first.waitFor()
   // Assert the precondition FIRST: if emulation ever silently stops working
@@ -191,6 +239,7 @@ test.describe('with motion enabled', () => {
     // the real, current state explicitly via emulateMedia + matchMedia.
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.goto('/')
+    await expandAllSections(page)   // mobile starts every section collapsed
     const first = page.locator('article svg[role="img"]').first()
     await first.waitFor()
     expect(await page.evaluate(() =>

@@ -1,6 +1,6 @@
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from './types'
-import { chartPoints } from './selectors'
+import { chartPoints, lineName } from './selectors'
 
 const site = assertSiteData(siteEdge)
 const NOW = new Date('2026-07-18T00:00:00Z')
@@ -28,4 +28,24 @@ test('range cutoff filters points', () => {
   const none = chartPoints(site, chart('cash_rate'), '1y', 'melbourne',
                            new Date('2028-01-01T00:00:00Z'))
   expect(none.lines[0]?.pts ?? []).toHaveLength(0)
+})
+
+// Design review P1-labels: machine-vocabulary legends ("credit housing mom")
+// get a display-label map instead of a raw underscore-strip.
+describe('lineName', () => {
+  test('uses the metric_labels map when the metric is covered', () => {
+    expect(lineName('cash_rate', { cash_rate: 'Cash rate' })).toBe('Cash rate')
+  })
+
+  test('falls back to underscore-stripping humanisation when uncovered or absent', () => {
+    expect(lineName('rent_3br_house', { cash_rate: 'Cash rate' })).toBe('rent 3br house')
+    expect(lineName('rent_3br_house')).toBe('rent 3br house')
+  })
+})
+
+test('chartPoints names lines via site.metric_labels when present', () => {
+  const labelled = assertSiteData({ ...siteEdge as object,
+    metric_labels: { cash_rate: 'Cash rate target' } })
+  const { lines } = chartPoints(labelled, chart('cash_rate'), 'all', 'melbourne', NOW)
+  expect(lines[0].name).toBe('Cash rate target')
 })

@@ -43,7 +43,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   // chart's primary metric where identifiable, else the first unit found.
   const chartMetrics = chart.metrics ?? (entry ? Object.keys(entry.units) : [])
   const primaryUnits = entry
-    ? Object.fromEntries(chartMetrics.map(m => [lineName(m), entry.units[m] ?? '']))
+    ? Object.fromEntries(chartMetrics.map(m => [lineName(m, site.metric_labels), entry.units[m] ?? '']))
     : {}
   const unit = entry ? (entry.units[chartMetrics[0]] ?? Object.values(entry.units)[0] ?? '') : ''
   const st = entry ? staleness(entry, now) : null
