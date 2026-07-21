@@ -1,4 +1,4 @@
-import { buildChart, nearest, atTime } from './chartMath'
+import { buildChart, nearest, atTime, fmtTickLabel } from './chartMath'
 
 const lines = [{ name: 'a', pts: [
   { date: '2026-01-31', region: 'vic', metric: 'm', value: 10 },
@@ -94,6 +94,19 @@ test('atTime omits a line with no point at the hovered date', () => {
   const r = atTime(b.flat, feb)
   expect(r.points.map(p => p.name)).toEqual(['a'])
   expect(r.points[0].value).toBe(2)
+})
+
+test('fmtTickLabel: compact notation for large non-percent values', () => {
+  expect(fmtTickLabel(1_000_000, false)).toBe('1M')
+  expect(fmtTickLabel(950_000, false)).toBe('950k')
+  expect(fmtTickLabel(8_000, false)).toBe('8,000')
+  expect(fmtTickLabel(4.35, true)).toBe('4.35%')
+})
+
+test('fmtTickLabel: keeps one decimal only when needed, and handles negatives', () => {
+  expect(fmtTickLabel(1_500_000, false)).toBe('1.5M')
+  expect(fmtTickLabel(-1_000_000, false)).toBe('-1M')
+  expect(fmtTickLabel(10_000, false)).toBe('10k')
 })
 
 test('atTime snaps to the nearest date before grouping', () => {

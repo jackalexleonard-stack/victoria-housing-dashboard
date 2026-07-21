@@ -19,6 +19,21 @@ const T = (iso: string) => Date.parse(`${iso.slice(0, 10)}T00:00:00Z`)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+// Tick-label formatting for the y/y2 axes. Percent charts are already
+// suffixed and compact by nature (never exceeds a couple of digits), so they
+// pass through unchanged. Non-percent values get compact notation once they
+// grow past the point where a full `toLocaleString` would blow out the fixed
+// 44px left margin (e.g. `1,000,000` clips to `00,000`) — millions collapse
+// to `1M`/`1.5M`, tens-of-thousands-and-up collapse to whole `k`, and
+// anything smaller keeps today's comma-grouped formatting.
+export function fmtTickLabel(v: number, percent: boolean): string {
+  if (percent) return `${+v.toFixed(2)}%`
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
+  if (abs >= 10_000) return `${Math.round(v / 1_000)}k`
+  return v.toLocaleString('en-AU')
+}
+
 function fitY(pts: FlatPt[], range: [number, number]) {
   const [v0, v1] = extent(pts, p => p.value)
   return scaleLinear([Math.min(v0 ?? 0, 0) === 0 && (v0 ?? 0) >= 0 ? 0 : (v0 ?? 0), v1 ?? 1],
@@ -65,10 +80,9 @@ export function buildChart(
       axis: (y2 && y2Names.has(l.name)) ? 'y2' as const : 'y' as const,
     }
   })
-  const yTicks = y.ticks(4).map(v => ({
-    y: y(v), label: opts.percent ? `${+v.toFixed(2)}%` : v.toLocaleString('en-AU') }))
+  const yTicks = y.ticks(4).map(v => ({ y: y(v), label: fmtTickLabel(v, opts.percent) }))
   const y2Ticks = y2 ? y2.ticks(4).map(v => ({
-    y: y2(v), label: opts.y2Percent ? `${+v.toFixed(2)}%` : v.toLocaleString('en-AU') })) : []
+    y: y2(v), label: fmtTickLabel(v, !!opts.y2Percent) })) : []
   const xTicks = x.ticks(4).map(d => ({
     x: x(d), label: `${MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}` }))
   flat.sort((a, b) => a.t - b.t)

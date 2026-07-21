@@ -13,8 +13,12 @@ export function DataTable({ lines, unit, unitByName }: {
         <div className="max-h-64 overflow-auto mt-1">
           <table className="num text-xs w-full">
             <thead><tr>
-              <th className="text-left font-medium p-1">Date</th>
-              {lines.map(l => <th key={l.name} className="text-right font-medium p-1">{l.name}</th>)}
+              <th className="text-left font-medium p-1 sticky top-0 z-10 bg-card">Date</th>
+              {lines.map(l => (
+                <th key={l.name} className="text-right font-medium p-1 sticky top-0 z-10 bg-card">
+                  {l.name}
+                </th>
+              ))}
             </tr></thead>
             <tbody>
               {dates.map(d => (
