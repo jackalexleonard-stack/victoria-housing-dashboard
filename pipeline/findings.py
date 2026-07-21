@@ -41,14 +41,16 @@ _MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
 
 CHARTS: list[dict] = [
     # --- prices ---
+    # mean_price leads the section (full-width slot): it carries the longest
+    # live history; the HVI daily worms follow (user request 2026-07-21).
+    _c("mean_price", "prices", "Mean dwelling price", "au_dwelling_stock",
+       metrics=["mean_price"], region_mode="geo", noun="The mean dwelling price"),
     _c("hvi_melbourne", "prices", "Cotality HVI — Melbourne", "vic_hvi",
        metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True,
        note=_HVI_NOTE),
     _c("hvi_australia", "prices", "Cotality HVI — 5 capitals", "au_hvi",
        metrics=["hvi_index"], region_mode="fixed:australia", annotate=True,
        note=_HVI_NOTE),
-    _c("mean_price", "prices", "Mean dwelling price", "au_dwelling_stock",
-       metrics=["mean_price"], region_mode="geo", noun="The mean dwelling price"),
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
        region_mode="geo", noun="The median house price",
        primary="median_house_price"),
