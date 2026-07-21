@@ -374,6 +374,14 @@ def _resample_last(s: pd.Series, rule: str) -> pd.Series:
     period's calendar end-timestamp is the same operation, minus the private
     binning path that emits the warning — same values, same index dtype,
     same dates, for every rule this registry currently uses.
+
+    PRECONDITION: expects a chronologically sorted index. ``groupby(...)
+    .last()`` picks the last value *by row order* within each period,
+    while ``.resample().last()`` picks the last value *by timestamp* —
+    the two are equivalent only when the index is already ascending.
+    Callers go through ``_series_values``, which guarantees it (sorts by
+    date before returning), so this holds for every caller in this file.
+    Do not call this directly on an unsorted series.
     """
     period_alias = rule[:-1] if rule.endswith("E") else rule  # "ME" -> "M"
     grouped = s.groupby(s.index.to_period(period_alias)).last()

@@ -308,7 +308,7 @@ def _hvi(chart, load_series, load_meta):
     # "Melbourne"/"Capital-city" + " dwelling values" phrase that could drift
     # from what the rest of the UI calls this series.
     subject = SERIES_SHORT_NAMES.get(chart["id"], chart["title"])
-    verb = "rose" if v > 0 else ("fell" if v < 0 else "held flat,")
+    verb = "rose" if v > 0 else "fell"
     yoy = df[(df["metric"] == "hvi_change_yoy") & (df["region"] == region)]
     tail = ""
     if len(yoy):

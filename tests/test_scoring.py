@@ -1,11 +1,12 @@
 import json
+import warnings
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from pipeline import scoring
+from pipeline import export, scoring
 
 TODAY = date(2026, 7, 17)
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -244,3 +245,91 @@ def test_tile_chart_matches_the_cross_language_parity_fixture():
     each other."""
     fixture = json.loads((REPO_ROOT / "pipeline" / "tile_chart.json").read_text())
     assert scoring.TILE_CHART == fixture
+
+
+# ---------------------------------------------------------------------------
+# _resample_last equivalence guard (D3 review) — _resample_last replaced
+# `s.resample("ME").last().dropna()` to kill a pandas 2.2.3 + NumPy 2.x
+# DeprecationWarning (root cause documented on _resample_last's own
+# docstring). That replacement was proven byte-identical during development
+# but the proof was never committed as a test. This locks it in, mirroring
+# test_findings.py::test_world_summary_unchanged_against_real_committed_data's
+# own old-vs-new pattern: run both expressions and assert they agree.
+# ---------------------------------------------------------------------------
+def _old_resample_last(s: pd.Series, rule: str) -> pd.Series:
+    """The exact PRE-FIX expression `_resample_last` replaced. On this
+    repo's pinned pandas==2.2.3 + NumPy 2.x combination it emits a
+    DeprecationWarning from pandas' own private binning internals
+    (`DatetimeIndexResampler._adjust_bin_edges` — see
+    scoring._resample_last's docstring for the full root-cause trace).
+    Suppressed HERE ONLY, scoped to this one call, so the rest of the
+    suite stays at 0 warnings."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return s.resample(rule).last().dropna()
+
+
+def _dt_series(dates, values):
+    idx = pd.to_datetime(dates)
+    idx.name = "date"
+    return pd.Series(values, index=idx, dtype="float64", name="value")
+
+
+# One case per edge the D3 review named explicitly.
+SYNTHETIC_RESAMPLE_CASES = {
+    "month_boundary_values": (
+        ["2026-01-30", "2026-01-31", "2026-02-01", "2026-02-28",
+         "2026-03-01", "2026-03-31"],
+        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    ),
+    "wholly_missing_gap_month": (
+        ["2026-01-15", "2026-01-31", "2026-03-01", "2026-03-15"],  # no Feb row at all
+        [1.0, 2.0, 3.0, 4.0],
+    ),
+    "chronologically_last_value_is_nan": (
+        ["2026-01-10", "2026-01-31", "2026-02-15"],  # Jan's last-by-date row is NaN
+        [1.0, float("nan"), 2.0],
+    ),
+    "all_nan_month": (
+        ["2026-01-10", "2026-01-20", "2026-01-31", "2026-02-15"],
+        [float("nan"), float("nan"), float("nan"), 5.0],
+    ),
+    "single_point_series": (
+        ["2026-01-15"],
+        [42.0],
+    ),
+}
+
+
+@pytest.mark.parametrize("dates, values", list(SYNTHETIC_RESAMPLE_CASES.values()),
+                         ids=list(SYNTHETIC_RESAMPLE_CASES.keys()))
+def test_resample_last_matches_old_resample_expression_on_synthetic_edges(dates, values):
+    """_resample_last(s, "ME") must stay byte-identical (values, index,
+    dtype) to the OLD `s.resample("ME").last().dropna()` expression it
+    replaced. check_freq=False: `.index.freq` is a pandas metadata cache
+    that differs between the two code paths once a dropna() removes an
+    entry (confirmed by grep that nothing downstream — pipeline or web —
+    ever reads `.index.freq`), so it is out of scope for the equivalence
+    this guard protects; values/index/dtype are checked in full."""
+    s = _dt_series(dates, values)
+    new = scoring._resample_last(s, "ME")
+    old = _old_resample_last(s, "ME")
+    pd.testing.assert_series_equal(new, old, check_freq=False)
+
+
+def test_resample_last_matches_old_resample_expression_on_real_committed_data():
+    """Same proof, over the real committed data/ directory, loaded via the
+    exact export.load_series -> scoring._series_values path score_metric
+    itself uses to feed hero picks / lead finding / section movers /
+    what's-new scores. au_hvi and vic_hvi are the only two series this
+    repo actually resamples (both HVI registry entries, resample="ME")."""
+    for sid, metric, region in [
+        ("au_hvi", "hvi_index", "australia"),
+        ("vic_hvi", "hvi_index", "melbourne"),
+    ]:
+        df = scoring._series_values(export.load_series, sid, metric, region)
+        assert not df.empty, f"expected real committed data for {sid}"
+        s = df.set_index("date")["value"]
+        new = scoring._resample_last(s, "ME")
+        old = _old_resample_last(s, "ME")
+        pd.testing.assert_series_equal(new, old, check_freq=False)
