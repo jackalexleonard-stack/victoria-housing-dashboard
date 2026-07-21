@@ -1,3 +1,14 @@
+// Minus-sign glyph choice (design review d3): the board's mock uses a true
+// minus "−" (U+2212), but this codebase's ASCII "-" is used consistently —
+// by this file's own `sign()` helper below (every tile/delta in the app),
+// by every existing test's string literals, and by fmtUnit's money-branch
+// fix below — everywhere a negative number is rendered. Swapping to U+2212
+// would mean touching all of those call sites for one glyph with no
+// functional difference (Inter renders both cleanly; tabular-nums doesn't
+// require U+2212 specifically), for a purely cosmetic win. Kept as ASCII
+// "-" so "sign precedes symbol" is fixed everywhere with no double-sign risk
+// and no glyph inconsistency between old and new code — disclosed per the
+// task brief's explicit "either is defensible" allowance.
 const n0 = (v: number) => v.toLocaleString('en-AU', { maximumFractionDigits: 0 })
 const sign = (d: number, s: string) => (d >= 0 ? '+' : '-') + s
 
@@ -55,15 +66,25 @@ export function fmtUnit(v: number, unit: string): string {
   // and drops unnecessary trailing zeros, matching Python's round+strip.
   if (u === 'percent') return `${v.toLocaleString('en-AU', { maximumFractionDigits: 2 })}%`
   if (u === 'index') return v.toLocaleString('en-AU', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-  if (u === 'aud') return `$${n0(v)}`
-  if (u === 'aud_million') return `$${n0(v)}m`
-  if (u === 'aud_per_week') return `$${n0(v)}/wk`
+  // Money branches: the sign must precede the currency symbol ("-$2,400",
+  // never "$-2,400" — design review d3, broadened by D1(f)'s field report to
+  // cover every money-shaped branch, not just the three AUD ones). n0/
+  // toFixed below only ever see the absolute value; the '-' is prepended by
+  // hand so it always lands in front of the symbol, not the digits.
+  if (u === 'aud') return v < 0 ? `-$${n0(-v)}` : `$${n0(v)}`
+  if (u === 'aud_million') return v < 0 ? `-$${n0(-v)}m` : `$${n0(v)}m`
+  if (u === 'aud_per_week') return v < 0 ? `-$${n0(-v)}/wk` : `$${n0(v)}/wk`
   if (u === 'years') return `${v.toFixed(1)} yrs`
-  if (u === 'usd_per_aud') {  // exchange rate, not a money amount
+  if (u === 'usd_per_aud') {  // exchange rate, not a money amount (no $ symbol
+    // to place the sign in front of — toLocaleString's own leading '-' on a
+    // bare number is already correctly ordered, unlike the $-prefixed units
+    // above).
     return v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   if (u.startsWith('usd')) {  // any USD-per-commodity money unit
-    return Math.abs(v) < 10 ? `US$${v.toFixed(2)}` : `US$${n0(v)}`
+    const abs = Math.abs(v)
+    const body = abs < 10 ? abs.toFixed(2) : n0(abs)
+    return v < 0 ? `-US$${body}` : `US$${body}`
   }
   if (['dwellings', 'applications', 'number', 'persons', 'lots'].includes(u)) return n0(v)
   return v.toLocaleString('en-AU', { maximumFractionDigits: 2 })

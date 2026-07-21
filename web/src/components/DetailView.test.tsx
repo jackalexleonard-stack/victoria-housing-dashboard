@@ -76,6 +76,27 @@ test('failed series surfaces the raw source error', () => {
   expect(screen.getByText('HTTPError')).toBeInTheDocument()
 })
 
+// --- design review d2: per-chart FRED source_name override ---
+
+test('a chart-level source_name override shows in the modal instead of the series’ shared meta.source_name', () => {
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'brent_test', section: 'world', title: 'Brent crude',
+    series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+    percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
+    source_name: 'FRED — Brent crude (DCOILBRENTEU)',
+  })
+  mutated.findings.brent_test = 'f'
+  const s = assertSiteData(mutated)
+  const brentChart = s.charts.find(c => c.id === 'brent_test')!
+  render(<DetailView site={s} chart={brentChart} finding="f"
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  const link = screen.getByText('FRED — Brent crude (DCOILBRENTEU)')
+  expect(link).toHaveAttribute('href', 'https://rba.gov.au')
+  expect(screen.queryByText('RBA F1.1')).not.toBeInTheDocument()
+})
+
 test('chart note renders as a muted line near the provenance block', () => {
   renderView()
   expect(screen.getByText('Test note.')).toBeInTheDocument()

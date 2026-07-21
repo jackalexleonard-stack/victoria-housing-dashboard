@@ -151,10 +151,14 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
       {lines.length > 0 &&
         <DataTable lines={[...lines, ...cmpLines]} unit={unit} unitByName={unitByName} />}
       <p className="flex flex-wrap items-center gap-2 text-xs text-faint mt-3">
+        {/* Design review d2: prefer the chart's own per-series source
+            override (the three FRED world charts, which all share intl_fred's
+            single meta.source_name) so the modal cites the right instrument
+            instead of the combined feed string on every one of the three. */}
         {entry?.meta.source_url &&
           <a href={entry.meta.source_url} target="_blank" rel="noreferrer"
              className="underline underline-offset-2 hover:text-blue">
-            {entry.meta.source_name}</a>}
+            {chart.source_name ?? entry.meta.source_name}</a>}
         {st && (st.kind === 'fresh' ? <span>{st.label}</span>
           : <Chip kind={st.kind === 'ageing' ? 'warn' : 'bad'}>{st.label}</Chip>)}
         {entry && <span>fetched {ago(entry.meta.last_fetched, now)}</span>}

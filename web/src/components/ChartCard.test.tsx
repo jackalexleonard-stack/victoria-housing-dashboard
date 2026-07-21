@@ -80,6 +80,27 @@ test('the caption row carries a short source token, not the full source title', 
   expect(screen.queryByText('RBA F1.1')).not.toBeInTheDocument()
 })
 
+// --- design review d2: per-chart FRED source_name override ---
+
+test('a chart-level source_name override wins over the series’ shared meta.source_name in the caption token', () => {
+  // Reuses au_cash_rate's series entry (meta.source_name "RBA F1.1", which
+  // would token to "RBA") purely as a data host — the point is proving the
+  // chart-level override wins, not modelling a real FRED series here.
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'brent_test', section: 'world', title: 'Brent crude',
+    series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+    percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
+    source_name: 'FRED — Brent crude (DCOILBRENTEU)',
+  })
+  mutated.findings.brent_test = 'f'
+  const s = assertSiteData(mutated)
+  render(<ChartCard site={s} chart={s.charts.find(c => c.id === 'brent_test')!}
+                    finding="f" range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  expect(screen.getByText('FRED')).toBeInTheDocument()
+  expect(screen.queryByText('RBA')).not.toBeInTheDocument()
+})
+
 test('title, source token, status and table toggle all sit in one row', () => {
   const { container } = render(
     <ChartCard site={site} chart={chart('cash_rate')} finding="f"

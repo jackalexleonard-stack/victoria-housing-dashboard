@@ -91,16 +91,49 @@ describe('touch targets (design review P1-touch)', () => {
     expect(toolbarRadio.className).not.toMatch(/pointer-coarse:/)
   })
 
-  test('section chips enlarge their hit area via padding/negative margin, keeping the visible pill unchanged', () => {
+  test('section chips enlarge their hit area via padding/negative margin, keeping the visible tab unchanged', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
                       activeSection="today" onFilters={() => {}} onJump={() => {}} />)
     const chip = screen.getByRole('button', { name: 'Jump to Prices' })
     // The hit-box classes live on the button; visual sizing moved to the
-    // inner span, so the button itself carries no px-3/py-1 pill styling.
+    // inner span, so the button itself carries no px-1/py-1 tab styling.
     expect(chip).toHaveClass('pointer-coarse:p-1.5', 'pointer-coarse:-m-1.5')
     expect(chip.className).not.toMatch(/\btext-xs\b/)
-    const pill = within(chip).getByText('Prices')
-    expect(pill).toHaveClass('px-3', 'py-1', 'text-xs', 'rounded-full', 'border-line')
-    expect(pill).toHaveClass('pointer-coarse:py-2')   // the only coarse-pointer growth
+    const tab = within(chip).getByText('Prices')
+    expect(tab).toHaveClass('px-1', 'py-1', 'text-xs', 'border-b-2', 'border-transparent')
+    expect(tab).toHaveClass('pointer-coarse:py-2')   // the only coarse-pointer growth
+  })
+})
+
+// Design review P2-a (narrowed): the scrollspy nav restyles from a filled/
+// outlined pill to an underlined text-tab — pale-tint/outline pills are now
+// exclusively status/provenance (staleness/scope Chips, the masthead), so a
+// control no longer shares their silhouette.
+describe('scrollspy de-pill (design review P2-a)', () => {
+  test('idle and active tabs carry no rounded-full/border-pill classes', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+    const idle = within(screen.getByRole('button', { name: 'Jump to Today' })).getByText('Today')
+    const active = within(screen.getByRole('button', { name: 'Jump to Prices' })).getByText('Prices')
+    for (const tab of [idle, active]) {
+      expect(tab.className).not.toMatch(/rounded-full/)
+      expect(tab.className).not.toMatch(/\bborder-line\b/)
+    }
+  })
+
+  test('active tab uses a blue underline + medium weight, not a filled pill', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+    const active = within(screen.getByRole('button', { name: 'Jump to Prices' })).getByText('Prices')
+    expect(active).toHaveClass('border-b-2', 'border-blue', 'text-blue', 'font-medium')
+    expect(active.className).not.toMatch(/bg-blue/)
+  })
+
+  test('idle tabs get a transparent underline (reserves the same space, no visible border)', () => {
+    render(<FilterBar range="5y" geo="melbourne" sections={sections}
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+    const idle = within(screen.getByRole('button', { name: 'Jump to Today' })).getByText('Today')
+    expect(idle).toHaveClass('border-b-2', 'border-transparent', 'text-muted')
+    expect(idle.className).not.toMatch(/\btext-blue\b|font-medium/)
   })
 })

@@ -69,6 +69,39 @@ test('fmtUnit covers the full real unit vocabulary', () => {
   expect(fmtUnit(1.23456, 'mystery_unit')).toBe('1.23')
 })
 
+// Design review d3 (broadened by D1(f)'s field report to every money-shaped
+// fmtUnit branch, not just the three AUD ones): a negative amount must sign
+// BEFORE the currency symbol ("-$2,400"), never embed it in the digits after
+// the symbol ("$-2,400").
+test('fmtUnit signs money branches before the symbol, never "$-N"/"US$-N"', () => {
+  expect(fmtUnit(-2400, 'aud')).toBe('-$2,400')
+  expect(fmtUnit(-2400, 'AUD')).toBe('-$2,400')
+  expect(fmtUnit(2400, 'aud')).toBe('$2,400')
+  expect(fmtUnit(-16808.9, 'aud_million')).toBe('-$16,809m')
+  expect(fmtUnit(-580, 'AUD/week')).toBe('-$580/wk')
+  // usd-prefixed commodity units (D1(f)'s field report: the World tiles/
+  // DetailView stat blocks render "US$-7.80"/"US$-8.50" today).
+  expect(fmtUnit(-7.8, 'usd_per_barrel')).toBe('-US$7.80')
+  expect(fmtUnit(-8.5, 'USD/m3')).toBe('-US$8.50')
+  expect(fmtUnit(-101, 'USD/dmtu')).toBe('-US$101')
+  expect(fmtUnit(101, 'USD/dmtu')).toBe('US$101')
+  // Never a bare '-' embedded after the symbol.
+  expect(fmtUnit(-2400, 'aud')).not.toMatch(/\$-/)
+  expect(fmtUnit(-7.8, 'usd_per_barrel')).not.toMatch(/\$-/)
+})
+
+// The DetailView/WorldTiles delta pattern — fmtUnit(delta, unit).replace(/^/,
+// latest >= prev ? '+' : '') — must never double up a sign: a negative delta
+// already carries fmtUnit's own '-', and the replace only ever prepends
+// nothing (decrease) or '+' (increase/equal), so exactly one sign survives.
+test('the DetailView/WorldTiles delta pattern never double-signs a negative money delta', () => {
+  const decreasing = fmtUnit(-7.8, 'usd_per_barrel').replace(/^/, '')  // latest < prev
+  expect(decreasing).toBe('-US$7.80')
+  expect(decreasing.match(/-/g)?.length).toBe(1)
+  const increasing = fmtUnit(120, 'aud').replace(/^/, '+')             // latest >= prev
+  expect(increasing).toBe('+$120')
+})
+
 test('zero deltas keep the + sign (python :+ parity)', () => {
   expect(TILE_FMT.cash_rate.delta(0)).toBe('+0.00 pp')
   expect(TILE_FMT.vic_approvals.delta(0)).toBe('+0')

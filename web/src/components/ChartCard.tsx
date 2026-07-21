@@ -162,10 +162,16 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // reads as a fake result, and repeating it again in the body/chip is the
   // "triple-repeat" the review calls out.
   const headline = failedEmpty ? chart.title : finding
+  // Design review d2: prefer the chart's own per-series source override
+  // (the three FRED world charts) over the series' one shared
+  // meta.source_name — shortSource() collapses either to the same "FRED"
+  // token here, so this only changes behaviour where a chart's own name
+  // actually differs (the modal, see DetailView.tsx).
   const sourceToken = entry?.meta.source_url && (
     <a href={entry.meta.source_url} target="_blank" rel="noreferrer"
        className="hover:text-blue underline-offset-2"
-       onClick={e => e.stopPropagation()}>{shortSource(entry.meta.source_name)}</a>
+       onClick={e => e.stopPropagation()}>
+      {shortSource(chart.source_name ?? entry.meta.source_name)}</a>
   )
   const statusChip = st && (
     quietOutage && (st.kind === 'stale' || st.kind === 'failed')

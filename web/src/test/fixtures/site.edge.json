@@ -17,7 +17,7 @@
     "median_rent_by_type": "The median 3-bedroom-house rent held at $580/wk in Mar qtr 2026",
     "lending": "Owner-occupier lending rose 2.0% to $1,020m in Jun 2026",
     "mortgage_rates": "The average new mortgage rate held at 6.10% in Jun 2026",
-    "hvi_melbourne": "Melbourne dwelling values rose 0.3% in Jun 2026 (+2.1% over the year)"
+    "hvi_melbourne": "Melb dwelling values rose 0.3% in Jun 2026 (+2.1% over the year)"
   },
   "series": {
     "au_cash_rate": {"status":"ok","meta":{"source_name":"RBA F1.1","source_url":"https://rba.gov.au","frequency":"monthly","last_fetched":"2026-07-17T06:00:00Z","last_changed":"2026-07-15T00:00:00Z","last_data_date":"2026-06-30","error":null,"cadence_days":31},"units":{"cash_rate":"percent"},"points":[{"date":"2026-02-28","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-03-31","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-04-30","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-05-31","region":"australia","metric":"cash_rate","value":3.85},{"date":"2026-06-30","region":"australia","metric":"cash_rate","value":3.85}]},

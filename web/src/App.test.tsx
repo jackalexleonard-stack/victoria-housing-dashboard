@@ -424,6 +424,43 @@ describe('World KPI tile row (D1f)', () => {
   })
 })
 
+// --- D2(e): dangling last card spans full width ---
+
+describe('trailing card grid (D2e)', () => {
+  test('an even-remainder section (fixture Money: 3 cards) does not dangle its last card', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const articles = within(section).getAllByRole('article')
+    expect(articles).toHaveLength(3)   // cash_rate, lending, mortgage_rates
+    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // the lead card
+    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // last, but pairs evenly
+  })
+
+  test('an odd-remainder section (4 cards) spans the dangling last card full width', async () => {
+    history.replaceState(null, '', '/')
+    const mutated = JSON.parse(JSON.stringify(siteEdge))
+    mutated.charts.push({
+      id: 'credit', section: 'money', title: 'Housing credit growth',
+      series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+      percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
+    })
+    mutated.findings.credit = 'f'
+    mockFetch(mutated)
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const articles = within(section).getAllByRole('article')
+    expect(articles).toHaveLength(4)
+    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')       // the lead card
+    expect(articles[1].parentElement).not.toHaveClass('sm:col-span-2')
+    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')
+    expect(articles[3].parentElement).toHaveClass('sm:col-span-2')       // the dangling last card
+  })
+})
+
 // --- P1-outage: hoisted section notice + quiet per-card chips ---
 
 describe('shared-outage section notice', () => {

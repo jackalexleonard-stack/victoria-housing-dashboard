@@ -95,27 +95,34 @@ export function FilterBar({ range, geo, sections, activeSection, onFilters, onJu
         </dialog>
       </div>
       <div className="flex gap-1 overflow-x-auto mt-2" role="group" aria-label="Jump to section">
-        {/* Design review P1-touch: the sticky bar's own height must not
-            grow (the page's problem is too little content per screen, not
-            too much chrome) — so the hit area grows via the classic
-            padding + equal-and-opposite negative-margin technique instead
-            of a bigger visible pill. The outer <button> is the invisible
-            hit-box: its padding extends the clickable/tappable region
-            (padding is part of an element's hit-tested box regardless of
-            what a negative margin does to surrounding layout) while the
-            negative margin cancels that padding's footprint, so the row's
-            rendered height still comes from the ~34-36px visual pill
-            (py-2 on coarse pointers, up from py-1) carried by the inner
-            span, not the 44px+ hit box the button itself occupies. */}
+        {/* Design review P2-a (narrowed): restyled from a filled/outlined
+            pill to an underlined text-tab — pale-tint/outline pills are now
+            exclusively status/provenance chips (Chip.tsx, staleness/scope),
+            so a control (this scrollspy nav) no longer shares their
+            silhouette. Active mirrors the Segmented control's own active
+            language (text-blue font-medium) with a bottom border standing
+            in for the filled bg-blue/10 pill.
+            P1-touch: the sticky bar's own height must not grow (the page's
+            problem is too little content per screen, not too much chrome)
+            — so the hit area still grows via the classic padding +
+            equal-and-opposite negative-margin technique instead of a bigger
+            visible tab. The outer <button> is the invisible hit-box: its
+            padding extends the clickable/tappable region (padding is part
+            of an element's hit-tested box regardless of what a negative
+            margin does to surrounding layout) while the negative margin
+            cancels that padding's footprint, so the row's rendered height
+            still comes from the inner span's visual tab (py-2 on coarse
+            pointers, up from py-1), not the 44px+ hit box the button itself
+            occupies. */}
         {sections.map(([id, label]) => (
           <button key={id} type="button" onClick={() => onJump(id)}
                   aria-current={id === activeSection ? 'true' : undefined}
                   aria-label={`Jump to ${label}`}
-                  className="rounded-full pointer-coarse:p-1.5 pointer-coarse:-m-1.5">
-            <span className={`block px-3 py-1 pointer-coarse:py-2 text-xs whitespace-nowrap rounded-full border
+                  className="pointer-coarse:p-1.5 pointer-coarse:-m-1.5">
+            <span className={`block px-1 py-1 pointer-coarse:py-2 text-xs whitespace-nowrap border-b-2
                       ${id === activeSection
                         ? 'border-blue text-blue font-medium'
-                        : 'border-line text-muted hover:text-ink'}`}>
+                        : 'border-transparent text-muted hover:text-ink'}`}>
               {label}
             </span>
           </button>

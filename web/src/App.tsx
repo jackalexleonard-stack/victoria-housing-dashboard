@@ -255,13 +255,23 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   <WorldTiles site={site} charts={charts} now={now} onOpen={openDetail} />
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-4">
-                    {charts.map((c, i) => (
-                      <div key={c.id} className={i === 0 ? 'sm:col-span-2' : ''}>
-                        <ChartCard site={site} chart={c} finding={site.findings[c.id]}
-                                   range={state.range} geo={state.geo} now={now}
-                                   onOpen={openDetail} quietOutage={!!outageNotice} />
-                      </div>
-                    ))}
+                    {charts.map((c, i) => {
+                      // D2(e): the first card always spans full width (the
+                      // section's lead chart); everything else pairs up
+                      // 2-per-row. When the remaining count (charts.length -
+                      // 1) is odd, the LAST card is left alone in its own row
+                      // with the right half of the grid empty — span it full
+                      // width too instead of leaving it dangling.
+                      const dangling = i === charts.length - 1 &&
+                        (charts.length - 1) % 2 === 1
+                      return (
+                        <div key={c.id} className={i === 0 || dangling ? 'sm:col-span-2' : ''}>
+                          <ChartCard site={site} chart={c} finding={site.findings[c.id]}
+                                     range={state.range} geo={state.geo} now={now}
+                                     onOpen={openDetail} quietOutage={!!outageNotice} />
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </>

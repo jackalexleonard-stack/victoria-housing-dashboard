@@ -21,6 +21,12 @@ export interface ChartSpec {
   // (credit, Accord) keep a secondary series set there. Optional: older
   // fixtures/exports without it stay valid.
   modal_metrics?: string[] | null
+  // Per-chart override of the series' shared meta.source_name (design
+  // review d2): the three FRED world charts (brent/aud_usd/ust10) share one
+  // series_id (intl_fred), and thus one meta.source_name, but each is a
+  // different instrument — this field lets each chart cite its own. Falls
+  // back to entry.meta.source_name everywhere when absent/null.
+  source_name?: string | null
 }
 
 export interface HeroTile {

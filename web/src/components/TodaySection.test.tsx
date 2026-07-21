@@ -43,7 +43,7 @@ test('two secondary finding cards render the next hero picks, excluding the lead
   const headings = within(secondaries).getAllByRole('heading', { level: 3 })
   expect(headings).toHaveLength(2)
   expect(headings[0]).toHaveTextContent('The cash rate has held at 3.85% since Jan 2026')
-  expect(headings[1]).toHaveTextContent(/Melbourne dwelling values rose 0.3%/)
+  expect(headings[1]).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   await userEvent.click(headings[0])
   expect(onOpen).toHaveBeenCalledWith('cash_rate')
 })
