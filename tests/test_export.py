@@ -101,6 +101,68 @@ def test_extra_tiles_carries_the_erp_population_stat_tile():
     }]
 
 
+def test_whats_new_tiles_carry_export_time_notability_scores():
+    """P0-2 (complete): the change strip needs a rank signal beyond recency
+    — export the same score_metric notability pick_hero already uses."""
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)
+    whats_new = {t["key"]: t for t in site["whats_new"]}
+    assert "cash_rate" in whats_new
+    tile = whats_new["cash_rate"]
+    assert isinstance(tile["score"], float)
+    expected = export.scoring.score_metric("cash_rate", ls, lm, date(2026, 7, 18))["n"]
+    assert tile["score"] == pytest.approx(expected)
+    # Hero tiles (no changed_at) never carry a score field at all.
+    assert all("score" not in t for t in site["hero"])
+
+
+def test_whats_new_tile_score_is_none_when_unscoreable():
+    frames = {"vic_approvals": _df([
+        ("2026-06-30", "vic", "approvals_dwellings_total", 4400, "dwellings"),
+    ])}
+    metas = {"vic_approvals": {
+        "series_id": "vic_approvals", "source_name": "ABS",
+        "source_url": "https://abs.gov.au", "frequency": "monthly",
+        "status": "ok", "last_fetched": "2026-07-17T06:00:00Z",
+        "last_changed": "2026-07-16T00:00:00Z",
+        "last_data_date": "2026-06-30", "error": None,
+    }}
+    ls = lambda sid: frames.get(sid, _df([]))
+    lm = lambda sid: metas.get(sid, {})
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(metas))
+    export.validate_site(site)
+    whats_new = {t["key"]: t for t in site["whats_new"]}
+    # A single data point renders a tile (value present, delta absent) but
+    # score_metric can't compute notability from one point -> null score,
+    # not a dropped field or a fabricated number.
+    assert "vic_approvals" in whats_new
+    assert whats_new["vic_approvals"]["score"] is None
+
+
+def test_section_summary_quiet_present_and_news_always_false():
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    export.validate_site(site)
+    quiet = site["section_summary_quiet"]
+    assert set(quiet) >= {"prices", "rents", "supply", "money",
+                         "people", "social", "world", "news"}
+    assert quiet["news"] is False
+    # au_cash_rate has real (if quiet-flavoured) data in this fixture -> the
+    # section's own mover chart scores and its summary is a real finding.
+    assert quiet["money"] is False
+    # No people-section series data at all in this fixture -> quiet.
+    assert quiet["people"] is True
+
+
+def test_validate_rejects_non_bool_section_summary_quiet():
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    site["section_summary_quiet"]["money"] = "no"
+    with pytest.raises(ValueError, match="section_summary_quiet"):
+        export.validate_site(site)
+
+
 def test_section_summaries_news_uses_top_story_tag_and_count():
     ls, lm = _loaders()
     items = [

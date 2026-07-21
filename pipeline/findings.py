@@ -504,17 +504,34 @@ def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> str:
 _SUMMARY_SECTIONS = ("prices", "rents", "supply", "money", "people", "social", "world")
 
 
-def build_section_summaries(load_series: Loader, load_meta: Loader,
-                            today: date) -> dict[str, str]:
+def build_section_summaries_full(load_series: Loader, load_meta: Loader,
+                                 today: date) -> tuple[dict[str, str], dict[str, bool]]:
+    """(section_summaries, section_summary_quiet) in one pass — the quiet
+    flag is derived right here, where the _QUIET_SUMMARY/WORLD_QUIET_SUMMARY
+    sentinels are authored, rather than by string-matching the rendered
+    sentence later (design review honesty-override upgrade, T6): the
+    collapsed-section override must not depend on prose staying byte-
+    identical to these two constants."""
     findings_out = build_findings(load_series, load_meta)
     titles = dict(SECTIONS)
-    out: dict[str, str] = {}
+    text: dict[str, str] = {}
+    quiet: dict[str, bool] = {}
     for section_id in _SUMMARY_SECTIONS:
         if section_id == "world":
-            out[section_id] = _world_summary(load_series, findings_out)
+            summary = _world_summary(load_series, findings_out)
+            text[section_id] = summary
+            quiet[section_id] = summary == WORLD_QUIET_SUMMARY
             continue
         mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
-        text = findings_out.get(mover) if mover else None
-        out[section_id] = text if text and text != NO_DATA_FINDING \
+        found = findings_out.get(mover) if mover else None
+        is_quiet = not found or found == NO_DATA_FINDING
+        text[section_id] = found if not is_quiet \
             else _QUIET_SUMMARY.format(title=titles[section_id])
-    return out
+        quiet[section_id] = is_quiet
+    return text, quiet
+
+
+def build_section_summaries(load_series: Loader, load_meta: Loader,
+                            today: date) -> dict[str, str]:
+    text, _ = build_section_summaries_full(load_series, load_meta, today)
+    return text

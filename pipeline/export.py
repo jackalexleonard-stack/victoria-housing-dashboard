@@ -16,7 +16,7 @@ import pandas as pd
 
 from pipeline import scoring
 from pipeline.findings import (CHARTS, SECTIONS, build_findings,
-                               build_metric_labels, build_section_summaries)
+                               build_metric_labels, build_section_summaries_full)
 
 SCHEMA_VERSION = 1
 DATA = Path("data")
@@ -65,7 +65,8 @@ def _series_entry(sid: str, ls: Loader, lm: Loader) -> dict:
     return {"status": status, "meta": out_meta, "units": units, "points": points}
 
 
-def _machine_tile(key: str, ls: Loader, changed_at: Optional[str] = None) -> Optional[dict]:
+def _machine_tile(key: str, ls: Loader, changed_at: Optional[str] = None,
+                  score: Optional[float] = None) -> Optional[dict]:
     v, d, last_date = scoring.tile_value(key, ls)
     if v is None:
         return None
@@ -75,7 +76,11 @@ def _machine_tile(key: str, ls: Loader, changed_at: Optional[str] = None) -> Opt
             "delta_color": spec["delta_color"],
             "last_date": last_date.date().isoformat() if last_date is not None else None}
     if changed_at is not None:
+        # score rides alongside changed_at — both only ever set for
+        # whats_new tiles (design review P0-2: export-time notability so
+        # the "changed this week" strip can rank by score, not just recency).
         tile["changed_at"] = changed_at
+        tile["score"] = score
     return tile
 
 
@@ -103,7 +108,9 @@ def _whats_new(ls: Loader, lm: Loader, today: date, window_days: int = 7) -> lis
     hits.sort(reverse=True)
     out = []
     for lc, key in hits:
-        tile = _machine_tile(key, ls, changed_at=lc)
+        result = scoring.score_metric(key, ls, lm, today)
+        score = result["n"] if result is not None else None
+        tile = _machine_tile(key, ls, changed_at=lc, score=score)
         if tile:
             out.append(tile)
     return out
@@ -184,8 +191,11 @@ def build_site(ls: Loader, lm: Loader, today: date,
                series_ids: Optional[list[str]] = None,
                news_items: Optional[list[dict]] = None) -> dict:
     sids = series_ids if series_ids is not None else repo_series_ids()
-    section_summaries = build_section_summaries(ls, lm, today)
+    section_summaries, section_summary_quiet = build_section_summaries_full(ls, lm, today)
     section_summaries["news"] = _news_section_summary(news_items or [], today)
+    # News uses its own "N stories this week" sentence, never the generic
+    # quiet sentinel — always non-quiet by this mechanism.
+    section_summary_quiet["news"] = False
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -204,6 +214,7 @@ def build_site(ls: Loader, lm: Loader, today: date,
         "extra_tiles": _extra_tiles(ls),
         "metric_labels": build_metric_labels(ls),
         "section_summaries": section_summaries,
+        "section_summary_quiet": section_summary_quiet,
     }
 
 
@@ -286,6 +297,12 @@ def validate_site(site: dict) -> None:
     for sec_id, text in section_summaries.items():
         if not isinstance(text, str) or not text:
             _fail(f"empty section_summary for {sec_id}")
+    section_summary_quiet = site.get("section_summary_quiet")
+    if not isinstance(section_summary_quiet, dict) or not section_summary_quiet:
+        _fail("section_summary_quiet")
+    for sec_id, flag in section_summary_quiet.items():
+        if not isinstance(flag, bool):
+            _fail(f"section_summary_quiet not bool for {sec_id}")
     extra_tiles = site.get("extra_tiles")
     if not isinstance(extra_tiles, list):
         _fail("extra_tiles")

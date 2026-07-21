@@ -277,6 +277,54 @@ def test_section_summaries_world_names_the_biggest_mover():
     assert out["world"] == findings.build_findings(ls, lm)["iron_ore"]
 
 
+# --- T6: section_summary_quiet — the honesty-override flag, derived in
+# Python right where the sentinel strings are authored (not string-matched
+# client-side, which broke the moment prose drifted from the sentinel). ---
+
+def test_section_summaries_full_flags_every_section_quiet_when_no_data():
+    ls, lm = _loaders({})
+    text, quiet = findings.build_section_summaries_full(ls, lm, date(2026, 7, 18))
+    assert set(quiet) == {"prices", "rents", "supply", "money", "people",
+                         "social", "world"}
+    assert all(quiet.values())
+    # The thin wrapper's text output must match the full function's text dict
+    # exactly — no divergence between the two entry points.
+    assert text == findings.build_section_summaries(ls, lm, date(2026, 7, 18))
+
+
+def test_section_summaries_full_flags_a_real_finding_section_not_quiet():
+    rows_cash = [(f"2026-0{m}-28", "australia", "cash_rate", 3.85, "percent")
+                for m in range(1, 6)]
+    rows_cash.append(("2026-06-28", "australia", "cash_rate", 3.60, "percent"))
+    ls, lm = _loaders({"au_cash_rate": _df(rows_cash)},
+                      {"au_cash_rate": {"frequency": "monthly"}})
+    text, quiet = findings.build_section_summaries_full(ls, lm, date(2026, 7, 18))
+    assert quiet["money"] is False
+    assert text["money"] == findings.build_findings(ls, lm)["cash_rate"]
+    # Sections with no scoreable chart at all stay flagged quiet.
+    assert quiet["people"] is True
+
+
+def test_section_summaries_full_world_quiet_vs_real_mover():
+    quiet_ls, quiet_lm = _loaders({
+        "intl_fred": _df([
+            ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
+            ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
+        ]),
+    })
+    _, quiet = findings.build_section_summaries_full(quiet_ls, quiet_lm, date(2026, 7, 18))
+    assert quiet["world"] is True
+
+    mover_ls, mover_lm = _loaders({
+        "intl_commodities": _df([
+            ("2026-06-30", "global", "iron_ore", 95.0, "USD/tonne"),
+            ("2026-07-31", "global", "iron_ore", 115.0, "USD/tonne"),
+        ]),
+    })
+    _, quiet2 = findings.build_section_summaries_full(mover_ls, mover_lm, date(2026, 7, 18))
+    assert quiet2["world"] is False
+
+
 def test_fmt_value_full_unit_vocabulary():
     # Regressions observed live on real data.
     assert findings.fmt_value(3.52655, "percent") == "3.53%"
