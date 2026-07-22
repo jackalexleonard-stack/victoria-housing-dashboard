@@ -213,7 +213,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       <Masthead generatedAt={site.generated_at} failedSources={failedSources} />
       {siteIsStale(site.generated_at, now) && (
         <p role="alert" className="text-sm rounded-md px-3 py-2 mb-3"
-           style={{ background: PALETTE.chip_warn, color: PALETTE.warn }}>
+           style={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
           The daily update hasn't run since {fmtDate(site.generated_at)} — data may be stale.
         </p>
       )}
@@ -241,7 +241,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
                     ChartCard's `quietOutage`). */}
                 {outageNotice && (
                   <p role="status" className="text-sm rounded-md px-3 py-2 mb-3"
-                     style={{ background: PALETTE.chip_warn, color: PALETTE.warn }}>
+                     style={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
                     {outageNotice.token} source unavailable — data to {outageNotice.period}
                   </p>
                 )}

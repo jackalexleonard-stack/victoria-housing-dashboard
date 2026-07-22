@@ -9,7 +9,7 @@ export interface Built {
   y2: ScaleLinear<number, number> | null
   // Whether the axis's OWN underlying data (not the padded/nice-d domain)
   // genuinely straddles zero — drives whether LineChart draws the
-  // #B7B5AC zeroline reference (design review P1-axes: "keep zero baseline
+  // PALETTE.zeroline reference (design review P1-axes: "keep zero baseline
   // ONLY when data genuinely spans zero").
   yZero: boolean; y2Zero: boolean
   paths: { name: string; d: string; color: string; axis: 'y' | 'y2' }[]

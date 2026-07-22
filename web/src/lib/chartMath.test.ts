@@ -1,5 +1,6 @@
 import { buildChart, nearest, atTime, fmtTickLabel, placeAnnotationLabels,
          xExtentOf } from './chartMath'
+import { COLORWAY } from '../theme/tokens'
 
 const lines = [{ name: 'a', pts: [
   { date: '2026-01-31', region: 'vic', metric: 'm', value: 10 },
@@ -8,27 +9,27 @@ const lines = [{ name: 'a', pts: [
 ] }]
 
 test('builds scales, one path per line, sensible ticks', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   expect(b.paths).toHaveLength(1)
-  expect(b.paths[0].color).toBe('#205EA6')
+  expect(b.paths[0].color).toBe(COLORWAY[0])
   expect(b.paths[0].d.startsWith('M')).toBe(true)
   expect(b.yTicks.length).toBeGreaterThanOrEqual(3)
   expect(b.flat).toHaveLength(3)
 })
 
 test('percent charts suffix tick labels', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: true })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: true })
   expect(b.yTicks[0].label.endsWith('%')).toBe(true)
 })
 
 test('nearest snaps to the closest observation', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   const feb = Date.parse('2026-02-20T00:00:00Z')
   expect(nearest(b.flat, feb)!.value).toBe(20)
 })
 
 test('without y2Lines, y2 stays null and y2Ticks stays empty (back-compat)', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   expect(b.y2).toBeNull()
   expect(b.y2Ticks).toEqual([])
   expect(b.paths[0].axis).toBe('y')
@@ -46,7 +47,7 @@ test('y2Lines get their own right-axis scale, sized to their own extent', () => 
     ] },
   ]
   const b = buildChart(twoLines, 400, 200,
-    { colorway: ['#205EA6', '#BC5215'], percent: false, y2Lines: ['b'] })
+    { colorway: [COLORWAY[0], COLORWAY[1]], percent: false, y2Lines: ['b'] })
   expect(b.y2).not.toBeNull()
   expect(b.y2Ticks.length).toBeGreaterThan(0)
   expect(b.paths.find(p => p.name === 'a')!.axis).toBe('y')
@@ -72,7 +73,7 @@ test('atTime returns one point per line at the hovered date, in line order', () 
     ] },
   ]
   const b = buildChart(threeLines, 400, 200,
-    { colorway: ['#205EA6', '#BC5215', '#24837B'], percent: false })
+    { colorway: [COLORWAY[0], COLORWAY[1], COLORWAY[2]], percent: false })
   const jan = Date.parse('2026-01-31T00:00:00Z')
   const r = atTime(b.flat, jan)
   expect(r.points.map(p => p.name)).toEqual(['a', 'b', 'c'])
@@ -90,7 +91,7 @@ test('atTime omits a line with no point at the hovered date', () => {
     ] },
   ]
   const b = buildChart(twoLines, 400, 200,
-    { colorway: ['#205EA6', '#BC5215'], percent: false })
+    { colorway: [COLORWAY[0], COLORWAY[1]], percent: false })
   const feb = Date.parse('2026-02-28T00:00:00Z')
   const r = atTime(b.flat, feb)
   expect(r.points.map(p => p.name)).toEqual(['a'])
@@ -148,7 +149,7 @@ test('placeAnnotationLabels: exact-gap boundary (== minGap) still places; just-u
 })
 
 test('atTime snaps to the nearest date before grouping', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   const near = Date.parse('2026-02-20T00:00:00Z')
   const r = atTime(b.flat, near)
   expect(r.points).toHaveLength(1)
@@ -167,7 +168,7 @@ test('fitY: level series (all positive, far from zero) gets extent + padding, NO
     { date: '2026-01-31', region: 'vic', metric: 'm', value: 900_000 },
     { date: '2026-02-28', region: 'vic', metric: 'm', value: 950_000 },
   ] }]
-  const b = buildChart(highLevel, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(highLevel, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   const [lo, hi] = b.y.domain()
   expect(lo).toBeGreaterThan(700_000)   // nowhere near the old 0 floor
   expect(lo).toBeLessThan(900_000)      // some headroom BELOW the data min
@@ -184,7 +185,7 @@ test('fitY: HVI-style near-top-of-range data gets real headroom above its max (n
     { date: '2026-02-28', region: 'melbourne', metric: 'hvi_index', value: 180.4 },
     { date: '2026-03-31', region: 'melbourne', metric: 'hvi_index', value: 180.62 },
   ] }]
-  const b = buildChart(nearTop, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(nearTop, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   expect(b.y.domain()[1]).toBeGreaterThan(181.5)   // genuine headroom above 180.62
 })
 
@@ -196,7 +197,7 @@ test('fitY: MIN-SPAN guard widens a near-flat percent series instead of auto-zoo
     { date: '2026-02-28', region: 'australia', metric: 'cash_rate', value: 3.85 },
     { date: '2026-03-31', region: 'australia', metric: 'cash_rate', value: 3.85 },
   ] }]
-  const b = buildChart(flatCashRate, 400, 200, { colorway: ['#205EA6'], percent: true })
+  const b = buildChart(flatCashRate, 400, 200, { colorway: [COLORWAY[0]], percent: true })
   const [lo, hi] = b.y.domain()
   expect(hi - lo).toBeGreaterThan(0.8)     // the 1pp floor engaged, not a ~0 span
   expect(lo).toBeLessThan(3.85)
@@ -211,7 +212,7 @@ test('fitY: MIN-SPAN guard scales with magnitude for non-percent near-flat serie
     { date: '2026-01-31', region: 'global', metric: 'aud_usd', value: 0.655 },
     { date: '2026-02-28', region: 'global', metric: 'aud_usd', value: 0.658 },
   ] }]
-  const b = buildChart(audUsd, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(audUsd, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   const [lo, hi] = b.y.domain()
   expect(hi - lo).toBeLessThan(0.1)   // stayed tight to the real (tiny) scale
 })
@@ -221,14 +222,14 @@ test('fitY/spansZero: a series that genuinely straddles zero keeps zero inside i
     { date: '2026-01-31', region: 'vic', metric: 'd', value: -5 },
     { date: '2026-02-28', region: 'vic', metric: 'd', value: 10 },
   ] }]
-  const b = buildChart(deltas, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(deltas, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   expect(b.yZero).toBe(true)
   expect(b.y.domain()[0]).toBeLessThan(0)
   expect(b.y.domain()[1]).toBeGreaterThan(0)
 })
 
 test('atTime: when all lines share exact dates, every returned point matches the header date (no offset, no suffix needed)', () => {
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false })
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false })
   const jan = Date.parse('2026-01-31T00:00:00Z')
   const r = atTime(b.flat, jan)
   const headerDate = new Date(r.t).toISOString().slice(0, 10)
@@ -259,7 +260,7 @@ const mixedCadenceLines = [
 
 test('atTime tolerance: a mixed-cadence pair includes the nearby line with its own date; a far line stays absent', () => {
   const b = buildChart(mixedCadenceLines, 400, 200,
-    { colorway: ['#205EA6', '#BC5215', '#24837B'], percent: false })
+    { colorway: [COLORWAY[0], COLORWAY[1], COLORWAY[2]], percent: false })
   const hoverT = Date.parse('2026-01-15T00:00:00Z')
   const r = atTime(b.flat, hoverT)
   const byName = Object.fromEntries(r.points.map(p => [p.name, p]))
@@ -275,7 +276,7 @@ test('buildChart honours an explicit xDomain instead of computing its own data e
   const explicit: [number, number] = [
     Date.parse('2025-01-01T00:00:00Z'), Date.parse('2027-01-01T00:00:00Z'),
   ]
-  const b = buildChart(lines, 400, 200, { colorway: ['#205EA6'], percent: false,
+  const b = buildChart(lines, 400, 200, { colorway: [COLORWAY[0]], percent: false,
                                            xDomain: explicit })
   const [d0, d1] = b.x.domain()
   expect(d0.getTime()).toBe(explicit[0])

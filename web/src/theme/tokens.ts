@@ -1,18 +1,19 @@
 export const PALETTE = {
-  bg: '#FAF7EF', bg2: '#F2F0E5', card: '#FFFEFA',
-  line: '#E6E4D9', line2: '#DAD8CE',
-  ink: '#1C1B1A', muted: '#575653', faint: '#6F6E69',
-  blue: '#205EA6', clay: '#BC5215',
-  up: '#00824D', down: '#AF3029', warn: '#7A5900',
-  chip_up: '#DDF7CE', chip_down: '#FFE0E0', chip_warn: '#FFEECC',
-  zeroline: '#B7B5AC',
+  bg: '#1A1824', bg2: '#211E2E', card: '#242133',
+  line: '#332F45', line2: '#3D3852',
+  ink: '#ECEAF4', muted: '#B5B1C4', faint: '#918DA3',
+  blue: '#7FA9D6', clay: '#DA8A54',
+  up: '#879A39', down: '#DB7263', warn: '#D0A215',
+  chip_up: '#223420', chip_down: '#3A2224', chip_warn: '#352C1A',
+  chip_up_text: '#A3C68C', chip_down_text: '#F0A296', chip_warn_text: '#D8B45A',
+  zeroline: '#4A4660',
   // Reserved EXCLUSIVELY for de-emphasised context lines (LineChart's
   // `emphasize` prop) — design review P1-emphasis found this same hex
   // misused as a rotating DATA colour in the mortgage chart's 6-line
   // colorway, which meant a genuinely de-emphasised context line and a
   // named data series could accidentally share one colour. Freed from
   // COLORWAY below; a Flexoki hue takes its old rotation slot instead.
-  deemphasis: '#878580',
+  deemphasis: '#6F6A84',
 } as const
 
 // Six-hue rotation for multi-line charts. The 6th slot used to be the same
@@ -25,9 +26,10 @@ export const PALETTE = {
 // remaining Flexoki hue family with no near-neighbour already in rotation
 // (cyan was the other candidate, but the existing teal (#24837B) already
 // reads as cyan-adjacent, so magenta stays more visually distinct from the
-// other five).
-export const COLORWAY = ['#205EA6', '#BC5215', '#24837B',
-                         '#66800B', '#5E409D', '#A02F6F'] as const
+// other five). The six values are now the Flexoki dark-scheme 400 levels
+// of the same six hue families, matched to the ink-violet identity.
+export const COLORWAY = ['#4385BE', '#DA702C', '#3AABB0',
+                         '#879A39', '#8B7EC8', '#CE5D97'] as const
 
 export const FONT_UI = "'Inter Variable', 'Helvetica Neue', Arial, sans-serif"
 export const FONT_DISPLAY = "'Newsreader Variable', Georgia, serif"

@@ -1,12 +1,13 @@
 :root {
-  --bg: #FAF7EF; --bg2: #F2F0E5; --card: #FFFEFA;
-  --line: #E6E4D9; --line2: #DAD8CE;
-  --ink: #1C1B1A; --muted: #575653; --faint: #6F6E69;
-  --blue: #205EA6; --clay: #BC5215;
-  --up: #00824D; --down: #AF3029; --warn: #7A5900;
-  --chip-up: #DDF7CE; --chip-down: #FFE0E0; --chip-warn: #FFEECC;
-  --zeroline: #B7B5AC;
-  --deemphasis: #878580;
+  --bg: #1A1824; --bg2: #211E2E; --card: #242133;
+  --line: #332F45; --line2: #3D3852;
+  --ink: #ECEAF4; --muted: #B5B1C4; --faint: #918DA3;
+  --blue: #7FA9D6; --clay: #DA8A54;
+  --up: #879A39; --down: #DB7263; --warn: #D0A215;
+  --chip-up: #223420; --chip-down: #3A2224; --chip-warn: #352C1A;
+  --chip-up-text: #A3C68C; --chip-down-text: #F0A296; --chip-warn-text: #D8B45A;
+  --zeroline: #4A4660;
+  --deemphasis: #6F6A84;
   --font-ui: 'Inter Variable', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Newsreader Variable', Georgia, serif;
 }

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData, type HeroTile, type NewsData } from '../lib/types'
 import { TodaySection } from './TodaySection'
+import { PALETTE } from '../theme/tokens'
 
 const site = assertSiteData(siteEdge)
 const NOW = new Date('2026-07-18T00:00:00Z')
@@ -79,7 +80,7 @@ test('the ERP tile renders in the strip after the five hero tiles, muted (delta_
   expect(within(strip).getByText('Resident population')).toBeInTheDocument()
   expect(within(strip).getByText('27,801,000')).toBeInTheDocument()
   const delta = within(strip).getByText('+78,600')
-  expect(delta).toHaveStyle({ color: '#575653' })   // PALETTE.muted — 'off' delta_color
+  expect(delta).toHaveStyle({ color: PALETTE.muted })   // 'off' delta_color
 })
 
 test('changed-this-week chips render deltas via TILE_FMT, coloured by delta_color', () => {
@@ -94,7 +95,7 @@ test('a flat/off delta renders level-only colour, not a move', () => {
   const list = screen.getByTestId('whats-new')
   const vac = within(list).getByText('2.5%').closest('button')!
   const delta = within(vac).getByText('+0.0 pp')
-  expect(delta).toHaveStyle({ color: '#575653' })   // PALETTE.muted
+  expect(delta).toHaveStyle({ color: PALETTE.muted })
 })
 
 test('changed-this-week caps at 6 chips with an "and N more" disclosure', async () => {
