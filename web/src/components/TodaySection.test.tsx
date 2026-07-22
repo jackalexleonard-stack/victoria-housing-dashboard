@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData, type HeroTile, type NewsData } from '../lib/types'
@@ -189,9 +189,96 @@ test('top stories heading explainer is visible text, not just a hover tooltip', 
   expect(screen.getByText('Ranked by source, topic and recency')).toBeInTheDocument()
 })
 
-test('no hero_lead (older export) falls back to strip only, no crash', () => {
+test('no hero_lead: the conveyor leads with the first hero pick, no crash', () => {
+  // 2.5: headlinePool degrades a missing/'empty' hero_lead to plain hero
+  // order (same rule conveyor.test.ts asserts for the 'empty' sentinel) —
+  // the conveyor rotates whenever findings exist, with or without an
+  // explicit hero_lead, so the lead card now renders (leading with the
+  // first hero pick, cash_rate) instead of being suppressed.
   const siteNoLead = { ...site, hero_lead: undefined }
   render(<TodaySection site={siteNoLead} news={news} now={NOW} onOpen={() => {}} />)
-  expect(screen.queryByTestId('lead-finding-card')).not.toBeInTheDocument()
+  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
   expect(screen.getByTestId('hero-strip')).toBeInTheDocument()
+})
+
+// --- 2.5 headline conveyor ---
+// setup.ts stubs matchMedia with reduced-motion ON (deterministic DOM for
+// every other test). Rotation tests need it OFF; afterEach restores ON.
+const stubMotion = (reduced: boolean) =>
+  vi.stubGlobal('matchMedia', (q: string) => ({
+    matches: reduced && q.includes('prefers-reduced-motion'),
+    media: q, addEventListener: () => {}, removeEventListener: () => {},
+  }))
+
+describe('headline conveyor', () => {
+  beforeEach(() => { stubMotion(false); vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers(); stubMotion(true) })
+
+  test('advances the lead finding after 5 s (conveyor: secondary-1 is promoted)', () => {
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
+    expect(screen.getByTestId('lead-finding'))
+      .toHaveTextContent('The median rent held at $580/wk in Mar qtr 2026')
+    act(() => vi.advanceTimersByTime(5000))
+    expect(screen.getByTestId('lead-finding'))
+      .toHaveTextContent('The cash rate has held at 3.85% since Jan 2026')
+  })
+
+  test('the pause control stops auto-advance and flips to a resume control', () => {
+    // fireEvent.click (not userEvent) — vitest@4 + user-event@14 fake-timer
+    // clicks deadlock in this toolchain regardless of advanceTimers/delay
+    // config (confirmed with a minimal repro unrelated to this component).
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause rotating findings' }))
+    act(() => vi.advanceTimersByTime(15000))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
+    expect(screen.getByRole('button', { name: 'Resume rotating findings' })).toBeInTheDocument()
+  })
+
+  test('hovering pauses; leaving resumes', () => {
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
+    fireEvent.mouseEnter(screen.getByTestId('headline-conveyor'))
+    act(() => vi.advanceTimersByTime(15000))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
+    fireEvent.mouseLeave(screen.getByTestId('headline-conveyor'))
+    act(() => vi.advanceTimersByTime(5000))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+  })
+
+  test('a dot jumps straight to its finding', () => {
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show finding 3 of 5' }))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
+  })
+
+  test('detailOpen suspends rotation', () => {
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} detailOpen />)
+    act(() => vi.advanceTimersByTime(15000))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
+  })
+
+  test('reduced motion: no auto-advance, manual controls still work', () => {
+    stubMotion(true)
+    render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
+    act(() => vi.advanceTimersByTime(15000))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
+    fireEvent.click(screen.getByRole('button', { name: 'Show finding 2 of 5' }))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+  })
+})
+
+test('fewer than 3 findings: static row, no conveyor controls', () => {
+  // Keep hero at 5 (assertSiteData requires it) but strip findings down to
+  // two hero-resolving charts, so headlinePool yields a pool of 2 (< MIN_ROTATE).
+  // hero keys -> chart: cash_rate->cash_rate, melb_dwelling_values->hvi_melbourne.
+  const small = assertSiteData({
+    ...siteEdge,
+    hero_lead: 'empty',
+    findings: {
+      cash_rate: (siteEdge as { findings: Record<string, string> }).findings.cash_rate,
+      hvi_melbourne: (siteEdge as { findings: Record<string, string> }).findings.hvi_melbourne,
+    },
+  })
+  render(<TodaySection site={small} news={news} now={NOW} onOpen={() => {}} />)
+  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+  expect(screen.queryByTestId('conveyor-controls')).not.toBeInTheDocument()
 })

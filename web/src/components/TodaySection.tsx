@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'motion/react'
 import { deltaColor, HeroTiles, splitCadenceCode, TILE_CHART } from './HeroTiles'
 import { TILE_FMT, fmtPeriod, newsByline } from '../lib/format'
 import { staleness } from '../lib/staleness'
+import { headlinePool, MIN_ROTATE, prefersReducedMotion, useConveyor } from '../lib/conveyor'
 import { PALETTE } from '../theme/tokens'
 import type { HeroTile, NewsData, SiteData } from '../lib/types'
 
@@ -41,19 +43,23 @@ function LeadCard({ site, leadKey, onOpen }: {
               className="sm:col-span-2 bg-card border border-line rounded-lg p-5">
       <button type="button" onClick={() => onOpen(chartId)}
               className="block w-full text-left group">
-        <h2 data-testid="lead-finding"
-            className="font-display text-2xl sm:text-3xl leading-snug group-hover:text-blue">
-          {finding}
-        </h2>
-        {(valueText || deltaText) && (
-          <p className="num text-sm text-muted mt-2">
-            {valueText}
-            {deltaText && (
-              <span className="ml-1.5 font-medium" style={{ color: deltaColor(tile) }}>
-                {deltaText}</span>
-            )}
-          </p>
-        )}
+        <motion.div key={chartId} initial={{ opacity: 0, x: 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}>
+          <h2 data-testid="lead-finding"
+              className="font-display text-2xl sm:text-3xl leading-snug group-hover:text-blue">
+            {finding}
+          </h2>
+          {(valueText || deltaText) && (
+            <p className="num text-sm text-muted mt-2">
+              {valueText}
+              {deltaText && (
+                <span className="ml-1.5 font-medium" style={{ color: deltaColor(tile) }}>
+                  {deltaText}</span>
+              )}
+            </p>
+          )}
+        </motion.div>
       </button>
     </article>
   )
@@ -75,8 +81,12 @@ function SecondaryCard({ site, tileKey, onOpen }: {
   return (
     <article className="bg-card border border-line rounded-lg p-3">
       <button type="button" onClick={() => onOpen(chartId)} className="block w-full text-left group">
-        <h3 className="font-display text-base leading-snug group-hover:text-blue">{finding}</h3>
-        {valueText && <p className="num text-xs text-muted mt-1.5">{valueText}</p>}
+        <motion.div key={chartId} initial={{ opacity: 0, x: 16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}>
+          <h3 className="font-display text-base leading-snug group-hover:text-blue">{finding}</h3>
+          {valueText && <p className="num text-xs text-muted mt-1.5">{valueText}</p>}
+        </motion.div>
       </button>
     </article>
   )
@@ -97,21 +107,38 @@ function sortWhatsNew(tiles: HeroTile[]): HeroTile[] {
   })
 }
 
-export function TodaySection({ site, news, onOpen, now, filtersActive = false }: {
+export function TodaySection({ site, news, onOpen, now, filtersActive = false,
+                               detailOpen = false }: {
   site: SiteData; news: NewsData; onOpen: (chartId: string) => void
-  now: Date; filtersActive?: boolean }) {
+  now: Date; filtersActive?: boolean; detailOpen?: boolean }) {
   const top = news.top_story_urls
     .map(u => news.items.find(i => i.url === u))
     .filter(i => i != null)
 
-  // Findings are computed for the exported default view only — a filtered
-  // range/geo would make the lead sentence's specific numbers misleading,
-  // so filters-active reverts to the strip alone (the strip's own numbers
-  // already only ever reflected the default view, filtered or not).
-  const leadKey = !filtersActive && site.hero_lead && site.hero_lead !== 'empty'
-    ? site.hero_lead : null
-  const secondaryKeys = leadKey
-    ? site.hero.map(t => t.key).filter(k => k !== leadKey && k !== 'empty').slice(0, 2)
+  // Findings are computed for the exported default view only (unchanged
+  // 2.4 rule) — filters-active zeroes the pool, which hides the whole row.
+  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site)),
+                       [site, filtersActive])
+  const rotating = pool.length >= MIN_ROTATE
+  const [userPaused, setUserPaused] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [hidden, setHidden] = useState(() =>
+    typeof document !== 'undefined' && document.visibilityState === 'hidden')
+  useEffect(() => {
+    const onVis = () => setHidden(document.visibilityState === 'hidden')
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+  const running = rotating && !userPaused && !hovered && !focused && !hidden &&
+    !detailOpen && !prefersReducedMotion()
+  const { offset, jump } = useConveyor(pool.length, running)
+  const pos = pool.length > 0 ? offset % pool.length : 0
+  const leadKey = pool.length > 0 ? pool[pos] : null
+  const secondaryKeys = pool.length > 1
+    ? [pool[(pos + 1) % pool.length],
+       pool.length > 2 ? pool[(pos + 2) % pool.length] : null]
+        .filter((k): k is string => k != null)
     : []
 
   const [expanded, setExpanded] = useState(false)
@@ -122,11 +149,38 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false }:
   return (
     <section aria-label="Today">
       {leadKey && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
-          {secondaryKeys.length > 0 && (
-            <div data-testid="secondary-findings" className="grid grid-cols-2 gap-3 sm:grid-cols-1">
-              {secondaryKeys.map(k => <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
+        <div data-testid="headline-conveyor" aria-live="off"
+             onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+             onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
+            {secondaryKeys.length > 0 && (
+              <div data-testid="secondary-findings"
+                   className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+                {secondaryKeys.map(k =>
+                  <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
+              </div>
+            )}
+          </div>
+          {rotating && (
+            <div className="flex items-center gap-1 mt-2" data-testid="conveyor-controls">
+              <button type="button" aria-pressed={userPaused}
+                      aria-label={userPaused ? 'Resume rotating findings' : 'Pause rotating findings'}
+                      onClick={() => setUserPaused(p => !p)}
+                      className="text-muted hover:text-ink pointer-coarse:p-2.5">
+                <span aria-hidden="true" className="material-symbols-rounded text-lg block">
+                  {userPaused ? 'play_arrow' : 'pause'}</span>
+              </button>
+              {pool.map((k, i) => (
+                <button key={k} type="button" onClick={() => jump(i)}
+                        aria-label={`Show finding ${i + 1} of ${pool.length}`}
+                        aria-current={i === pos ? 'true' : undefined}
+                        className="p-1.5 pointer-coarse:p-2.5 group">
+                  <span aria-hidden="true"
+                        className={`block w-1.5 h-1.5 rounded-full ${
+                          i === pos ? 'bg-blue' : 'bg-line2 group-hover:bg-faint'}`} />
+                </button>
+              ))}
             </div>
           )}
         </div>

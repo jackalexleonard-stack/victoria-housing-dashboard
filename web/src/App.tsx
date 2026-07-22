@@ -222,7 +222,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       <div ref={el => { sectionsRef.current.today = el }} id="today"
            className="pt-6 scroll-mt-28">
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}
-                      filtersActive={filtersActive} />
+                      filtersActive={filtersActive} detailOpen={!!detailChart} />
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
