@@ -27,11 +27,14 @@ test('"Enter dashboard" is disabled until at least one section is checked', asyn
   expect(enter).toBeEnabled()
 })
 
-test('"Enter dashboard" calls onEnter with exactly the checked ids', async () => {
+test('"Enter dashboard" calls onEnter with checked ids in declaration order, not click order', async () => {
   const onEnter = vi.fn()
   render(<WelcomeModal sections={SECTIONS} onEnter={onEnter} />)
-  await userEvent.click(screen.getByRole('checkbox', { name: 'Prices' }))
+  // Click in an order that diverges from declaration order (Money & credit
+  // is index 2, Prices is index 0) — proves the result is derived from
+  // `sections`, not from click/insertion order.
   await userEvent.click(screen.getByRole('checkbox', { name: 'Money & credit' }))
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Prices' }))
   await userEvent.click(screen.getByRole('button', { name: 'Enter dashboard' }))
   expect(onEnter).toHaveBeenCalledWith(['prices', 'money'])
 })

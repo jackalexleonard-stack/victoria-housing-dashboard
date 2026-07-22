@@ -43,10 +43,10 @@ export function WelcomeModal({ sections, onEnter }: {
       <div className="flex items-center gap-3 mt-5">
         <button type="button" disabled={checked.size === 0}
                 onClick={() => onEnter(checkedIds())}
-                className="bg-blue text-bg rounded-md px-4 py-2.5 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                className="bg-blue text-bg rounded-md px-4 py-3 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
           Enter dashboard</button>
         <button type="button" onClick={() => onEnter(sections.map(([id]) => id))}
-                className="text-blue border border-line rounded-md px-3 py-2.5 text-sm">
+                className="text-blue border border-line rounded-md px-3 py-3 text-sm">
           Show everything</button>
       </div>
     </dialog>
