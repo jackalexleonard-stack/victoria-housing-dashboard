@@ -10,14 +10,17 @@ export const DEFAULT_GEO: Geo = 'melbourne'
 export interface UrlState {
   range: Range; geo: Geo
   detail: string | null; compare: string | null; detailPushed: boolean
+  sections: string[] | null
 }
 
 export function parseUrl(search: string): UrlState {
   const q = new URLSearchParams(search)
   const range = RANGES.includes(q.get('range') as Range) ? (q.get('range') as Range) : DEFAULT_RANGE
   const geo = GEOS.includes(q.get('geo') as Geo) ? (q.get('geo') as Geo) : DEFAULT_GEO
+  const rawSections = q.get('sections')
+  const sections = rawSections == null ? null : rawSections.split(',').filter(Boolean)
   return { range, geo, detail: q.get('s'), compare: q.get('vs'),
-           detailPushed: history.state?.detailPushed === true }
+           detailPushed: history.state?.detailPushed === true, sections }
 }
 
 function writeUrl(next: Partial<UrlState>, prev: UrlState, push: boolean) {
@@ -27,6 +30,10 @@ function writeUrl(next: Partial<UrlState>, prev: UrlState, push: boolean) {
   if (merged.geo !== DEFAULT_GEO) q.set('geo', merged.geo)
   if (merged.detail) q.set('s', merged.detail)
   if (merged.compare) q.set('vs', merged.compare)
+  // An empty list still writes `?sections=` — "explicitly all closed" must
+  // survive a copy-paste, unlike an absent param (falls back to the
+  // reader's own storage).
+  if (merged.sections != null) q.set('sections', merged.sections.join(','))
   const url = q.toString() ? `?${q}` : location.pathname
   if (push) history.pushState({ detailPushed: true }, '', url)
   else history.replaceState(history.state, '', url)
@@ -59,5 +66,9 @@ export function useUrlState() {
     writeUrl({ compare: id }, parseUrl(location.search), false); sync()
   }, [sync])
 
-  return { state, setFilters, openDetail, closeDetail, setCompare }
+  const setSections = useCallback((ids: string[] | null) => {
+    writeUrl({ sections: ids }, parseUrl(location.search), false); sync()
+  }, [sync])
+
+  return { state, setFilters, openDetail, closeDetail, setCompare, setSections }
 }

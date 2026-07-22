@@ -3,11 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { FilterBar } from './FilterBar'
 
 const sections: [string, string][] = [['today', 'Today'], ['prices', 'Prices']]
+// Stub props for the Sections popover (Task 6) — none of the pre-existing
+// tests below exercise it, so a fixed no-op/closed-everything shape keeps
+// every render call unchanged aside from spreading this in.
+const sectionsProps = { isSectionOpen: () => false, onSetSections: () => {}, onResetSections: () => {} }
 
 test('range and geo are keyboard-operable radiogroups', async () => {
   const onFilters = vi.fn()
   render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                    activeSection="today" onFilters={onFilters} onJump={() => {}} />)
+                    activeSection="today" onFilters={onFilters} onJump={() => {}} {...sectionsProps} />)
   const groups = screen.getAllByRole('radiogroup')
   expect(groups).toHaveLength(2)
   await userEvent.click(screen.getByRole('radio', { name: '1y' }))
@@ -19,7 +23,7 @@ test('range and geo are keyboard-operable radiogroups', async () => {
 test('section chips jump and mark the active section', async () => {
   const onJump = vi.fn()
   render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                    activeSection="prices" onFilters={() => {}} onJump={onJump} />)
+                    activeSection="prices" onFilters={() => {}} onJump={onJump} {...sectionsProps} />)
   const active = screen.getByRole('button', { name: 'Jump to Prices' })
   expect(active).toHaveAttribute('aria-current', 'true')
   await userEvent.click(screen.getByRole('button', { name: 'Jump to Today' }))
@@ -29,7 +33,7 @@ test('section chips jump and mark the active section', async () => {
 test('arrow keys move selection within a radiogroup', async () => {
   const onFilters = vi.fn()
   render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                    activeSection="today" onFilters={onFilters} onJump={() => {}} />)
+                    activeSection="today" onFilters={onFilters} onJump={() => {}} {...sectionsProps} />)
   const group = screen.getByRole('radiogroup', { name: /date range/i })
   const selected = within(group).getByRole('radio', { checked: true })
   selected.focus()
@@ -41,7 +45,7 @@ test('arrow keys move selection within a radiogroup', async () => {
 
 test('roving tabindex: only the selected radio is in the tab order', () => {
   render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                    activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+                    activeSection="today" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
   const group = screen.getByRole('radiogroup', { name: /date range/i })
   const radios = within(group).getAllByRole('radio')
   const tabbable = radios.filter(r => r.getAttribute('tabindex') === '0')
@@ -64,12 +68,14 @@ test('roving tabindex: only the selected radio is in the tab order', () => {
 describe('touch targets (design review P1-touch)', () => {
   test('Filters/Done become bordered buttons on coarse pointers, never a solid fill; fine-pointer text-link styling is untouched', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     // Done lives inside the (closed-by-default) <dialog>, invisible to the
     // default accessibility-tree query — hidden:true reads its classes
-    // without needing to actually open the sheet.
+    // without needing to actually open the sheet. Task 6: the Sections
+    // popover (rendered twice, desktop + mobile) has its own "Done" button
+    // too, so three match the name — the sheet's is last in DOM order.
     const filters = screen.getByRole('button', { name: 'Filters' })
-    const done = screen.getByRole('button', { name: 'Done', hidden: true })
+    const done = screen.getAllByRole('button', { name: 'Done', hidden: true }).at(-1)!
     for (const btn of [filters, done]) {
       expect(btn).toHaveClass('text-blue')   // fine-pointer look: unchanged
       expect(btn).toHaveClass('pointer-coarse:border', 'pointer-coarse:border-line',
@@ -81,7 +87,7 @@ describe('touch targets (design review P1-touch)', () => {
 
   test('the bottom sheet\'s Segmented copy gets the 44px bump; the desktop toolbar copy is untouched', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     // Document order: the always-visible toolbar row renders before the
     // sm:hidden/dialog block, so [0] is the toolbar's radio, [1] the sheet's.
     const [toolbarRadio, sheetRadio] =
@@ -93,7 +99,7 @@ describe('touch targets (design review P1-touch)', () => {
 
   test('section chips enlarge their hit area via padding/negative margin, keeping the visible tab unchanged', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="today" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="today" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     const chip = screen.getByRole('button', { name: 'Jump to Prices' })
     // The hit-box classes live on the button; visual sizing moved to the
     // inner span, so the button itself carries no px-1/py-1 tab styling.
@@ -112,7 +118,7 @@ describe('touch targets (design review P1-touch)', () => {
 describe('scrollspy de-pill (design review P2-a)', () => {
   test('idle and active tabs carry no rounded-full/border-pill classes', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     const idle = within(screen.getByRole('button', { name: 'Jump to Today' })).getByText('Today')
     const active = within(screen.getByRole('button', { name: 'Jump to Prices' })).getByText('Prices')
     for (const tab of [idle, active]) {
@@ -123,7 +129,7 @@ describe('scrollspy de-pill (design review P2-a)', () => {
 
   test('active tab uses a blue underline + medium weight, not a filled pill', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     const active = within(screen.getByRole('button', { name: 'Jump to Prices' })).getByText('Prices')
     expect(active).toHaveClass('border-b-2', 'border-blue', 'text-blue', 'font-medium')
     expect(active.className).not.toMatch(/bg-blue/)
@@ -131,7 +137,7 @@ describe('scrollspy de-pill (design review P2-a)', () => {
 
   test('idle tabs get a transparent underline (reserves the same space, no visible border)', () => {
     render(<FilterBar range="5y" geo="melbourne" sections={sections}
-                      activeSection="prices" onFilters={() => {}} onJump={() => {}} />)
+                      activeSection="prices" onFilters={() => {}} onJump={() => {}} {...sectionsProps} />)
     const idle = within(screen.getByRole('button', { name: 'Jump to Today' })).getByText('Today')
     expect(idle).toHaveClass('border-b-2', 'border-transparent', 'text-muted')
     expect(idle.className).not.toMatch(/\btext-blue\b|font-medium/)

@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { WorldTiles } from './WorldTiles'
 import type { ChartSpec, SeriesMeta, SiteData } from '../lib/types'
+import { PALETTE } from '../theme/tokens'
 
 const NOW = new Date('2026-07-21T00:00:00Z')
 
@@ -104,7 +105,7 @@ test('every delta renders the muted "off" colour, never a green/red judgement', 
   const site = baseSite()
   render(<WorldTiles site={site} charts={worldCharts} now={NOW} onOpen={() => {}} />)
   const brentDelta = screen.getByText('+US$2.00')
-  expect(brentDelta).toHaveStyle({ color: '#575653' })   // PALETTE.muted
+  expect(brentDelta).toHaveStyle({ color: PALETTE.muted })
 })
 
 test('a stale series carries its staleness chip on the tile', () => {

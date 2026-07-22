@@ -38,3 +38,22 @@ test('close on a shared link strips params without popping', () => {
   expect(location.search).not.toContain('s=')
   expect(history.length).toBe(depth)               // replaced, not popped
 })
+
+describe('sections param (2.5)', () => {
+  test('absent param parses to null; present parses to the id list', () => {
+    history.replaceState(null, '', '/')
+    expect(parseUrl(location.search).sections).toBeNull()
+    history.replaceState(null, '', '/?sections=rents,money')
+    expect(parseUrl(location.search).sections).toEqual(['rents', 'money'])
+  })
+
+  test('an empty param means "all closed", distinct from absent', () => {
+    history.replaceState(null, '', '/?sections=')
+    expect(parseUrl(location.search).sections).toEqual([])
+  })
+
+  test('stray commas are dropped', () => {
+    history.replaceState(null, '', '/?sections=rents,,money,')
+    expect(parseUrl(location.search).sections).toEqual(['rents', 'money'])
+  })
+})

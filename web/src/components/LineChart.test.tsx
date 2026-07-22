@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { LineChart } from './LineChart'
-import { PALETTE } from '../theme/tokens'
+import { PALETTE, COLORWAY } from '../theme/tokens'
 
 const lines = [{ name: 'cash rate', pts: [
   { date: '2026-05-31', region: 'australia', metric: 'cash_rate', value: 3.85 },
@@ -53,7 +53,7 @@ test('markers on a multi-line chart use their own line’s color', () => {
     <LineChart lines={twoLines} percent={false} unit="index" label="two lines" />)
   const markers = container.querySelectorAll('circle.pt-marker')
   expect(markers.length).toBe(1)                        // only line b is single-point
-  expect(markers[0].getAttribute('fill')).toBe('#BC5215')  // line b = colorway[1], not [0]
+  expect(markers[0].getAttribute('fill')).toBe(COLORWAY[1])  // line b = colorway[1], not [0]
 })
 
 const sharedDateLines = [
@@ -210,8 +210,8 @@ test('emphasize: the named line keeps its colorway hue and width; every other li
   const paths = [...container.querySelectorAll('path')]
   const byColor = (c: string) => paths.filter(p => p.getAttribute('stroke') === c)
   expect(byColor(PALETTE.deemphasis).length).toBe(2)          // a and c
-  expect(byColor('#BC5215').length).toBe(1)                   // b keeps colorway[1]
-  const emphPath = byColor('#BC5215')[0]
+  expect(byColor(COLORWAY[1]).length).toBe(1)                   // b keeps colorway[1]
+  const emphPath = byColor(COLORWAY[1])[0]
   expect(emphPath.getAttribute('stroke-width')).toBe('2.25')
   const deemphPath = byColor(PALETTE.deemphasis)[0]
   expect(deemphPath.getAttribute('stroke-width')).toBe('1.25')
@@ -234,7 +234,7 @@ test('emphasize: hovering reaches the crosshair dot and tooltip swatch too, not 
   const tooltip = screen.getByRole('status')
 
   // De-emphasized row 'a': the tooltip swatch must be the reserved grey,
-  // not its raw colorway hue (colorway[0] = '#205EA6').
+  // not its raw colorway hue (colorway[0]).
   // jsdom's CSSOM normalizes hex colors assigned via inline style to rgb().
   const hexToRgb = (hex: string) => {
     const n = parseInt(hex.slice(1), 16)
@@ -247,15 +247,15 @@ test('emphasize: hovering reaches the crosshair dot and tooltip swatch too, not 
   // Emphasized row 'b' keeps its own colorway hue in the tooltip.
   const bRow = within(tooltip).getByText('b').closest('div')!
   const bSwatch = bRow.querySelector('span') as HTMLElement
-  expect(bSwatch.style.background).toBe(hexToRgb('#BC5215'))
+  expect(bSwatch.style.background).toBe(hexToRgb(COLORWAY[1]))
 
   // The enlarged hover crosshair dot (r=4) for the de-emphasized line must
   // also be grey, not the raw colorway hue.
   const hoverDots = [...container.querySelectorAll('circle[r="4"]')]
   const hoverColors = hoverDots.map(c => c.getAttribute('fill'))
   expect(hoverColors).toContain(PALETTE.deemphasis)
-  expect(hoverColors).not.toContain('#205EA6')
-  expect(hoverColors).toContain('#BC5215')
+  expect(hoverColors).not.toContain(COLORWAY[0])
+  expect(hoverColors).toContain(COLORWAY[1])
 })
 
 test('emphasize: the emphasized line sorts first in the legend', () => {

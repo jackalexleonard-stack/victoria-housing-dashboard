@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { GEOS, RANGES, type Geo, type Range } from '../lib/urlState'
+import { SectionsControl } from './SectionsControl'
 
 const GEO_SHORT: Record<Geo, string> = {
   melbourne: 'Melbourne', regional_vic: 'Regional', vic: 'Victoria',
@@ -14,8 +15,8 @@ function Segmented<T extends string>({ options, value, label, format, onPick, to
   // coarse-pointer-only bottom sheet. Only the sheet instance passes
   // touch — so a wide fine-pointer viewport keeps today's compact size,
   // while a genuinely coarse-pointer device (matched via `pointer: coarse`,
-  // not viewport width — the same media feature T4's defaultSectionOpen
-  // gates on in lib/sections.ts) gets the full 44px target inside the
+  // not viewport width — the same `pointer: coarse` media feature the
+  // section-collapse defaults use) gets the full 44px target inside the
   // sheet. text-sm replaces text-xs there too (44 = 12px py-3 top+bottom +
   // 20px text-sm line-height). px-3, not px-4: measured at 393px (Playwright,
   // Pixel-7 emulation) the 4-option Geography group overflowed its 361px
@@ -54,11 +55,20 @@ function Segmented<T extends string>({ options, value, label, format, onPick, to
   )
 }
 
-export function FilterBar({ range, geo, sections, activeSection, onFilters, onJump }: {
+export function FilterBar({ range, geo, sections, activeSection, onFilters, onJump,
+                            isSectionOpen, onSetSections, onResetSections }: {
   range: Range; geo: Geo; sections: [string, string][]; activeSection: string
   onFilters: (p: { range?: Range; geo?: Geo }) => void
-  onJump: (id: string) => void }) {
+  onJump: (id: string) => void
+  isSectionOpen: (id: string) => boolean
+  onSetSections: (openIds: string[]) => void
+  onResetSections: () => void }) {
   const sheet = useRef<HTMLDialogElement>(null)
+  const themed = sections.filter(([id]) => id !== 'today')
+  const sectionsControl = (
+    <SectionsControl sections={themed} isOpen={isSectionOpen}
+                     onSetAll={onSetSections} onReset={onResetSections} />
+  )
   // Design review P1-touch: the toolbar row (desktop-width, any pointer)
   // keeps today's compact Segmented; the bottom sheet — reachable only via
   // the coarse-pointer-gated "Filters" disclosure below — passes touch so
@@ -82,9 +92,13 @@ export function FilterBar({ range, geo, sections, activeSection, onFilters, onJu
   return (
     <nav className="sticky top-0 z-20 bg-bg/95 backdrop-blur-sm border-b border-line py-2"
          aria-label="Filters and sections">
-      <div className="hidden sm:flex flex-wrap items-center gap-3">{renderControls(false)}</div>
+      <div className="hidden sm:flex flex-wrap items-center gap-3">
+        {renderControls(false)}
+        {sectionsControl}
+      </div>
       <div className="sm:hidden flex items-center gap-2">
         <span className="text-xs num text-muted">{range} · {GEO_SHORT[geo]}</span>
+        {sectionsControl}
         <button type="button" className={`text-xs text-blue ml-auto ${touchButton}`}
                 onClick={() => sheet.current?.showModal()}>Filters</button>
         <dialog ref={sheet} className="m-0 mt-auto w-full max-w-none rounded-t-xl p-4"

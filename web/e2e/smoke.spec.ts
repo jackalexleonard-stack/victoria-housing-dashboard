@@ -21,36 +21,31 @@ test('loads the briefing with real fixture data', async ({ page }) => {
   await expect(page.locator('article h3').first()).not.toBeEmpty() // findings non-empty
 })
 
-// --- P0-3: collapse defaults ---
+// --- 2.5: collapse defaults ---
 
-test.describe('collapse defaults', () => {
-  test('desktop: World starts collapsed, other sections stay open', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'desktop-only default')
+test.describe('collapse defaults (2.5: closed everywhere)', () => {
+  test('every themed section starts closed on both projects', async ({ page }) => {
     await page.goto('/')
     await page.locator('nav[aria-label="Filters and sections"]').waitFor()
-    const world = page.locator('section[aria-label="World"] h2 button')
-    await expect(world).toHaveAttribute('aria-expanded', 'false')
-    const prices = page.locator('section[aria-label="Prices"] h2 button')
-    await expect(prices).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  test('desktop: News stays open by default but is truncated to its top stories', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop', 'desktop-only default')
-    await page.goto('/')
-    const news = page.locator('section[aria-label="News"] h2 button')
-    await expect(news).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.locator('section[aria-label="News"]').getByRole('button', { name: /show all \d+ stories/i }))
-      .toBeVisible()
-  })
-
-  test('mobile: every section after Today starts collapsed, World included', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile', 'phone-fold default, not a breakpoint sweep')
-    await page.goto('/')
-    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
-    for (const name of ['World', 'Prices', 'Money & credit', 'News']) {
-      const toggle = page.locator(`section[aria-label="${name}"] h2 button`)
-      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    for (const name of ['Prices', 'Rents & vacancy', 'Supply & construction',
+                        'Money & credit', 'People', 'Social housing', 'World', 'News']) {
+      await expect(page.locator(`section[aria-label="${name}"] h2 button`))
+        .toHaveAttribute('aria-expanded', 'false')
     }
+  })
+
+  test('a collapsed section is truly bare — heading only', async ({ page }) => {
+    await page.goto('/')
+    const prices = page.locator('section[aria-label="Prices"]')
+    await prices.waitFor()
+    expect(await prices.locator(':scope > *:not(h2)').count()).toBe(0)
+  })
+
+  test('News still lazy-mounts correctly when opened', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('section[aria-label="News"] h2 button').click()
+    await expect(page.locator('section[aria-label="News"]')
+      .getByRole('button', { name: /show all \d+ stories/i })).toBeVisible()
   })
 })
 
@@ -109,10 +104,14 @@ test('detail opens, deep-links and closes via back', async ({ page }) => {
   await page.goto('/')
   await expandAllSections(page)   // mobile starts every section collapsed
   await page.getByRole('button', { name: /open details/ }).first().click()
-  await expect(page).toHaveURL(/s=/)
+  // Anchored to the query-param boundary (?/&) rather than a bare /s=/:
+  // expandAllSections (2.5) leaves a `?sections=...` param in the URL, whose
+  // value legitimately contains the substring "s=" and would otherwise
+  // false-match the loose regex this test used pre-2.5.
+  await expect(page).toHaveURL(/[?&]s=/)
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.goBack()
-  await expect(page).not.toHaveURL(/s=/)
+  await expect(page).not.toHaveURL(/[?&]s=/)
 })
 
 test('shared deep link restores the modal', async ({ page }) => {
@@ -250,5 +249,85 @@ test.describe('with motion enabled', () => {
     await page.waitForFunction(() => document.querySelectorAll('.draw-in').length > 0)
     const drawIn = await page.evaluate(() => document.querySelectorAll('.draw-in').length)
     expect(drawIn).toBeGreaterThan(0)
+  })
+})
+
+// 2.5 headline conveyor. page.clock lets us fast-forward the 5s interval
+// deterministically; install() must precede goto().
+test.describe('headline conveyor', () => {
+  test.use({ reducedMotion: 'no-preference' })
+
+  test('the lead finding advances after 5 s when motion is allowed', async ({ page }) => {
+    await page.clock.install()
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/')
+    const lead = page.getByTestId('lead-finding')
+    await lead.waitFor()
+    const before = await lead.textContent()
+    await page.clock.fastForward(5100)
+    await expect(lead).not.toHaveText(before!)
+  })
+
+  test('pause halts rotation', async ({ page }) => {
+    await page.clock.install()
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/')
+    const lead = page.getByTestId('lead-finding')
+    await lead.waitFor()
+    const before = await lead.textContent()
+    await page.getByRole('button', { name: 'Pause rotating findings' }).click()
+    await page.clock.fastForward(15000)
+    await expect(lead).toHaveText(before!)
+  })
+})
+
+test('reduced motion: the conveyor never auto-advances', async ({ page }) => {
+  await page.clock.install()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  const lead = page.getByTestId('lead-finding')
+  await lead.waitFor()
+  // Loud precondition (2.2 gotcha): config-level reducedMotion is not
+  // trusted — assert the page actually sees the preference.
+  expect(await page.evaluate(() =>
+    matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
+  const before = await lead.textContent()
+  await page.clock.fastForward(15000)
+  await expect(lead).toHaveText(before!)
+})
+
+test.describe('sections personalisation (2.5)', () => {
+  test('?sections= deep link opens exactly those sections', async ({ page }) => {
+    await page.goto('/?sections=rents,money')
+    await expect(page.locator('section[aria-label="Rents & vacancy"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('section[aria-label="Money & credit"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('section[aria-label="Prices"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('Sections popover: open with keyboard, tick a section, Esc closes', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Sections' }).first().click()
+    const dialog = page.getByRole('dialog', { name: 'Choose sections' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('checkbox', { name: 'Prices' }).check()
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+    await expect(page.locator('section[aria-label="Prices"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'true')
+    expect(new URL(page.url()).searchParams.get('sections')).toBe('prices')
+  })
+
+  test('first-visit hint shows once and dismisses', async ({ page }) => {
+    await page.goto('/')
+    const hint = page.getByTestId('sections-hint')
+    await expect(hint).toBeVisible()
+    await hint.getByRole('button', { name: 'Dismiss' }).click()
+    await expect(hint).not.toBeVisible()
+    await page.reload()
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await expect(page.getByTestId('sections-hint')).not.toBeVisible()
   })
 })
