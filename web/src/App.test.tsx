@@ -11,6 +11,11 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
+// The first-run modal blocks a cold load; every test that drives the
+// dashboard directly seeds the "already onboarded" flag so the modal is
+// suppressed. The modal's own describe clears it (see below) to see it.
+beforeEach(() => { try { localStorage.setItem('vh.welcomeSeen', '1') } catch { /* ignore */ } })
+
 const news = { schema_version: 1, generated_at: '2026-07-18T04:00:00Z',
                items: [], top_story_urls: [], digest: null }
 
@@ -109,7 +114,7 @@ test('masthead only counts sources that are actually overdue, singular wording',
 })
 
 describe('collapsible sections', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('toggling a section header mounts its body and flips aria-expanded', async () => {
     history.replaceState(null, '', '/')
@@ -194,7 +199,7 @@ describe('collapsible sections', () => {
 })
 
 describe('default-closed sections (2.5)', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('every themed section starts closed — no pointer-type dependence', async () => {
     history.replaceState(null, '', '/')
@@ -289,7 +294,7 @@ function withWorldTiles(base: object) {
 }
 
 describe('World KPI tile row (D1f)', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('World expanded renders the compact 6-tile KPI row led by the section summary, not six chart cards', async () => {
     history.replaceState(null, '', '/')
@@ -358,7 +363,7 @@ describe('trailing card grid (D2e)', () => {
 // --- P1-outage: hoisted section notice + quiet per-card chips ---
 
 describe('sections URL param (2.5)', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   const toggleOf = (name: string) =>
     within(screen.getByRole('region', { name })).getByRole('button', { name })
@@ -424,44 +429,78 @@ describe('sections URL param (2.5)', () => {
   })
 })
 
-describe('first-visit hint (2.5)', () => {
+describe('first-run welcome modal', () => {
   beforeEach(() => localStorage.clear())
 
-  test('shows on a true first visit and dismisses permanently', async () => {
+  const modal = () => screen.getByRole('dialog', { name: /choose your sections/i })
+
+  test('shows on a true first visit (no saved state, no preset link)', async () => {
     history.replaceState(null, '', '/')
-    mockFetch()
-    const { unmount } = render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
-    expect(screen.getByTestId('sections-hint')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
-    expect(localStorage.getItem('vh.sectionsHintDismissed')).toBe('1')
-    unmount()
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+    expect(modal()).toBeInTheDocument()
   })
 
-  test('suppressed for anyone with saved section state or a preset link', async () => {
-    localStorage.setItem('vh.sections', JSON.stringify({ money: 'open' }))
-    history.replaceState(null, '', '/')
-    mockFetch()
-    const { unmount } = render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
-    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
-    unmount()
-    localStorage.clear()
-    history.replaceState(null, '', '/?sections=money')
+  test.each([
+    ['vh.welcomeSeen present', () => localStorage.setItem('vh.welcomeSeen', '1'), '/'],
+    ['vh.sections present', () => localStorage.setItem('vh.sections', JSON.stringify({ money: 'open' })), '/'],
+    ['legacy hint dismissed', () => localStorage.setItem('vh.sectionsHintDismissed', '1'), '/'],
+    ['preset link', () => {}, '/?sections=money'],
+  ])('suppressed when %s', async (_label, seed, url) => {
+    seed()
+    history.replaceState(null, '', url)
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /choose your sections/i })).not.toBeInTheDocument()
+  })
+
+  test('Enter opens exactly the checked sections, persists, and closes the modal', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await userEvent.click(within(modal()).getByRole('checkbox', { name: 'Money & credit' }))
+    await userEvent.click(within(modal()).getByRole('button', { name: 'Enter dashboard' }))
+    // Section opened
+    const money = screen.getByRole('region', { name: 'Money & credit' })
+    expect(within(money).getByRole('button', { name: 'Money & credit' }))
+      .toHaveAttribute('aria-expanded', 'true')
+    // Persisted + mirrored + marked seen
+    expect(localStorage.getItem('vh.welcomeSeen')).toBe('1')
+    expect(new URLSearchParams(location.search).get('sections')).toBe('money')
+    // Modal gone
+    expect(screen.queryByRole('dialog', { name: /choose your sections/i })).not.toBeInTheDocument()
+  })
+
+  test('Show everything opens all themed sections, persists, and closes', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await userEvent.click(within(modal()).getByRole('button', { name: 'Show everything' }))
+    for (const name of ['Prices', 'Money & credit', 'World', 'News']) {
+      const s = screen.getByRole('region', { name })
+      expect(within(s).getByRole('button', { name })).toHaveAttribute('aria-expanded', 'true')
+    }
+    expect(localStorage.getItem('vh.welcomeSeen')).toBe('1')
+    expect(screen.queryByRole('dialog', { name: /choose your sections/i })).not.toBeInTheDocument()
+  })
+
+  test('a first-visit detail deep-link shows onboarding first, not the detail view', async () => {
+    history.replaceState(null, '', '/?s=cash_rate')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.getByRole('dialog', { name: /choose your sections/i })).toBeInTheDocument()
+    // The detail view must be suppressed until the user has onboarded.
+    expect(screen.queryByRole('dialog', { name: 'RBA cash rate target' })).not.toBeInTheDocument()
   })
 })
 
 describe('shared-outage section notice', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('hoists one notice under the h2 when every series in the section shares one source + vintage',
     async () => {

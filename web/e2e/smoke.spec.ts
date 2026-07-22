@@ -12,8 +12,20 @@ async function expandAllSections(page: Page) {
   while (await collapsed.count() > 0) await collapsed.first().click()
 }
 
+// The first-run modal blocks a cold load. Every test that drives the
+// dashboard navigates through this helper, which seeds the "already
+// onboarded" flag BEFORE any page script runs (addInitScript), so the modal
+// is suppressed. The modal's own tests navigate with a plain page.goto to
+// see it.
+async function gotoDashboard(page: import('@playwright/test').Page, url = '/') {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('vh.welcomeSeen', '1') } catch { /* ignore */ }
+  })
+  await page.goto(url)
+}
+
 test('loads the briefing with real fixture data', async ({ page }) => {
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   await expect(page.getByRole('heading', { name: 'Victorian Housing' })).toBeVisible()
   await expandAllSections(page)
   const charts = page.locator('article svg[role="img"]')
@@ -25,7 +37,7 @@ test('loads the briefing with real fixture data', async ({ page }) => {
 
 test.describe('collapse defaults (2.5: closed everywhere)', () => {
   test('every themed section starts closed on both projects', async ({ page }) => {
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     await page.locator('nav[aria-label="Filters and sections"]').waitFor()
     for (const name of ['Prices', 'Rents & vacancy', 'Supply & construction',
                         'Money & credit', 'People', 'Social housing', 'World', 'News']) {
@@ -35,14 +47,14 @@ test.describe('collapse defaults (2.5: closed everywhere)', () => {
   })
 
   test('a collapsed section is truly bare — heading only', async ({ page }) => {
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     const prices = page.locator('section[aria-label="Prices"]')
     await prices.waitFor()
     expect(await prices.locator(':scope > *:not(h2)').count()).toBe(0)
   })
 
   test('News still lazy-mounts correctly when opened', async ({ page }) => {
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     await page.locator('section[aria-label="News"] h2 button').click()
     await expect(page.locator('section[aria-label="News"]')
       .getByRole('button', { name: /show all \d+ stories/i })).toBeVisible()
@@ -50,7 +62,7 @@ test.describe('collapse defaults (2.5: closed everywhere)', () => {
 })
 
 test('filters update the url and the charts', async ({ page }) => {
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   // On narrow viewports the filter bar's radios live behind a "Filters"
   // disclosure button (a bottom sheet <dialog>) instead of being always
   // visible, per FilterBar.tsx's `hidden sm:flex` / `sm:hidden` split. Wait
@@ -69,7 +81,7 @@ test('section jump lands with the heading visible below the sticky bar', async (
   // hidden behind it. Both projects render the section chip row (it's
   // outside the `hidden sm:flex` / `sm:hidden` controls split), so this
   // holds on desktop and mobile alike.
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   const nav = page.locator('nav[aria-label="Filters and sections"]')
   await nav.waitFor()
   // Scoped to the jump-chip row: since C1 (collapsible sections) the section
@@ -101,7 +113,7 @@ test('section jump lands with the heading visible below the sticky bar', async (
 })
 
 test('detail opens, deep-links and closes via back', async ({ page }) => {
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   await expandAllSections(page)   // mobile starts every section collapsed
   await page.getByRole('button', { name: /open details/ }).first().click()
   // Anchored to the query-param boundary (?/&) rather than a bare /s=/:
@@ -115,7 +127,7 @@ test('detail opens, deep-links and closes via back', async ({ page }) => {
 })
 
 test('shared deep link restores the modal', async ({ page }) => {
-  await page.goto('/?s=cash_rate')
+  await gotoDashboard(page, '/?s=cash_rate')
   await expect(page.getByRole('dialog')).toBeVisible()
 })
 
@@ -134,7 +146,7 @@ test('axe scan has no serious violations', async ({ page }) => {
   //    reducedMotion does not reach the page in this repo (Playwright quirk);
   //    the per-test emulateMedia above does.
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   await page.waitForFunction(() => {
     const el = document.querySelector('[data-testid="lead-finding"]')
     if (!el) return false
@@ -152,7 +164,7 @@ test('axe scan has no serious violations', async ({ page }) => {
 
 // --- the four keyboard assertions ---
 test('keyboard: tab reaches the filter bar radios', async ({ page }) => {
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   // Same mobile bottom-sheet disclosure as above — open it so the radios
   // are actually in the rendered (and therefore tabbable) DOM.
   await page.locator('nav[aria-label="Filters and sections"]').waitFor()
@@ -169,7 +181,7 @@ test('keyboard: tab reaches the filter bar radios', async ({ page }) => {
 })
 
 test('keyboard: modal traps focus and escape closes it', async ({ page }) => {
-  await page.goto('/?s=cash_rate')
+  await gotoDashboard(page, '/?s=cash_rate')
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   // Native <dialog>+showModal() is expected to make the rest of the document
@@ -186,7 +198,7 @@ test('keyboard: modal traps focus and escape closes it', async ({ page }) => {
 })
 
 test('keyboard: charts are reachable as accessible images', async ({ page }) => {
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   await expandAllSections(page)   // mobile starts every section collapsed
   const first = page.locator('article button').first()
   await first.focus()
@@ -204,7 +216,7 @@ test('keyboard/motion: reduced motion suppresses the draw-in', async ({ page }) 
   // failure. Call emulateMedia explicitly so the emulation this test relies
   // on is actually real, not assumed from config.
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   await expandAllSections(page)   // mobile starts every section collapsed
   const first = page.locator('article svg[role="img"]').first()
   await first.waitFor()
@@ -238,7 +250,7 @@ test.describe('mobile fold: lead-finding card', () => {
 
   test('one full finding sentence is visible at scroll 0', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile', 'phone-fold check, not a breakpoint sweep')
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     const lead = page.getByTestId('lead-finding')
     await lead.waitFor()
     expect(await page.evaluate(() => window.scrollY)).toBe(0)
@@ -260,7 +272,7 @@ test.describe('with motion enabled', () => {
     // context option (see note above — it's not proven reliable), assert
     // the real, current state explicitly via emulateMedia + matchMedia.
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     await expandAllSections(page)   // mobile starts every section collapsed
     const first = page.locator('article svg[role="img"]').first()
     await first.waitFor()
@@ -283,7 +295,7 @@ test.describe('headline conveyor', () => {
   test('the lead finding advances after 5 s when motion is allowed', async ({ page }) => {
     await page.clock.install()
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     const lead = page.getByTestId('lead-finding')
     await lead.waitFor()
     const before = await lead.textContent()
@@ -294,7 +306,7 @@ test.describe('headline conveyor', () => {
   test('pause halts rotation', async ({ page }) => {
     await page.clock.install()
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     const lead = page.getByTestId('lead-finding')
     await lead.waitFor()
     const before = await lead.textContent()
@@ -307,7 +319,7 @@ test.describe('headline conveyor', () => {
 test('reduced motion: the conveyor never auto-advances', async ({ page }) => {
   await page.clock.install()
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
+  await gotoDashboard(page, '/')
   const lead = page.getByTestId('lead-finding')
   await lead.waitFor()
   // Loud precondition (2.2 gotcha): config-level reducedMotion is not
@@ -321,7 +333,7 @@ test('reduced motion: the conveyor never auto-advances', async ({ page }) => {
 
 test.describe('sections personalisation (2.5)', () => {
   test('?sections= deep link opens exactly those sections', async ({ page }) => {
-    await page.goto('/?sections=rents,money')
+    await gotoDashboard(page, '/?sections=rents,money')
     await expect(page.locator('section[aria-label="Rents & vacancy"] h2 button'))
       .toHaveAttribute('aria-expanded', 'true')
     await expect(page.locator('section[aria-label="Money & credit"] h2 button'))
@@ -331,7 +343,7 @@ test.describe('sections personalisation (2.5)', () => {
   })
 
   test('Sections popover: open with keyboard, tick a section, Esc closes', async ({ page }) => {
-    await page.goto('/')
+    await gotoDashboard(page, '/')
     await page.getByRole('button', { name: 'Sections' }).first().click()
     const dialog = page.getByRole('dialog', { name: 'Choose sections' })
     await expect(dialog).toBeVisible()
@@ -342,15 +354,55 @@ test.describe('sections personalisation (2.5)', () => {
       .toHaveAttribute('aria-expanded', 'true')
     expect(new URL(page.url()).searchParams.get('sections')).toBe('prices')
   })
+})
 
-  test('first-visit hint shows once and dismisses', async ({ page }) => {
-    await page.goto('/')
-    const hint = page.getByTestId('sections-hint')
-    await expect(hint).toBeVisible()
-    await hint.getByRole('button', { name: 'Dismiss' }).click()
-    await expect(hint).not.toBeVisible()
+test.describe('first-run welcome modal', () => {
+  test('blocks a cold load; Show everything enters and does not re-show on reload', async ({ page }) => {
+    await page.goto('/')   // plain: no bypass, so the modal appears
+    const dialog = page.getByRole('dialog', { name: /choose your sections/i })
+    await expect(dialog).toBeVisible()
+    // Enter is disabled until at least one section is chosen.
+    await expect(dialog.getByRole('button', { name: 'Enter dashboard' })).toBeDisabled()
+    await dialog.getByRole('button', { name: 'Show everything' }).click()
+    await expect(dialog).not.toBeVisible()
+    // Every themed section is now open.
+    await expect(page.locator('section[aria-label="Prices"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'true')
+    // Reload: onboarded, so no modal.
     await page.reload()
     await page.locator('nav[aria-label="Filters and sections"]').waitFor()
-    await expect(page.getByTestId('sections-hint')).not.toBeVisible()
+    await expect(page.getByRole('dialog', { name: /choose your sections/i })).not.toBeVisible()
+  })
+
+  test('Enter opens exactly the chosen section and Esc cannot skip', async ({ page }) => {
+    await page.goto('/')
+    const dialog = page.getByRole('dialog', { name: /choose your sections/i })
+    await expect(dialog).toBeVisible()
+    // Esc does not dismiss a required dialog.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('checkbox', { name: 'Money & credit' }).check()
+    await dialog.getByRole('button', { name: 'Enter dashboard' }).click()
+    await expect(dialog).not.toBeVisible()
+    await expect(page.locator('section[aria-label="Money & credit"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('section[aria-label="Prices"] h2 button'))
+      .toHaveAttribute('aria-expanded', 'false')
+    expect(new URL(page.url()).searchParams.get('sections')).toBe('money')
+  })
+
+  test('the modal itself has no serious axe violations', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('dialog', { name: /choose your sections/i })).toBeVisible()
+    // Scope axe to the OPEN dialog only (dialog[open] = the welcome modal;
+    // the SectionsControl popover dialog is closed/display:none). This keeps
+    // the dashboard CONVEYOR — which is fading in behind the modal on this
+    // un-reduced, un-settled load — out of the scan, so the test measures the
+    // modal's own contrast without re-inheriting the conveyor-fade race the
+    // dashboard axe test guards against separately.
+    const results = await new AxeBuilder({ page }).include('dialog[open]').analyze()
+    const serious = results.violations.filter(v =>
+      v.impact === 'serious' || v.impact === 'critical')
+    expect(serious.map(v => `${v.id}: ${v.nodes[0]?.target}`)).toEqual([])
   })
 })
