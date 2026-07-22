@@ -3,15 +3,13 @@ import { loadAll } from './lib/load'
 import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate, fmtPeriod } from './lib/format'
-import { collapsedSummaryText, defaultSectionOpen, sectionOutageNotice,
-         worstStaleness, type SectionState } from './lib/sections'
+import { sectionOutageNotice, type SectionState } from './lib/sections'
 import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead, type FailedSource } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
 import { TodaySection } from './components/TodaySection'
 import { ChartCard } from './components/ChartCard'
-import { Chip } from './components/Chip'
 import { NewsSection } from './components/NewsSection'
 import { WorldTiles } from './components/WorldTiles'
 import { DetailView } from './components/DetailView'
@@ -56,27 +54,6 @@ function SectionHeading({ label, open, onToggle }: {
   )
 }
 
-// Design review P0-3: a collapsed section row keeps the header but gains a
-// one-line status: the pipeline's own section summary (or, when the
-// section is genuinely sitting on stale/failed data behind a "quiet"
-// sentinel, an honest override — see lib/sections.collapsedSummaryText)
-// plus the section's worst staleness chip, always shown so outages stay
-// visible even while collapsed.
-function CollapsedRow({ id, charts, site, now }: {
-  id: string; charts: SiteData['charts']; site: SiteData; now: Date }) {
-  const worst = worstStaleness(charts, site, now)
-  const quiet = site.section_summary_quiet?.[id] ?? false
-  const summary = collapsedSummaryText(site.section_summaries?.[id], quiet, worst)
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-sm mb-2">
-      {summary && <span className="font-display">{summary}</span>}
-      {worst && (worst.st.kind === 'fresh'
-        ? <span className="text-xs text-faint">{worst.st.label}</span>
-        : <Chip kind={worst.st.kind === 'ageing' ? 'warn' : 'bad'}>{worst.st.label}</Chip>)}
-    </p>
-  )
-}
-
 const SECTIONS_KEY = 'vh.sections'
 // Superseded by SECTIONS_KEY (viewport-dependent defaults don't survive a
 // flat "these ids are collapsed" array) — read once for migration, then
@@ -84,11 +61,11 @@ const SECTIONS_KEY = 'vh.sections'
 const OLD_COLLAPSED_KEY = 'vh.collapsed'
 
 // Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
-// to "everything at its viewport default" rather than crash the app over a
-// persistence nicety. Migrates the old vh.collapsed array (viewport-
-// independent: "closed, full stop") into explicit 'closed' overrides under
-// the new key — sections that were open under the old scheme carry no
-// override at all, so the new viewport-aware default decides them.
+// to "everything closed" (the app's default, 2.5) rather than crash the app
+// over a persistence nicety. Migrates the old vh.collapsed array into
+// explicit 'closed' overrides under the new key — sections that were open
+// under the old scheme carry no override at all, so they now fall back to
+// the default-closed state like everything else.
 function readSectionOverrides(): Record<string, SectionState> {
   try {
     const raw = localStorage.getItem(SECTIONS_KEY)
@@ -175,20 +152,11 @@ export default function App({ now = new Date() }: { now?: Date }) {
       vintage: s.meta.last_data_date
         ? fmtPeriod(s.meta.last_data_date, s.meta.frequency) : 'No data',
     }))
-  // Mobile (coarse pointer, e.g. touch-primary phones/tablets) starts every
-  // section after Today collapsed — the daily scan's tightest-budget device
-  // (design review P0-3). Not width-based: a touch device stays "mobile"
-  // regardless of how wide its viewport happens to be.
-  const coarsePointer = matchMedia('(pointer: coarse)').matches
-  // Today never collapses (it isn't part of this system at all); every
-  // other section (World, Rents, ... and now News too) resolves an explicit
-  // override first, falling back to the viewport-aware default.
+  // Today never collapses; every themed section is closed unless the user
+  // opened it (2.5: no viewport-aware default — absent override = closed).
   const sectionOpen = (id: string): boolean => {
     if (id === 'today') return true
-    const ov = overrides[id]
-    if (ov === 'open') return true
-    if (ov === 'closed') return false
-    return defaultSectionOpen(id, coarsePointer)
+    return overrides[id] === 'open'
   }
   const toggleSection = (id: string) => {
     const next = { ...overrides, [id]: sectionOpen(id) ? 'closed' as const : 'open' as const }
@@ -275,9 +243,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   </div>
                 )}
               </>
-            ) : (
-              <CollapsedRow id={id} charts={charts} site={site} now={now} />
-            )}
+            ) : null}
           </section>
         )
       })}

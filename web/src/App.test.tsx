@@ -21,6 +21,15 @@ function mockFetch(site: unknown = siteEdge) {
   })))
 }
 
+// 2.5: every themed section defaults closed, so tests that inspect section
+// BODIES must open the section first, exactly like a reader would.
+async function openSection(name: string) {
+  const section = screen.getByRole('region', { name })
+  const toggle = within(section).getByRole('button', { name })
+  if (toggle.getAttribute('aria-expanded') === 'false') await userEvent.click(toggle)
+  return section
+}
+
 test('shows a skeleton, not a spinner, before data loads', () => {
   vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
@@ -38,7 +47,7 @@ test('renders masthead, sections and a chart finding after load', async () => {
   // finding cards intentionally repeat hero-pick sentences — same rationale
   // as the "changed this week" chips duplicating hero tiles), so scope this
   // to the Money & credit section's own chart card.
-  const money = screen.getByRole('region', { name: 'Money & credit' })
+  const money = await openSection('Money & credit')
   expect(within(money).getByText(/held at 3.85%/)).toBeInTheDocument()
   expect(screen.queryByText(/data may be stale/i)).not.toBeInTheDocument()
 })
@@ -71,6 +80,7 @@ test('clicking a chart card opens detail and url gains ?s=', async () => {
   mockFetch()
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
   await screen.findByText('Victorian Housing')
+  await openSection('Money & credit')
   await userEvent.click(screen.getByRole('button', { name: /RBA cash rate target — open details/i }))
   expect(location.search).toContain('s=cash_rate')
 })
@@ -101,44 +111,39 @@ test('masthead only counts sources that are actually overdue, singular wording',
 describe('collapsible sections', () => {
   beforeEach(() => localStorage.clear())
 
-  test('toggling a section header hides its body and flips aria-expanded', async () => {
+  test('toggling a section header mounts its body and flips aria-expanded', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    // Sections have an accessible name via aria-label, so a plain <section>
-    // gets the implicit 'region' role — scope through that rather than a raw
-    // CSS attribute selector (jsdom's attribute-selector matcher chokes on a
-    // literal '&' in the value, e.g. "Money & credit", and always returns null).
     const section = screen.getByRole('region', { name: 'Money & credit' })
     const toggle = within(section).getByRole('button', { name: 'Money & credit' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(within(section).queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+
+    await userEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    // Scoped to the section: Today's own lead/secondary finding cards
-    // legitimately repeat this same sentence and aren't affected by this
-    // section's collapse state.
     expect(within(section).getByText(/held at 3.85%/)).toBeInTheDocument()
 
     await userEvent.click(toggle)
-
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(within(section).queryByText(/held at 3.85%/)).not.toBeInTheDocument()
   })
 
   test('collapsed state persists in localStorage across remounts', async () => {
     history.replaceState(null, '', '/')
-    localStorage.setItem('vh.collapsed', JSON.stringify(['money']))
+    localStorage.setItem('vh.sections', JSON.stringify({ money: 'open' }))
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     const section = screen.getByRole('region', { name: 'Money & credit' })
     const toggle = within(section).getByRole('button', { name: 'Money & credit' })
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(within(section).queryByText(/held at 3.85%/)).not.toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(within(section).getByText(/held at 3.85%/)).toBeInTheDocument()
   })
 
   test('jumping to a collapsed section expands it and then scrolls', async () => {
     history.replaceState(null, '', '/')
-    localStorage.setItem('vh.collapsed', JSON.stringify(['money']))
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
@@ -159,18 +164,17 @@ describe('collapsible sections', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
-  test('a localStorage read failure degrades to all sections expanded, no crash', async () => {
+  test('a localStorage read failure degrades to the closed defaults, no crash', async () => {
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage disabled')
     })
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
+    expect(await screen.findByText('Victorian Housing')).toBeInTheDocument()
     const section = screen.getByRole('region', { name: 'Money & credit' })
-    expect(within(section).getByText(/held at 3.85%/)).toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Money & credit' }))
-      .toHaveAttribute('aria-expanded', 'true')
+      .toHaveAttribute('aria-expanded', 'false')
     spy.mockRestore()
   })
 
@@ -189,137 +193,44 @@ describe('collapsible sections', () => {
   })
 })
 
-// --- P0-3: viewport-aware collapse defaults ---
-
-function stubPointer(coarse: boolean) {
-  vi.stubGlobal('matchMedia', (q: string) => ({
-    matches: q.includes('prefers-reduced-motion') || (coarse && q.includes('pointer: coarse')),
-    media: q, addEventListener: () => {}, removeEventListener: () => {},
-  }))
-}
-
-describe('viewport-aware collapse defaults', () => {
+describe('default-closed sections (2.5)', () => {
   beforeEach(() => localStorage.clear())
-  afterEach(() => stubPointer(false))   // restore the fine-pointer default for later tests
 
-  test('desktop (fine pointer): only World starts collapsed — News stays open', async () => {
-    stubPointer(false)
+  test('every themed section starts closed — no pointer-type dependence', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const world = screen.getByRole('region', { name: 'World' })
-    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'false')
-    const news = screen.getByRole('region', { name: 'News' })
-    expect(within(news).getByRole('button', { name: 'News' })).toHaveAttribute('aria-expanded', 'true')
-    const prices = screen.getByRole('region', { name: 'Prices' })
-    expect(within(prices).getByRole('button', { name: 'Prices' })).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  test('mobile (coarse pointer): every section after Today starts collapsed, World and News included', async () => {
-    stubPointer(true)
-    history.replaceState(null, '', '/')
-    mockFetch()
-    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
-    for (const name of ['World', 'News', 'Prices', 'Money & credit']) {
+    for (const name of ['Prices', 'Rents & vacancy', 'Supply & construction',
+                        'Money & credit', 'People', 'Social housing', 'World', 'News']) {
       const section = screen.getByRole('region', { name })
-      expect(within(section).getByRole('button', { name })).toHaveAttribute('aria-expanded', 'false')
+      expect(within(section).getByRole('button', { name }))
+        .toHaveAttribute('aria-expanded', 'false')
     }
-    // Today itself is never collapsible, regardless of viewport.
-    expect(screen.getByText(/held at 3.85%/)).toBeInTheDocument()
+    // Today is not part of the system and stays rendered.
+    expect(screen.getByTestId('hero-strip')).toBeInTheDocument()
   })
 
-  test('an explicit override beats the viewport default in either direction', async () => {
-    stubPointer(true)   // mobile default would close World
+  test('a stored open override still opens a section', async () => {
     localStorage.setItem('vh.sections', JSON.stringify({ world: 'open' }))
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     const world = screen.getByRole('region', { name: 'World' })
-    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'true')
+    expect(within(world).getByRole('button', { name: 'World' }))
+      .toHaveAttribute('aria-expanded', 'true')
   })
 
-  // T6 item 4: a coverage gap — every prior jump test drove the section
-  // closed via an explicit vh.collapsed/vh.sections override, never via the
-  // viewport (coarse-pointer) DEFAULT alone. Proves the jump chip's
-  // "expand, then scroll" path also fires when defaultSectionOpen (not a
-  // stored override) is the only reason the section starts closed.
-  test('jumping to a section that is closed only by the mobile viewport default expands it and scrolls', async () => {
-    stubPointer(true)
+  test('a closed section renders its heading and nothing else (truly bare)', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const section = screen.getByRole('region', { name: 'Money & credit' })
-    const toggle = within(section).getByRole('button', { name: 'Money & credit' })
-    // No localStorage override at all — closed purely via the coarse-pointer
-    // viewport default (confirmed by the 'mobile (coarse pointer)' test above).
-    expect(localStorage.getItem('vh.sections')).toBeNull()
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-
-    const nav = screen.getByRole('navigation', { name: /filters and sections/i })
-    const chip = within(nav).getByRole('button', { name: 'Jump to Money & credit' })
-    await userEvent.click(chip)
-
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(await within(section).findByText(/held at 3.85%/)).toBeInTheDocument()
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    const money = screen.getByRole('region', { name: 'Money & credit' })
+    expect(money.children).toHaveLength(1)
+    expect(money.children[0].tagName).toBe('H2')
   })
-})
-
-// --- P0-3: collapsed-row summary line + worst status chip ---
-
-describe('collapsed section rows', () => {
-  beforeEach(() => localStorage.clear())
-
-  test('a collapsed row shows the section summary and its worst status chip', async () => {
-    history.replaceState(null, '', '/')
-    mockFetch()   // au_cash_rate is fresh -> Money's summary shows with a plain (non-chip) status
-    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
-    const section = screen.getByRole('region', { name: 'Money & credit' })
-    await userEvent.click(within(section).getByRole('button', { name: 'Money & credit' }))
-    expect(within(section).getByText('The cash rate held steady this week.')).toBeInTheDocument()
-  })
-
-  test('honesty override: a quiet-sentinel summary is replaced when the section is actually stale/failed',
-    async () => {
-      history.replaceState(null, '', '/')
-      // vic_rents (the fixture's only Rents series) is 'failed' status but reads
-      // as 'fresh' at the fixture's usual NOW — push `now` far enough past its
-      // 92-day cadence that its real outage actually trips the staleness gate.
-      const mutated = { ...siteEdge as object,
-        section_summaries: { ...(siteEdge as { section_summaries: object }).section_summaries,
-          rents: 'No notable moves in Rents & vacancy this week.' },
-        section_summary_quiet: { ...(siteEdge as { section_summary_quiet: object }).section_summary_quiet,
-          rents: true } }
-      mockFetch(mutated)
-      const stale = new Date('2027-01-01T00:00:00Z')
-      render(<App now={stale} />)
-      await screen.findByText('Victorian Housing')
-      const section = screen.getByRole('region', { name: 'Rents & vacancy' })
-      await userEvent.click(within(section).getByRole('button', { name: 'Rents & vacancy' }))
-      expect(within(section).queryByText('No notable moves in Rents & vacancy this week.'))
-        .not.toBeInTheDocument()
-      expect(within(section).getByText(/Data to Mar qtr 2026 — source unavailable/)).toBeInTheDocument()
-    })
-
-  test('a genuine finding survives even when some series in the section is stale (not suppressed)',
-    async () => {
-      history.replaceState(null, '', '/')
-      mockFetch()
-      render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-      await screen.findByText('Victorian Housing')
-      const section = screen.getByRole('region', { name: 'Prices' })
-      await userEvent.click(within(section).getByRole('button', { name: 'Prices' }))
-      // vic_auctions is failed with no vintage at all, yet Prices' real
-      // summary sentence still shows, with the failure surfaced via the
-      // worst-status chip alongside it rather than by suppressing the news.
-      expect(within(section).getByText('Prices were broadly steady this week.')).toBeInTheDocument()
-      expect(within(section).getByText(/source unavailable/i)).toBeInTheDocument()
-    })
 })
 
 // --- D1(f): World KPI tile row when expanded ---
@@ -380,30 +291,13 @@ function withWorldTiles(base: object) {
 describe('World KPI tile row (D1f)', () => {
   beforeEach(() => localStorage.clear())
 
-  test('World collapsed by default (unchanged) shows the existing one-line collapsed summary, not the tile row', async () => {
-    history.replaceState(null, '', '/')
-    mockFetch(withWorldTiles(siteEdge))
-    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
-    await screen.findByText('Victorian Housing')
-    const world = screen.getByRole('region', { name: 'World' })
-    expect(within(world).getByRole('button', { name: 'World' })).toHaveAttribute('aria-expanded', 'false')
-    // CollapsedRow's pre-existing one-line status (unrelated to D1f) is
-    // unaffected and still shows — this proves the tile row/grid itself
-    // (individual series tiles, tap targets) is what's absent while
-    // collapsed, not that the section renders nothing at all.
-    expect(within(world).getByText('Brent crude rose 9.8% to US$82 in Jul 2026')).toBeInTheDocument()
-    for (const label of ['AUD/USD', 'US 10-year Treasury', 'Iron ore', 'Copper', 'Sawnwood']) {
-      expect(within(world).queryByText(label)).not.toBeInTheDocument()
-    }
-  })
-
   test('World expanded renders the compact 6-tile KPI row led by the section summary, not six chart cards', async () => {
     history.replaceState(null, '', '/')
     localStorage.setItem('vh.sections', JSON.stringify({ world: 'open' }))
     mockFetch(withWorldTiles(siteEdge))
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const world = screen.getByRole('region', { name: 'World' })
+    const world = await openSection('World')
     expect(within(world).getByText('Brent crude rose 9.8% to US$82 in Jul 2026')).toBeInTheDocument()
     for (const label of ['Brent crude', 'AUD/USD', 'US 10-year Treasury', 'Iron ore', 'Copper', 'Sawnwood']) {
       expect(within(world).getByText(label)).toBeInTheDocument()
@@ -418,7 +312,7 @@ describe('World KPI tile row (D1f)', () => {
     mockFetch(withWorldTiles(siteEdge))
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const world = screen.getByRole('region', { name: 'World' })
+    const world = await openSection('World')
     await userEvent.click(within(world).getByText('Copper').closest('button')!)
     expect(location.search).toContain('s=copper')
   })
@@ -432,7 +326,7 @@ describe('trailing card grid (D2e)', () => {
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const section = await openSection('Money & credit')
     const articles = within(section).getAllByRole('article')
     expect(articles).toHaveLength(3)   // cash_rate, lending, mortgage_rates
     expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // the lead card
@@ -451,7 +345,7 @@ describe('trailing card grid (D2e)', () => {
     mockFetch(mutated)
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
-    const section = screen.getByRole('region', { name: 'Money & credit' })
+    const section = await openSection('Money & credit')
     const articles = within(section).getAllByRole('article')
     expect(articles).toHaveLength(4)
     expect(articles[0].parentElement).toHaveClass('sm:col-span-2')       // the lead card
@@ -473,7 +367,7 @@ describe('shared-outage section notice', () => {
       const stale = new Date('2027-01-01T00:00:00Z')   // trips vic_rents' failed gate
       render(<App now={stale} />)
       await screen.findByText('Victorian Housing')
-      const section = screen.getByRole('region', { name: 'Rents & vacancy' })
+      const section = await openSection('Rents & vacancy')
       expect(within(section).getByText(/DFFH source unavailable — data to Mar qtr 2026/))
         .toBeInTheDocument()
       // The per-card chip drops to the quiet form instead of repeating the
@@ -488,7 +382,7 @@ describe('shared-outage section notice', () => {
       mockFetch()
       render(<App now={new Date('2026-07-18T10:00:00Z')} />)
       await screen.findByText('Victorian Housing')
-      const section = screen.getByRole('region', { name: 'Money & credit' })
+      const section = await openSection('Money & credit')
       expect(within(section).queryByText(/source unavailable — data to/)).not.toBeInTheDocument()
     })
 })
