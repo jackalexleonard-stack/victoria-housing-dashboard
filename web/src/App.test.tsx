@@ -490,7 +490,7 @@ describe('first-run welcome modal', () => {
 })
 
 describe('shared-outage section notice', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('hoists one notice under the h2 when every series in the section shares one source + vintage',
     async () => {
