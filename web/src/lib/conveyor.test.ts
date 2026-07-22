@@ -54,6 +54,12 @@ describe('useConveyor', () => {
     expect(result.current.offset).toBe(0)
   })
 
+  test('does not rotate below MIN_ROTATE findings even when running', () => {
+    const { result } = renderHook(() => useConveyor(2, true))
+    act(() => vi.advanceTimersByTime(10 * ROTATE_MS))
+    expect(result.current.offset).toBe(0)
+  })
+
   test('pausing stops the clock; resuming restarts a full fresh interval', () => {
     const { result, rerender } = renderHook(
       ({ run }: { run: boolean }) => useConveyor(3, run), { initialProps: { run: true } })
