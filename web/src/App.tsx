@@ -205,7 +205,9 @@ export default function App({ now = new Date() }: { now?: Date }) {
         </p>
       )}
       <FilterBar range={state.range} geo={state.geo} sections={site.sections}
-                 activeSection={active} onFilters={setFilters} onJump={jump} />
+                 activeSection={active} onFilters={setFilters} onJump={jump}
+                 isSectionOpen={sectionOpen} onSetSections={setAllSections}
+                 onResetSections={resetSections} />
       <div ref={el => { sectionsRef.current.today = el }} id="today"
            className="pt-6 scroll-mt-28">
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}

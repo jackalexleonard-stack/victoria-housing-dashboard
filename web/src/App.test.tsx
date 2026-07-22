@@ -407,6 +407,21 @@ describe('sections URL param (2.5)', () => {
       expect(toggleOf(name)).toHaveAttribute('aria-expanded', 'false')
     }
   })
+
+  test('the Sections popover opens sections and Reset returns to bare defaults', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Sections' })[0])
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Prices' }))
+    expect(toggleOf('Prices')).toHaveAttribute('aria-expanded', 'true')
+    expect(new URLSearchParams(location.search).get('sections')).toBe('prices')
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(toggleOf('Prices')).toHaveAttribute('aria-expanded', 'false')
+    expect(new URLSearchParams(location.search).get('sections')).toBeNull()
+    expect(localStorage.getItem('vh.sections')).toBeNull()
+  })
 })
 
 describe('shared-outage section notice', () => {
