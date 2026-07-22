@@ -55,8 +55,12 @@ describe('useConveyor', () => {
   })
 
   test('does not rotate below MIN_ROTATE findings even when running', () => {
+    // 11 (odd) ticks, not 10: with size=2 an even tick count parity-cycles
+    // back to offset 0 even if the gate were dropped entirely, which would
+    // let this test pass vacuously. An odd count means a dropped gate
+    // lands on offset 1, so the assertion actually discriminates.
     const { result } = renderHook(() => useConveyor(2, true))
-    act(() => vi.advanceTimersByTime(10 * ROTATE_MS))
+    act(() => vi.advanceTimersByTime(11 * ROTATE_MS))
     expect(result.current.offset).toBe(0)
   })
 
