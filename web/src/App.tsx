@@ -58,6 +58,7 @@ const SECTIONS_KEY = 'vh.sections'
 // Superseded by SECTIONS_KEY (a flat array can't carry per-section
 // open/closed state) — read once for migration, then removed.
 const OLD_COLLAPSED_KEY = 'vh.collapsed'
+const HINT_KEY = 'vh.sectionsHintDismissed'
 
 // Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
 // to "everything closed" (the app's default, 2.5) rather than crash the app
@@ -105,6 +106,20 @@ export default function App({ now = new Date() }: { now?: Date }) {
     }
     return readSectionOverrides()
   })
+  // First-visit hint (spec §4, GA4/Apple News-style non-blocking nudge):
+  // only for someone with NO saved section state and NO preset link —
+  // anyone else has already found (or been handed) the mechanism.
+  const [hintVisible, setHintVisible] = useState(() => {
+    try {
+      return localStorage.getItem(HINT_KEY) == null &&
+        localStorage.getItem(SECTIONS_KEY) == null &&
+        new URLSearchParams(location.search).get('sections') == null
+    } catch { return false }
+  })
+  const dismissHint = () => {
+    setHintVisible(false)
+    try { localStorage.setItem(HINT_KEY, '1') } catch { /* ignore */ }
+  }
   // Set by jump() when the target section was collapsed: the section body
   // must mount before scrollIntoView measures anything, so the actual scroll
   // happens in an effect that runs after that render commits.
@@ -213,6 +228,13 @@ export default function App({ now = new Date() }: { now?: Date }) {
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}
                       filtersActive={filtersActive} detailOpen={!!detailChart} />
       </div>
+      {hintVisible && (
+        <p data-testid="sections-hint" className="flex items-center gap-3 text-sm text-muted mt-6">
+          New here? Pick the sections you follow with the "Sections" control above.
+          <button type="button" className="text-xs text-blue" onClick={dismissHint}>
+            Dismiss</button>
+        </p>
+      )}
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
         const open = sectionOpen(id)

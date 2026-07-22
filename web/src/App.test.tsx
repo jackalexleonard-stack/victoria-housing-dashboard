@@ -424,6 +424,42 @@ describe('sections URL param (2.5)', () => {
   })
 })
 
+describe('first-visit hint (2.5)', () => {
+  beforeEach(() => localStorage.clear())
+
+  test('shows on a true first visit and dismisses permanently', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    const { unmount } = render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.getByTestId('sections-hint')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+    expect(localStorage.getItem('vh.sectionsHintDismissed')).toBe('1')
+    unmount()
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+  })
+
+  test('suppressed for anyone with saved section state or a preset link', async () => {
+    localStorage.setItem('vh.sections', JSON.stringify({ money: 'open' }))
+    history.replaceState(null, '', '/')
+    mockFetch()
+    const { unmount } = render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+    unmount()
+    localStorage.clear()
+    history.replaceState(null, '', '/?sections=money')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.queryByTestId('sections-hint')).not.toBeInTheDocument()
+  })
+})
+
 describe('shared-outage section notice', () => {
   beforeEach(() => localStorage.clear())
 
