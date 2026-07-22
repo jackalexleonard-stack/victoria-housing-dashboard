@@ -13,6 +13,7 @@ import { ChartCard } from './components/ChartCard'
 import { NewsSection } from './components/NewsSection'
 import { WorldTiles } from './components/WorldTiles'
 import { DetailView } from './components/DetailView'
+import { WelcomeModal } from './components/WelcomeModal'
 
 const DATA_URL =
   'https://github.com/jackalexleonard-stack/victoria-housing-dashboard/tree/main/data'
@@ -59,6 +60,7 @@ const SECTIONS_KEY = 'vh.sections'
 // open/closed state) — read once for migration, then removed.
 const OLD_COLLAPSED_KEY = 'vh.collapsed'
 const HINT_KEY = 'vh.sectionsHintDismissed'
+const WELCOME_KEY = 'vh.welcomeSeen'
 
 // Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
 // to "everything closed" (the app's default, 2.5) rather than crash the app
@@ -106,25 +108,20 @@ export default function App({ now = new Date() }: { now?: Date }) {
     }
     return readSectionOverrides()
   })
-  // First-visit hint (spec §4, GA4/Apple News-style non-blocking nudge):
-  // only for someone with NO saved section state and NO preset link —
-  // anyone else has already found (or been handed) the mechanism.
-  // Order dependency: this initializer's SECTIONS_KEY read must run AFTER
-  // the `overrides` initializer above, which performs the vh.collapsed ->
-  // vh.sections migration as a side effect — a migrating 2.4 user has no
-  // vh.sections key yet until that migration writes it, so this useState
-  // must stay declared below `overrides` or it will read stale/missing state.
-  const [hintVisible, setHintVisible] = useState(() => {
+  // First-run modal gate (spec §3): show only on a genuine first visit —
+  // no saved section state, no preset link, and not already onboarded
+  // (WELCOME_KEY, or the legacy 2.5 hint's HINT_KEY — a user who dismissed
+  // that hint must not be re-onboarded). Same order-dependency as before:
+  // this read must run after the `overrides` initializer's vh.collapsed ->
+  // vh.sections migration side effect.
+  const [showWelcome, setShowWelcome] = useState(() => {
     try {
-      return localStorage.getItem(HINT_KEY) == null &&
+      return localStorage.getItem(WELCOME_KEY) == null &&
         localStorage.getItem(SECTIONS_KEY) == null &&
+        localStorage.getItem(HINT_KEY) == null &&
         new URLSearchParams(location.search).get('sections') == null
     } catch { return false }
   })
-  const dismissHint = () => {
-    setHintVisible(false)
-    try { localStorage.setItem(HINT_KEY, '1') } catch { /* ignore */ }
-  }
   // Set by jump() when the target section was collapsed: the section body
   // must mount before scrollIntoView measures anything, so the actual scroll
   // happens in an effect that runs after that render commits.
@@ -189,6 +186,11 @@ export default function App({ now = new Date() }: { now?: Date }) {
     try { localStorage.removeItem(SECTIONS_KEY) } catch { /* ignore */ }
     setSections(null)
   }
+  const enterFromWelcome = (openIds: string[]) => {
+    setAllSections(openIds)
+    try { localStorage.setItem(WELCOME_KEY, '1') } catch { /* ignore */ }
+    setShowWelcome(false)
+  }
   const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
   const failedSources: FailedSource[] = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed')
@@ -233,13 +235,6 @@ export default function App({ now = new Date() }: { now?: Date }) {
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}
                       filtersActive={filtersActive} detailOpen={!!detailChart} />
       </div>
-      {hintVisible && (
-        <p data-testid="sections-hint" className="flex items-center gap-3 text-sm text-muted mt-6">
-          New here? Pick the sections you follow with the "Sections" control above.
-          <button type="button" className="text-xs text-blue" onClick={dismissHint}>
-            Dismiss</button>
-        </p>
-      )}
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
         const open = sectionOpen(id)
@@ -299,6 +294,9 @@ export default function App({ now = new Date() }: { now?: Date }) {
         Free public sources, updated daily by GitHub Actions ·{' '}
         <a className="underline" href={DATA_URL}>data & methodology</a>
       </footer>
+      {showWelcome && (
+        <WelcomeModal sections={contentSections} onEnter={enterFromWelcome} />
+      )}
       {detailChart && (
         <DetailView site={site} chart={detailChart}
                     finding={site.findings[detailChart.id]}
