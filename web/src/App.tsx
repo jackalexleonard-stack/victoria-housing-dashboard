@@ -55,9 +55,8 @@ function SectionHeading({ label, open, onToggle }: {
 }
 
 const SECTIONS_KEY = 'vh.sections'
-// Superseded by SECTIONS_KEY (viewport-dependent defaults don't survive a
-// flat "these ids are collapsed" array) — read once for migration, then
-// removed.
+// Superseded by SECTIONS_KEY (a flat array can't carry per-section
+// open/closed state) — read once for migration, then removed.
 const OLD_COLLAPSED_KEY = 'vh.collapsed'
 
 // Storage can throw (private-mode Safari, disabled cookies, etc.) — degrade
@@ -93,9 +92,19 @@ function writeSectionOverrides(overrides: Record<string, SectionState>) {
 export default function App({ now = new Date() }: { now?: Date }) {
   const [data, setData] = useState<{ site: SiteData; news: NewsData } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { state, setFilters, openDetail, closeDetail, setCompare } = useUrlState()
+  const { state, setFilters, openDetail, closeDetail, setCompare, setSections } = useUrlState()
   const [active, setActive] = useState('today')
-  const [overrides, setOverrides] = useState<Record<string, SectionState>>(readSectionOverrides)
+  // Precedence at load: URL > localStorage > default-closed (spec §4). A
+  // URL-seeded view is NOT persisted until the user actually toggles
+  // something — viewing a shared preset link must not overwrite the
+  // visitor's own saved state.
+  const [overrides, setOverrides] = useState<Record<string, SectionState>>(() => {
+    const fromUrl = state.sections
+    if (fromUrl != null) {
+      return Object.fromEntries(fromUrl.map(id => [id, 'open' as const]))
+    }
+    return readSectionOverrides()
+  })
   // Set by jump() when the target section was collapsed: the section body
   // must mount before scrollIntoView measures anything, so the actual scroll
   // happens in an effect that runs after that render commits.
@@ -144,6 +153,22 @@ export default function App({ now = new Date() }: { now?: Date }) {
   if (!data) return <main className="max-w-5xl mx-auto px-4"><Skeleton /></main>
 
   const { site, news } = data
+  const contentSections = site.sections.filter(([id]) => id !== 'today')
+  const applySections = (next: Record<string, SectionState>) => {
+    setOverrides(next)
+    writeSectionOverrides(next)
+    setSections(contentSections.map(([id]) => id).filter(id => next[id] === 'open'))
+  }
+  const toggleSection = (id: string) =>
+    applySections({ ...overrides, [id]: sectionOpen(id) ? 'closed' as const : 'open' as const })
+  const setAllSections = (openIds: string[]) =>
+    applySections(Object.fromEntries(contentSections.map(([id]) =>
+      [id, openIds.includes(id) ? 'open' as const : 'closed' as const])))
+  const resetSections = () => {
+    setOverrides({})
+    try { localStorage.removeItem(SECTIONS_KEY) } catch { /* ignore */ }
+    setSections(null)
+  }
   const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
   const failedSources: FailedSource[] = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed')
@@ -158,11 +183,6 @@ export default function App({ now = new Date() }: { now?: Date }) {
     if (id === 'today') return true
     return overrides[id] === 'open'
   }
-  const toggleSection = (id: string) => {
-    const next = { ...overrides, [id]: sectionOpen(id) ? 'closed' as const : 'open' as const }
-    setOverrides(next)
-    writeSectionOverrides(next)
-  }
   const jump = (id: string) => {
     if (!sectionOpen(id)) {
       // Expand first — the scroll itself happens once the body has mounted
@@ -174,7 +194,6 @@ export default function App({ now = new Date() }: { now?: Date }) {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     sectionsRef.current[id]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
   }
-  const contentSections = site.sections.filter(([id]) => id !== 'today')
 
   return (
     <main className="max-w-5xl mx-auto px-4 pb-16">

@@ -357,6 +357,58 @@ describe('trailing card grid (D2e)', () => {
 
 // --- P1-outage: hoisted section notice + quiet per-card chips ---
 
+describe('sections URL param (2.5)', () => {
+  beforeEach(() => localStorage.clear())
+
+  const toggleOf = (name: string) =>
+    within(screen.getByRole('region', { name })).getByRole('button', { name })
+
+  test('?sections= beats localStorage and the closed default — and is not persisted on load', async () => {
+    localStorage.setItem('vh.sections', JSON.stringify({ prices: 'open' }))
+    history.replaceState(null, '', '/?sections=rents,money')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(toggleOf('Rents & vacancy')).toHaveAttribute('aria-expanded', 'true')
+    expect(toggleOf('Money & credit')).toHaveAttribute('aria-expanded', 'true')
+    expect(toggleOf('Prices')).toHaveAttribute('aria-expanded', 'false')
+    // Viewing a preset link must not overwrite the visitor's own saved state.
+    expect(JSON.parse(localStorage.getItem('vh.sections')!)).toEqual({ prices: 'open' })
+  })
+
+  test('toggling a heading persists the full state and mirrors it into the URL', async () => {
+    history.replaceState(null, '', '/?sections=rents')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await userEvent.click(toggleOf('Prices'))
+    // contentSections order is prices,rents,… so the mirrored list is ordered.
+    expect(new URLSearchParams(location.search).get('sections')).toBe('prices,rents')
+    expect(JSON.parse(localStorage.getItem('vh.sections')!))
+      .toMatchObject({ prices: 'open', rents: 'open' })
+  })
+
+  test('with no param, toggling still mirrors into the URL', async () => {
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await userEvent.click(toggleOf('People'))
+    expect(new URLSearchParams(location.search).get('sections')).toBe('people')
+  })
+
+  test('unknown ids in the param are ignored', async () => {
+    history.replaceState(null, '', '/?sections=bogus,money')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(toggleOf('Money & credit')).toHaveAttribute('aria-expanded', 'true')
+    for (const name of ['Prices', 'People', 'World']) {
+      expect(toggleOf(name)).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
+})
+
 describe('shared-outage section notice', () => {
   beforeEach(() => localStorage.clear())
 
