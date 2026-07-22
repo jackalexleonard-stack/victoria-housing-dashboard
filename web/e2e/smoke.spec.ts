@@ -120,7 +120,30 @@ test('shared deep link restores the modal', async ({ page }) => {
 })
 
 test('axe scan has no serious violations', async ({ page }) => {
+  // Scan a SETTLED page. The headline conveyor's cards fade in (opacity
+  // 0 -> 1); axe multiplies a mid-fade element's opacity into its effective
+  // contrast, so scanning during the fade reads the (fully-legible-at-rest)
+  // lead finding as a transient color-contrast violation. Two guards:
+  // 1. emulateMedia reduce turns the 5s rotation timer OFF (running folds in
+  //    !prefersReducedMotion), so only the single initial mount-fade occurs —
+  //    no further fades can start mid-scan. (motion's reducedMotion disables
+  //    transform but NOT opacity animations, so this alone is not enough.)
+  // 2. Wait until the headline's EFFECTIVE opacity (its own times every
+  //    ancestor's — exactly what axe blends into contrast) reaches 1, i.e.
+  //    the mount-fade has finished, before analysing. Config-level
+  //    reducedMotion does not reach the page in this repo (Playwright quirk);
+  //    the per-test emulateMedia above does.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-testid="lead-finding"]')
+    if (!el) return false
+    let eff = 1
+    for (let n: Element | null = el; n; n = n.parentElement) {
+      eff *= parseFloat(getComputedStyle(n).opacity || '1')
+    }
+    return eff > 0.999
+  })
   const results = await new AxeBuilder({ page }).analyze()
   const serious = results.violations.filter(v =>
     v.impact === 'serious' || v.impact === 'critical')
