@@ -1,9 +1,37 @@
 import { act, renderHook } from '@testing-library/react'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from './types'
-import { headlinePool, useConveyor, MIN_ROTATE, ROTATE_MS } from './conveyor'
+import { headlinePool, prefersReducedMotion, useConveyor, MIN_ROTATE, ROTATE_MS } from './conveyor'
 
 const site = assertSiteData(siteEdge)
+
+// setup.ts stubs matchMedia globally with reduced-motion ON by default
+// (deterministic DOM for every other test in the suite) — afterEach here
+// restores exactly that default rather than leaving matchMedia unstubbed,
+// so this describe doesn't leak a different matchMedia into later tests.
+describe('prefersReducedMotion', () => {
+  const restoreDefault = () => vi.stubGlobal('matchMedia', (q: string) => ({
+    matches: q.includes('prefers-reduced-motion'),
+    media: q, addEventListener: () => {}, removeEventListener: () => {},
+  }))
+  afterEach(restoreDefault)
+
+  test('true when the reduce query matches', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('prefers-reduced-motion'),
+      media: q, addEventListener: () => {}, removeEventListener: () => {},
+    }))
+    expect(prefersReducedMotion()).toBe(true)
+  })
+
+  test('false when the reduce query does not match', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: false,
+      media: q, addEventListener: () => {}, removeEventListener: () => {},
+    }))
+    expect(prefersReducedMotion()).toBe(false)
+  })
+})
 
 describe('headlinePool', () => {
   test('hero_lead first, then hero tile order, deduped', () => {

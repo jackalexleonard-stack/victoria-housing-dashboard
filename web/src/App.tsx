@@ -109,6 +109,11 @@ export default function App({ now = new Date() }: { now?: Date }) {
   // First-visit hint (spec §4, GA4/Apple News-style non-blocking nudge):
   // only for someone with NO saved section state and NO preset link —
   // anyone else has already found (or been handed) the mechanism.
+  // Order dependency: this initializer's SECTIONS_KEY read must run AFTER
+  // the `overrides` initializer above, which performs the vh.collapsed ->
+  // vh.sections migration as a side effect — a migrating 2.4 user has no
+  // vh.sections key yet until that migration writes it, so this useState
+  // must stay declared below `overrides` or it will read stale/missing state.
   const [hintVisible, setHintVisible] = useState(() => {
     try {
       return localStorage.getItem(HINT_KEY) == null &&

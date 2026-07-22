@@ -149,18 +149,27 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
   return (
     <section aria-label="Today">
       {leadKey && (
-        <div data-testid="headline-conveyor" aria-live="off"
-             onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-             onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
-            {secondaryKeys.length > 0 && (
-              <div data-testid="secondary-findings"
-                   className="grid grid-cols-2 gap-3 sm:grid-cols-1">
-                {secondaryKeys.map(k =>
-                  <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
-              </div>
-            )}
+        <div>
+          {/* final-review Fix 1: the pause handlers + headline-conveyor
+              testid wrap ONLY the cards, not the controls below. When the
+              controls lived inside this region, hovering/focusing "Resume"
+              kept hovered/focused true, so rotation didn't visibly resume
+              until the user moved away — the button was trapped inside the
+              very region it was meant to release. Do not "tidy" the
+              controls back inside this div. */}
+          <div data-testid="headline-conveyor" aria-live="off"
+               onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+               onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
+              {secondaryKeys.length > 0 && (
+                <div data-testid="secondary-findings"
+                     className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+                  {secondaryKeys.map(k =>
+                    <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
+                </div>
+              )}
+            </div>
           </div>
           {rotating && (
             <div className="flex items-center gap-1 mt-2" data-testid="conveyor-controls">

@@ -36,10 +36,11 @@ export function SectionsControl({ sections, isOpen, onSetAll, onReset }: {
           ))}
         </ul>
         <div className="flex items-center gap-3 mt-3 text-xs">
-          <button type="button" className="text-blue"
+          <button type="button" className="text-blue pointer-coarse:py-2.5 pointer-coarse:px-3"
                   onClick={() => onSetAll(sections.map(([id]) => id))}>Open all</button>
-          <button type="button" className="text-blue" onClick={onReset}>Reset</button>
-          <button type="button" className="text-blue ml-auto"
+          <button type="button" className="text-blue pointer-coarse:py-2.5 pointer-coarse:px-3"
+                  onClick={onReset}>Reset</button>
+          <button type="button" className="text-blue ml-auto pointer-coarse:py-2.5 pointer-coarse:px-3"
                   onClick={() => dlg.current?.close()}>Done</button>
         </div>
       </dialog>
