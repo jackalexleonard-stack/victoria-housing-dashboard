@@ -294,7 +294,7 @@ function withWorldTiles(base: object) {
 }
 
 describe('World KPI tile row (D1f)', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 
   test('World expanded renders the compact 6-tile KPI row led by the section summary, not six chart cards', async () => {
     history.replaceState(null, '', '/')
@@ -486,6 +486,16 @@ describe('first-run welcome modal', () => {
     }
     expect(localStorage.getItem('vh.welcomeSeen')).toBe('1')
     expect(screen.queryByRole('dialog', { name: /choose your sections/i })).not.toBeInTheDocument()
+  })
+
+  test('a first-visit detail deep-link shows onboarding first, not the detail view', async () => {
+    history.replaceState(null, '', '/?s=cash_rate')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.getByRole('dialog', { name: /choose your sections/i })).toBeInTheDocument()
+    // The detail view must be suppressed until the user has onboarded.
+    expect(screen.queryByRole('dialog', { name: 'RBA cash rate target' })).not.toBeInTheDocument()
   })
 })
 

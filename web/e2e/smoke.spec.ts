@@ -361,7 +361,7 @@ test.describe('first-run welcome modal', () => {
     await page.goto('/')   // plain: no bypass, so the modal appears
     const dialog = page.getByRole('dialog', { name: /choose your sections/i })
     await expect(dialog).toBeVisible()
-    // Background is inert: a section heading behind the modal isn't clickable.
+    // Enter is disabled until at least one section is chosen.
     await expect(dialog.getByRole('button', { name: 'Enter dashboard' })).toBeDisabled()
     await dialog.getByRole('button', { name: 'Show everything' }).click()
     await expect(dialog).not.toBeVisible()

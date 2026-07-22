@@ -297,7 +297,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       {showWelcome && (
         <WelcomeModal sections={contentSections} onEnter={enterFromWelcome} />
       )}
-      {detailChart && (
+      {!showWelcome && detailChart && (
         <DetailView site={site} chart={detailChart}
                     finding={site.findings[detailChart.id]}
                     range={state.range} geo={state.geo} compare={state.compare}
