@@ -7,13 +7,6 @@ export const GEO_LABEL: Record<string, string> = {
   australia: 'Australia-wide', global: 'Global',
 }
 
-const FALLBACK: Record<Geo, string[]> = {
-  melbourne: ['melbourne', 'vic', 'australia'],
-  regional_vic: ['regional_vic', 'vic', 'australia'],
-  vic: ['vic', 'australia'],
-  australia: ['australia'],
-}
-
 const YEARS: Record<Exclude<Range, 'all'>, number> = { '1y': 1, '3y': 3, '5y': 5, '10y': 10 }
 
 // Single source of truth for turning a raw metric key into a display-ready
@@ -47,12 +40,14 @@ export function chartPoints(site: SiteData, chart: ChartSpec, range: Range,
   if (chart.region_mode.startsWith('fixed:')) {
     const r = chart.region_mode.slice(6)
     pts = pts.filter(p => p.region === r)
+    // A fixed-region chart shown outside its own geography is context, and
+    // must say so (previously it said nothing at all — audit D3).
+    if (r !== geo) scopeNote = GEO_LABEL[r] ?? r
   } else if (chart.region_mode === 'geo') {
-    const regions = [...new Set(pts.map(p => p.region))]
-    const hit = FALLBACK[geo].find(r => regions.includes(r)) ?? regions[0]
-    if (hit === undefined) return { lines: [], scopeNote: null }
-    if (hit !== geo) scopeNote = GEO_LABEL[hit] ?? hit
-    pts = pts.filter(p => p.region === hit)
+    // Strictly the selected geo. No widening, no `?? regions[0]` — a chart
+    // with no rows for this geo renders nothing and is filtered out of the
+    // grid upstream by bandFor() (audit D2).
+    pts = pts.filter(p => p.region === geo)
   }
 
   const lines: { name: string; pts: Pt[] }[] = []

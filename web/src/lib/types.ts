@@ -15,6 +15,10 @@ export interface SeriesEntry {
 export interface ChartSpec {
   id: string; section: string; title: string; series_id: string
   metrics: string[] | null; region_mode: string
+  // T1/T3: pipeline-derived scope classification and the UI geos this chart
+  // genuinely has data for (§2/geoBands.ts) — never hardcoded per-chart, so
+  // a chart can never claim a geography it doesn't actually have rows for.
+  scope: string; geos: string[]
   percent: boolean; markers: boolean; annotate: boolean
   note?: string | null
   // Extra series shown only in the detail modal — mixed-scale split charts
@@ -51,7 +55,10 @@ export interface ExtraTile {
 export interface SiteData {
   schema_version: 1; generated_at: string
   sections: [string, string][]
-  charts: ChartSpec[]; findings: Record<string, string>
+  // T2/T3: per-geo findings — {chartId: {geo: sentence}}, keyed by the geo
+  // the sentence was written for (a chart can read differently per geo, e.g.
+  // "Melbourne rents held" vs "Regional Vic rents rose").
+  charts: ChartSpec[]; findings: Record<string, Record<string, string>>
   series: Record<string, SeriesEntry>
   hero: HeroTile[]; whats_new: HeroTile[]
   annotations: { cash_rate_moves: { date: string; delta: number }[]; accord_start: string }
@@ -93,6 +100,9 @@ export function assertSiteData(x: unknown): SiteData {
   if (!s.generated_at || typeof s.generated_at !== 'string') bad('generated_at')
   if (!s.series || typeof s.series !== 'object') bad('series')
   if (!Array.isArray(s.charts) || s.charts.length === 0) bad('charts')
+  // T3: findings is now nested per-geo (object-of-objects, see SiteData
+  // above) — still validated shallowly here, matching every other
+  // object-shaped field in this function; per-entry shape isn't re-walked.
   if (!s.findings || typeof s.findings !== 'object') bad('findings')
   if (!Array.isArray(s.hero) || s.hero.length !== 5) bad('hero')
   for (const [sid, e] of Object.entries(s.series)) {

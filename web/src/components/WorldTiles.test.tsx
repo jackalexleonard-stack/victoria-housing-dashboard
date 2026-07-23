@@ -9,7 +9,8 @@ const NOW = new Date('2026-07-21T00:00:00Z')
 function chart(id: string, title: string, seriesId: string, metric: string,
                percent = false): ChartSpec {
   return { id, section: 'world', title, series_id: seriesId, metrics: [metric],
-           region_mode: 'fixed:global', percent, markers: false, annotate: false }
+           region_mode: 'fixed:global', scope: 'global', geos: [],
+           percent, markers: false, annotate: false }
 }
 
 const worldCharts: ChartSpec[] = [
