@@ -434,8 +434,15 @@ def test_world_summary_matches_independently_derived_mover_on_real_data():
     This still locks in the real behaviour end-to-end: independently
     re-derive which World chart is the biggest mover over the committed
     data/ directory (the same loaders test_export.py's real end-to-end test
-    uses), and assert _world_summary's text is exactly what calling
-    _finding_for on that chart produces."""
+    uses). The mover-selection loop below intentionally duplicates
+    _world_summary's own (pre-existing, not this task's to fix) — but the
+    expected TEXT is a hardcoded literal, not re-derived via _finding_for:
+    an `expected = findings._finding_for(...)` comparison here would call
+    the exact same function the exact same way _world_summary itself does
+    (pipeline/findings.py), making the assertion tautological — able to
+    catch only a transcription slip in how _world_summary invokes
+    _finding_for, never a real bug inside _finding_for/_primary_frame
+    (precisely the code this task rewrote)."""
     best = None
     for chart in findings.CHARTS:
         if chart["section"] != "world":
@@ -457,12 +464,13 @@ def test_world_summary_matches_independently_derived_mover_on_real_data():
         if best is None or mag > best[0]:
             best = (mag, chart)
     assert best is not None, "sanity: real data must have a genuine mover today"
+    assert best[1]["id"] == "brent"  # independently-derived mover, pinned below
 
-    expected = findings._finding_for(
-        best[1], export.load_series, export.load_meta,
-        best[1]["region_mode"].split(":", 1)[1])
     text, is_quiet = findings._world_summary(export.load_series, export.load_meta)
-    assert text == expected
+    # Literal, verified against the committed data/ directory on 2026-07-23:
+    #   >>> findings._world_summary(export.load_series, export.load_meta)
+    #   ('Brent crude rose 9.8% to US$82 in Jul 2026', False)
+    assert text == "Brent crude rose 9.8% to US$82 in Jul 2026"
     # Sanity: real data has a genuine mover today, not the quiet fallback —
     # otherwise this test would pass vacuously.
     assert is_quiet is False

@@ -637,9 +637,27 @@ def build_section_summaries_full(load_series: Loader, load_meta: Loader,
         # first geo in UI_GEOS priority order (the dict's insertion order —
         # build_findings walks chart_geos(chart, load_series), which already
         # returns UI_GEOS order).
+        #
+        # !!! WARNING — MELBOURNE-FIRST COLLAPSE, GEO-BLIND BY DESIGN !!!
+        # "First in UI_GEOS order" means Melbourne whenever Melbourne has
+        # data — every non-World section's mover chart (median_rent,
+        # vacancy, mean_price, approvals, lending, population, ...) is
+        # region_mode="geo", so this sentence ALWAYS quotes Melbourne's own
+        # number, never whichever geo a viewer has selected. That is
+        # exactly the class of defect Task 2 just fixed for the per-chart
+        # headlines, recreated here one level up for section summaries.
+        # It is safe ONLY today, ONLY because the sole consumer of
+        # section_summaries is WorldTiles, and World is geo-independent
+        # (region_mode="fixed:global" everywhere, never Melbourne-first).
+        # Before wiring section_summaries into ANY geo-aware surface (a
+        # collapsed-section row, a homepage card, anything rendered beside
+        # the geo selector), section_summaries must become per-geo first —
+        # this is scheduled as Phase B plan Task 4, Step 4.4b. Do NOT read
+        # this dict as "the finding for the user's selected geo" until that
+        # lands.
         per_geo = (findings_out.get(mover) or {}) if mover else {}
         found = next(iter(per_geo.values()), None)
-        is_quiet = not found or found == NO_DATA_FINDING
+        is_quiet = not found
         text[section_id] = found if not is_quiet \
             else _QUIET_SUMMARY.format(title=titles[section_id])
         quiet[section_id] = is_quiet
