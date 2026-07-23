@@ -557,14 +557,26 @@ describe('geo banding', () => {
     for (const t of screen.getAllByRole('button', { expanded: false })) await userEvent.click(t)
   }
 
-  test('a chart with no data for the selected geo is not rendered in the grid', async () => {
-    history.replaceState(null, '', '/?geo=regional_vic&sections=prices')
+  test('a chart with no data for the selected geo is not rendered in the grid, but IS present at a geo it genuinely covers', async () => {
+    // median_rent (rents section): site.edge.json's vic_rents series only
+    // carries melbourne rows for the median_rent metric -> hidden (genuine
+    // gap) under regional_vic, present in the grid under melbourne. Picked
+    // by inspecting the fixture directly (`node -e` dump of site.edge.json)
+    // rather than assuming a title that doesn't exist in this fixture.
+    history.replaceState(null, '', '/?geo=regional_vic&sections=rents')
+    mockFetch()
+    const first = render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    expect(screen.queryByText('Median weekly rent')).not.toBeInTheDocument()
+    first.unmount()
+
+    history.replaceState(null, '', '/?geo=melbourne&sections=rents')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     await openAll()
-    // fixture: `land` has melbourne data only -> hidden under regional_vic
-    expect(screen.queryByText(/Greenfield land supply/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Median weekly rent')).toBeInTheDocument()
   })
 
   test('the footnote names the hidden charts for this geography', async () => {
@@ -573,11 +585,14 @@ describe('geo banding', () => {
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     await openAll()
-    // openAll() expands every section, not just 'prices' — the edge fixture's
-    // rents/money charts are also melbourne-only geo-scope data, so under
-    // regional_vic each of prices/rents/money legitimately renders its OWN
-    // footnote (one per section, correctly, since bandFor is a per-section
-    // decision) rather than a single page-wide one.
+    // openAll() expands every section, not just 'prices' — the edge
+    // fixture's rents/money sections also carry melbourne-only geo-scope
+    // charts backed by a WORKING source (vic_rents/au_lending are not the
+    // broken-source case), so under regional_vic each of rents/money
+    // legitimately renders its OWN footnote (a genuine per-section gap)
+    // — prices' own chart (auctions) is a broken source with no historical
+    // geos and is correctly absent, not footnoted (see 'never reports a
+    // failed source as a geography gap', below).
     const notes = screen.getAllByTestId('geo-footnote')
     expect(notes.length).toBeGreaterThan(0)
     for (const note of notes) expect(note).toHaveTextContent(/not published for Regional Vic/i)
@@ -592,5 +607,39 @@ describe('geo banding', () => {
     const band = screen.getByTestId('context-band')
     expect(within(band).getByText(/RBA cash rate/i)).toBeInTheDocument()
     expect(within(band).getAllByText('Australia').length).toBeGreaterThan(0)
+  })
+
+  // Review fix: a failed/missing source (vic_auctions: status 'failed', zero
+  // points, no historical geo signal at all) must never be reported as a
+  // geography gap — that would itself be the false claim this project
+  // exists to stop (auction clearance IS published for Melbourne; the
+  // scraper is blocked). It renders its honest outage card at its own home
+  // geo, and is simply absent — never footnoted — anywhere else.
+  test('a failed source never reports a false geography gap — outage card at its own geo, no footnote at all', async () => {
+    history.replaceState(null, '', '/?geo=melbourne&sections=prices')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    expect(screen.getByText('Auction clearance — Melbourne')).toBeInTheDocument()
+    expect(screen.getByText(/aren.t reachable from an automated source/i)).toBeInTheDocument()
+    // Nothing is a genuine gap under the chart's own home geo (melbourne) in
+    // this fixture — no footnote anywhere on the page.
+    expect(screen.queryByTestId('geo-footnote')).not.toBeInTheDocument()
+  })
+
+  test('...and under a geo it does not cover, it is simply absent — never named in the footnote either', async () => {
+    history.replaceState(null, '', '/?geo=vic&sections=prices')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    expect(screen.queryByText('Auction clearance — Melbourne')).not.toBeInTheDocument()
+    // Other sections legitimately footnote genuine gaps under 'vic' (their
+    // own working-source, melbourne-only charts) — auctions must never be
+    // named in any of them.
+    for (const note of screen.queryAllByTestId('geo-footnote')) {
+      expect(note).not.toHaveTextContent(/auction/i)
+    }
   })
 })

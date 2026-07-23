@@ -50,7 +50,7 @@
     {"key":"erp","label":"Resident population","value":27801000,"delta":78600,"delta_color":"off","last_date":"2025-12-31","chart":"population"}
   ],
   "metric_labels": {"cash_rate": "Cash rate", "median_rent": "Median rent"},
-  "section_summaries": {"prices": "Prices were broadly steady this week.", "money": "The cash rate held steady this week."},
+  "section_summaries": {"prices":{"melbourne":"Prices were broadly steady this week."},"money":{"melbourne":"The cash rate held steady this week."}},
   "section_summary_quiet": {"prices": false, "money": false},
   "annotations": {"cash_rate_moves":[{"date":"2026-02-28","delta":0.25},{"date":"2026-04-30","delta":-0.25}],"accord_start":"2024-07-01"}
 }

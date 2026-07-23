@@ -273,9 +273,11 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   // or is a genuine gap for this geography, named in the
                   // footnote instead of rendering a dead-looking card.
                   const sectionCharts = site.charts.filter(c => c.section === id)
-                  const grid = sectionCharts.filter(c => bandFor(c, state.geo) === 'grid')
-                  const context = sectionCharts.filter(c => bandFor(c, state.geo) === 'context')
-                  const hidden = hiddenTitles(sectionCharts, state.geo)
+                  const grid = sectionCharts.filter(c =>
+                    bandFor(c, state.geo, site.series[c.series_id]) === 'grid')
+                  const context = sectionCharts.filter(c =>
+                    bandFor(c, state.geo, site.series[c.series_id]) === 'context')
+                  const hidden = hiddenTitles(sectionCharts, state.geo, site.series)
                   return (
                     <>
                       <div className="grid sm:grid-cols-2 gap-4">
