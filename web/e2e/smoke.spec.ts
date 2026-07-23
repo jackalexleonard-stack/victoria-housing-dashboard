@@ -406,3 +406,24 @@ test.describe('first-run welcome modal', () => {
     expect(serious.map(v => `${v.id}: ${v.nodes[0]?.target}`)).toEqual([])
   })
 })
+
+// Regression: the detail modal (native <dialog>) rendered its main text black
+// because the document never declared a dark color-scheme, so the UA-default
+// `color: CanvasText` resolved to black. The two other dialogs masked it by
+// setting `text-ink`; DetailView didn't. Fix = `color-scheme: dark` on :root
+// (fixes CanvasText + native <select>/checkboxes/scrollbars) plus `text-ink`
+// on DetailView so its heading uses the exact token off-white, like its siblings.
+test('detail modal heading renders in the light theme ink, not black', async ({ page }) => {
+  await gotoDashboard(page, '/?s=cash_rate')   // deep-links the detail modal open
+  const heading = page.locator('dialog[open] h2').first()
+  await expect(heading).toBeVisible()
+  // --ink #ECEAF4 = rgb(236, 234, 244); the bug rendered this near-black.
+  await expect
+    .poll(() => heading.evaluate(el => getComputedStyle(el).color))
+    .toBe('rgb(236, 234, 244)')
+  // Root-cause guard: the document declares a dark color-scheme, so every
+  // native control (dialogs, <select>, checkboxes) renders dark.
+  const scheme = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).colorScheme)
+  expect(scheme).toContain('dark')
+})

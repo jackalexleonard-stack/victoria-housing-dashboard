@@ -78,7 +78,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
 
   return (
     <dialog ref={dlg} aria-label={chart.title}
-            className="w-full sm:max-w-2xl sm:rounded-xl bg-card p-5 m-auto
+            className="w-full sm:max-w-2xl sm:rounded-xl bg-card text-ink p-5 m-auto
                        max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none"
             style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
       <div className="flex items-start gap-2">

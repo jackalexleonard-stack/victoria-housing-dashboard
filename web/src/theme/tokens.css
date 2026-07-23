@@ -1,4 +1,8 @@
 :root {
+  /* Declare the dark scheme so native controls — the <dialog> UA color
+     (CanvasText, otherwise black), <select> dropdowns, checkboxes, scrollbars
+     — render dark instead of falling back to the light-mode defaults. */
+  color-scheme: dark;
   --bg: #1A1824; --bg2: #211E2E; --card: #242133;
   --line: #332F45; --line2: #3D3852;
   --ink: #ECEAF4; --muted: #B5B1C4; --faint: #918DA3;
