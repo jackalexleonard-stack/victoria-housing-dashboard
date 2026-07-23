@@ -574,7 +574,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Two-band layout + footnote in App
+### Task 4: Two-band layout, footnote, and ALL nested-findings consumers
 
 **Files:**
 - Modify: `web/src/App.tsx` (section chart grid, ~line 239 onward)
@@ -637,17 +637,36 @@ npx vitest run src/App.test.tsx -t "geo banding"
 ```
 Expected: FAIL — no banding, no testids.
 
-- [ ] **Step 4.3: Regenerate the test fixture**
+**COUPLING — read before starting.** Task 3 proved these cannot be split: migrating the fixtures to
+the nested `findings[id][geo]` shape makes that value an OBJECT at runtime, and `App.tsx`,
+`TodaySection.tsx` and `DetailView.tsx` still render `{finding}` directly — React then throws
+"Objects are not valid as a React child" and 59 tests fail. So the fixture migration and EVERY
+consumer update must land in this one task. The consumers are:
+- `App.tsx` — grid + context band (below), and the DetailView lookup:
+  `finding={site.findings[detailChart.id]?.[state.geo] ?? site.findings[detailChart.id]?.[detailChart.geos[0]] ?? ''}`
+- `ChartCard.tsx` — takes `finding: string` (already resolved by App) and gains `scopeBadge?: string`,
+  rendered beside the staleness chip via the existing `Chip`: `{scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}`
+- `DetailView.tsx` — takes the resolved string; no shape logic of its own.
+- `TodaySection.tsx` — its conveyor LeadCard/SecondaryCard read `site.findings[chartId]` directly.
+  Today is default-view-only, so resolve at the chart's own first geo:
+  `site.findings[chartId]?.[chart.geos[0]] ?? ''` (look the chart up via the existing `TILE_CHART` map).
 
-The fixture predates `scope`/`geos`/per-geo findings. Regenerate it from the real export:
-```powershell
-cd "C:\Users\OEM\Schemes\housing dashboard"
-& ".\.venv\Scripts\python.exe" -c "from pipeline.export import export_all; export_all()"
-Copy-Item web/public/data/site.json web/src/test/fixtures/site.edge.json -Force
-```
-Then re-read the fixture and fix up any test that asserted an exact finding string (findings are now
-objects). Keep the fixture's existing edge-case character where tests depend on it — if regenerating
-loses an edge case a test relies on, hand-patch that one field back rather than weakening the test.
+- [ ] **Step 4.3: Migrate the test fixtures**
+
+`site.edge.json` and `site.real.json` predate `scope`/`geos`/per-geo findings. **Do NOT regenerate
+them from the real export** — `site.edge.json` is a deliberately crafted edge-case fixture and
+regenerating silently drops the edge cases other tests depend on. Migrate them IN PLACE:
+- add `scope` per the `pipeline/findings.py` registry (`state` → activity, waitlist; `national` →
+  hvi_australia, accord, cash_rate, mortgage_rates, credit; `global` → the six world charts; all
+  others `geo`);
+- add `geos`, derived from the regions actually present in that fixture's own series for that chart,
+  in `melbourne, regional_vic, vic, australia` order (the `chart_geos` rule);
+- convert `findings[id]` from a string to `{<that chart's first geo>: <the same string>}`, and `{}`
+  when the chart has no geos.
+Preserve every other byte — prefer a surgical text/bracket-span edit over a full JSON reserialise, so
+unrelated formatting is untouched. Task 3 left a working script at
+`<scratchpad>/migrate-fixtures.js` (its own report names the exact path); read it, satisfy yourself
+it is correct, and reuse it or write your own. Do not commit the script.
 
 - [ ] **Step 4.4: Implement the two bands in `App.tsx`**
 
@@ -756,72 +775,63 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 5: Per-geo finding + scope badge in the cards
+### Task 5: Turn on nested-findings validation
 
 **Files:**
-- Modify: `web/src/components/ChartCard.tsx`, `web/src/components/DetailView.tsx`
-- Modify: `web/src/components/TodaySection.tsx` — **it renders `site.findings[chartId]` directly
-  as a string (the conveyor's LeadCard/SecondaryCard). After Task 2 that value is a `{geo: sentence}`
-  object, so this WILL render broken unless updated. Today is default-view-only, so resolve it at
-  the chart's own first geo: `site.findings[chartId]?.[chart.geos[0]]`, or the site default geo.**
-- Modify: `web/src/App.tsx` (DetailView finding lookup)
-- Test: `web/src/components/ChartCard.test.tsx`, `DetailView.test.tsx`
+- Modify: `web/src/lib/types.ts` (`assertSiteData` findings check)
+- Test: the file that currently tests `assertSiteData` — grep for it first
 
 **Interfaces:**
-- Consumes: Task 3/4 outputs.
-- Produces: `ChartCard` accepts `scopeBadge?: string`; both components receive `finding` as a plain
-  resolved string (the geo lookup happens in `App.tsx`, so the components stay dumb).
+- Consumes: Task 4 (every consumer reads `findings[id][geo]`; both fixtures migrated).
+- Produces: `assertSiteData` rejects a flat `{chartId: sentence}` export.
 
-- [ ] **Step 5.1: Write the failing test — append to `ChartCard.test.tsx`**
+**Why this is its own task:** Task 3 attempted this and had to revert — tightening the gate while the
+renderers still expected strings broke 59 tests. It is only safe once Task 4 has landed. If Task 4 is
+not committed, STOP and report rather than proceeding.
 
-```tsx
-test('renders the scope badge when the card is wider context', () => {
-  render(<ChartCard site={site} chart={chart} finding="A finding." range="5y"
-                    geo="melbourne" now={NOW} onOpen={() => {}} scopeBadge="Australia" />)
-  expect(screen.getByText('Australia')).toBeInTheDocument()
+- [ ] **Step 5.1: Write the failing test**
+
+Grep for the existing `assertSiteData` tests and follow that file's style. Add:
+
+```ts
+test('rejects the pre-geo flat findings shape', () => {
+  const flat = { ...validSite, findings: { cash_rate: 'The cash rate held at 3.60%.' } }
+  expect(() => assertSiteData(flat)).toThrow(/findings/)
 })
 
-test('renders no scope badge for an ordinary in-grid card', () => {
-  render(<ChartCard site={site} chart={chart} finding="A finding." range="5y"
-                    geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.queryByText('Australia')).not.toBeInTheDocument()
+test('accepts the nested per-geo findings shape', () => {
+  const nested = { ...validSite, findings: { cash_rate: { australia: 'The cash rate held at 3.60%.' } } }
+  expect(() => assertSiteData(nested)).not.toThrow()
 })
 ```
-(Use whatever `site`/`chart`/`NOW` helpers the file already defines.)
+Build `validSite` from the migrated `site.edge.json` fixture so the rest of the object is valid.
 
-- [ ] **Step 5.2: Run to verify it fails**
+- [ ] **Step 5.2: Run to verify the reject test fails**
 
-```powershell
-npx vitest run src/components/ChartCard.test.tsx
-```
-Expected: FAIL — `scopeBadge` unknown.
+Run the focused test file. Expected: the reject test FAILS (the flat shape is currently accepted).
 
 - [ ] **Step 5.3: Implement**
 
-In `ChartCard.tsx`, add `scopeBadge` to the props type (`scopeBadge?: string`) and render it beside
-the existing staleness chip in the card footer, reusing the existing `Chip`:
-```tsx
-        {scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}
-```
-In `App.tsx`, the DetailView finding lookup becomes geo-aware:
-```tsx
-                    finding={site.findings[detailChart.id]?.[state.geo]
-                             ?? site.findings[detailChart.id]?.[detailChart.geos[0]] ?? ''}
+In `web/src/lib/types.ts`, extend the findings check in the existing `bad()` style:
+
+```ts
+  if (s.findings == null || typeof s.findings !== 'object' ||
+      Object.values(s.findings).some(v => v == null || typeof v !== 'object')) {
+    bad('findings')
+  }
 ```
 
-- [ ] **Step 5.4: Run everything and commit**
+- [ ] **Step 5.4: Run everything**
 
-```powershell
-npx vitest run
-npm test
-npm run build
+From `web/`: `npm test`, then `npm run build`. Expected: all PASS, build clean. If ANY test outside
+the assertSiteData test file breaks, a consumer or fixture was missed in Task 4 — report which; do
+not adjust the test.
+
+- [ ] **Step 5.5: Commit**
+
 ```
-Expected: all PASS, build clean.
-
-```powershell
-cd "C:\Users\OEM\Schemes\housing dashboard"
-git add web/src/components/ChartCard.tsx web/src/components/DetailView.tsx web/src/App.tsx web/src/components/ChartCard.test.tsx web/src/components/DetailView.test.tsx
-git commit -m "feat(web): per-geo findings in cards + wider-context scope badge
+git add web/src/lib/types.ts <the assertSiteData test file>
+git commit -m "feat(web): reject the pre-geo flat findings shape at the boundary
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```

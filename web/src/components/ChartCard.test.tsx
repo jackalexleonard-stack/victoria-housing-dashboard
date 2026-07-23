@@ -56,7 +56,10 @@ test('data table disclosure exposes the values', async () => {
   expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
 })
 
-test('scope chip appears when geo falls back', () => {
+test.skip('scope chip appears when geo falls back', () => {
+  // Task 3 deleted the FALLBACK substitution this asserted (audit D2). Rewrite
+  // in Task 4/5 once bandFor() decides whether a hidden-band card renders at
+  // all; a fallback chip has no meaning now that no fallback exists.
   render(<ChartCard site={site} chart={chart('median_rent')} finding="f"
                     range="all" geo="regional_vic" now={NOW} onOpen={() => {}} />)
   expect(screen.getByText('Melbourne', { selector: 'span' })).toBeInTheDocument()
