@@ -24,8 +24,8 @@ SECTIONS: list[tuple[str, str]] = [
 
 
 def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
-       percent=False, markers=False, annotate=False, noun=None, primary=None,
-       note=None, modal_metrics=None, source_name=None):
+       scope="geo", percent=False, markers=False, annotate=False, noun=None,
+       primary=None, note=None, modal_metrics=None, source_name=None):
     """noun: subject of the generic finding sentence; primary: metric it uses
     (defaults to metrics[0]); both ignored by charts with custom rules.
     note: optional short disclosure/methodology line shown under the chart
@@ -38,10 +38,16 @@ def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
     single series_id whose own instruments deserve separate citations (the
     three FRED world charts all read intl_fred, but Brent/AUD-USD/US-10yr
     are different instruments); None for every chart happy with its series'
-    single shared source string."""
+    single shared source string.
+    scope: the FINEST geography this chart is ever available at —
+    "geo" (metro/regional specific), "state" (Victoria-wide only; no
+    metro/regional split is published), "national" (no sub-national version
+    exists), "global" (world context). Drives band placement: a chart whose
+    selected geo is absent from its derived `geos` is hidden-and-footnoted
+    when scope=="geo", but shown in the badged context band otherwise."""
     return dict(id=id, section=section, title=title, series_id=series_id,
-                metrics=metrics, region_mode=region_mode, percent=percent,
-                markers=markers, annotate=annotate, noun=noun,
+                metrics=metrics, region_mode=region_mode, scope=scope,
+                percent=percent, markers=markers, annotate=annotate, noun=noun,
                 primary=primary or (metrics[0] if metrics else None),
                 note=note, modal_metrics=modal_metrics, source_name=source_name)
 
@@ -85,8 +91,8 @@ CHARTS: list[dict] = [
        metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True,
        note=_HVI_NOTE),
     _c("hvi_australia", "prices", SERIES_SHORT_NAMES["hvi_australia"], "au_hvi",
-       metrics=["hvi_index"], region_mode="fixed:australia", annotate=True,
-       note=_HVI_NOTE),
+       metrics=["hvi_index"], region_mode="fixed:australia", scope="national",
+       annotate=True, note=_HVI_NOTE),
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
        region_mode="geo", noun="The median house price",
        primary="median_house_price"),
@@ -115,11 +121,11 @@ CHARTS: list[dict] = [
        region_mode="geo", noun="Dwelling approvals",
        primary="approvals_dwellings_total"),
     _c("activity", "supply", "Commencements, completions, pipeline",
-       "vic_activity", region_mode="fixed:vic", noun="Dwellings commenced",
-       primary="dwellings_commenced"),
+       "vic_activity", region_mode="geo", scope="state",
+       noun="Dwellings commenced", primary="dwellings_commenced"),
     _c("accord", "supply", "Housing Accord tracker", "au_accord",
        metrics=["accord_cumulative_actual", "accord_cumulative_target"],
-       region_mode="fixed:australia",
+       region_mode="fixed:australia", scope="national",
        modal_metrics=["accord_quarterly_actual", "accord_quarterly_target"]),
     _c("land", "supply", "Greenfield land supply", "vic_land",
        region_mode="fixed:melbourne", noun="Greenfield years of supply",
@@ -129,19 +135,19 @@ CHARTS: list[dict] = [
        noun="Input costs", primary="input_all_groups"),
     # --- money ---
     _c("cash_rate", "money", "RBA cash rate target", "au_cash_rate",
-       metrics=["cash_rate"], region_mode="fixed:australia", percent=True,
-       annotate=True),
+       metrics=["cash_rate"], region_mode="fixed:australia", scope="national",
+       percent=True, annotate=True),
     _c("mortgage_rates", "money", "Mortgage rates (owner-occupier)",
-       "au_mortgage_rates", region_mode="fixed:australia", percent=True,
-       noun="The average new mortgage rate", primary="mortgage_new"),
+       "au_mortgage_rates", region_mode="fixed:australia", scope="national",
+       percent=True, noun="The average new mortgage rate", primary="mortgage_new"),
     _c("lending", "money", "New housing loan commitments", "au_lending",
        region_mode="geo", annotate=True, noun="Owner-occupier lending",
        primary="lending_owner_occupier"),
     _c("credit", "money", "Housing credit growth", "au_credit",
        metrics=["credit_housing_yoy", "credit_investor_yoy",
                 "credit_owner_occupier_yoy"],
-       region_mode="fixed:australia", percent=True, annotate=True,
-       noun="Housing credit growth", primary="credit_housing_yoy",
+       region_mode="fixed:australia", scope="national", percent=True,
+       annotate=True, noun="Housing credit growth", primary="credit_housing_yoy",
        modal_metrics=["credit_housing_yoy", "credit_investor_yoy",
                       "credit_owner_occupier_yoy", "credit_housing_mom",
                       "credit_investor_mom", "credit_owner_occupier_mom"]),
@@ -155,8 +161,8 @@ CHARTS: list[dict] = [
        primary="net_overseas_migration"),
     # --- social ---
     _c("waitlist", "social", "Victorian Housing Register", "vic_social_waitlist",
-       region_mode="fixed:vic", noun="Housing Register applications",
-       primary="vhr_total"),
+       region_mode="fixed:vic", scope="state",
+       noun="Housing Register applications", primary="vhr_total"),
     # --- world ---
     # source_name: intl_fred's one shared meta.source_name ("FRED — Brent
     # crude, US 10yr Treasury, AUD/USD") reads fine on the card caption
@@ -165,21 +171,23 @@ CHARTS: list[dict] = [
     # string on every one of these three cards (design review d2). Each
     # chart cites its own FRED series id instead.
     _c("brent", "world", "Brent crude", "intl_fred", metrics=["brent_crude"],
-       region_mode="fixed:global", noun="Brent crude",
+       region_mode="fixed:global", scope="global", noun="Brent crude",
        source_name="FRED — Brent crude (DCOILBRENTEU)"),
     _c("aud_usd", "world", "AUD/USD", "intl_fred", metrics=["aud_usd"],
-       region_mode="fixed:global", noun="The Australian dollar",
+       region_mode="fixed:global", scope="global", noun="The Australian dollar",
        source_name="FRED — AUD/USD (DEXUSAL)"),
     _c("ust10", "world", "US 10-year Treasury", "intl_fred",
-       metrics=["us_10y_treasury"], region_mode="fixed:global", percent=True,
-       noun="The US 10-year yield",
+       metrics=["us_10y_treasury"], region_mode="fixed:global", scope="global",
+       percent=True, noun="The US 10-year yield",
        source_name="FRED — US 10-year Treasury (DGS10)"),
     _c("iron_ore", "world", "Iron ore", "intl_commodities",
-       metrics=["iron_ore"], region_mode="fixed:global", noun="Iron ore"),
+       metrics=["iron_ore"], region_mode="fixed:global", scope="global",
+       noun="Iron ore"),
     _c("copper", "world", "Copper", "intl_commodities", metrics=["copper"],
-       region_mode="fixed:global", noun="Copper"),
+       region_mode="fixed:global", scope="global", noun="Copper"),
     _c("sawnwood", "world", "Sawnwood", "intl_commodities",
-       metrics=["sawnwood"], region_mode="fixed:global", noun="Sawnwood"),
+       metrics=["sawnwood"], region_mode="fixed:global", scope="global",
+       noun="Sawnwood"),
 ]
 
 Loader = Callable[[str], object]

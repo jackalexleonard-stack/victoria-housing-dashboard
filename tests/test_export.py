@@ -317,3 +317,72 @@ def test_end_to_end_against_real_repo_data(tmp_path):
     # must surface a health object end-to-end.
     assert news["health"]["feeds_ok"] >= 0
     assert news["health"]["feeds_total"] >= news["health"]["feeds_ok"]
+
+
+# ---------------------------------------------------------------------------
+# chart_geos — Task 1: per-chart scope + data-derived geos
+# ---------------------------------------------------------------------------
+from pipeline.export import chart_geos
+
+UI_GEOS = ["melbourne", "regional_vic", "vic", "australia"]
+
+
+def _loader(rows):
+    df = pd.DataFrame(rows, columns=["date", "region", "metric", "value", "unit"])
+    return lambda _sid: df
+
+
+def test_geos_are_derived_from_the_regions_actually_present():
+    load = _loader([
+        ("2026-01-31", "melbourne", "m", 1.0, "n"),
+        ("2026-01-31", "regional_vic", "m", 2.0, "n"),
+    ])
+    chart = {"id": "c", "series_id": "s", "region_mode": "geo", "metrics": None}
+    assert chart_geos(chart, load) == ["melbourne", "regional_vic"]
+
+
+def test_geos_preserve_ui_geo_order_not_data_order():
+    load = _loader([
+        ("2026-01-31", "australia", "m", 1.0, "n"),
+        ("2026-01-31", "melbourne", "m", 2.0, "n"),
+    ])
+    chart = {"id": "c", "series_id": "s", "region_mode": "geo", "metrics": None}
+    assert chart_geos(chart, load) == ["melbourne", "australia"]
+
+
+def test_a_fixed_region_chart_reports_only_that_region():
+    load = _loader([
+        ("2026-01-31", "melbourne", "m", 1.0, "n"),
+        ("2026-01-31", "vic", "m", 2.0, "n"),
+    ])
+    chart = {"id": "c", "series_id": "s", "region_mode": "fixed:vic", "metrics": None}
+    assert chart_geos(chart, load) == ["vic"]
+
+
+def test_global_regions_never_appear_as_a_ui_geo():
+    load = _loader([("2026-01-31", "global", "m", 1.0, "n")])
+    chart = {"id": "c", "series_id": "s", "region_mode": "fixed:global", "metrics": None}
+    assert chart_geos(chart, load) == []
+
+
+def test_a_missing_or_empty_series_yields_no_geos():
+    chart = {"id": "c", "series_id": "s", "region_mode": "geo", "metrics": None}
+    assert chart_geos(chart, lambda _sid: None) == []
+
+
+def test_metric_filtering_applies_before_region_derivation():
+    # A region that only carries a metric this chart doesn't plot must not
+    # count as coverage for the chart.
+    load = _loader([
+        ("2026-01-31", "melbourne", "wanted", 1.0, "n"),
+        ("2026-01-31", "vic", "other", 2.0, "n"),
+    ])
+    chart = {"id": "c", "series_id": "s", "region_mode": "geo", "metrics": ["wanted"]}
+    assert chart_geos(chart, load) == ["melbourne"]
+
+
+def test_every_registry_chart_declares_a_valid_scope():
+    from pipeline.findings import CHARTS
+    valid = {"geo", "state", "national", "global"}
+    for c in CHARTS:
+        assert c["scope"] in valid, f"{c['id']} has invalid scope {c.get('scope')!r}"

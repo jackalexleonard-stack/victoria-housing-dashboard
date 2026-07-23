@@ -29,6 +29,27 @@ EMPTY_TILE = {"key": "empty", "label": "—", "value": None,
 
 Loader = Callable[[str], object]
 
+# The four selectable geographies, in display order. `global` is deliberately
+# absent: it is a data-side region token, never a UI selection.
+UI_GEOS = ("melbourne", "regional_vic", "vic", "australia")
+
+
+def chart_geos(chart: dict, load_series: Loader) -> list[str]:
+    """The UI geos this chart genuinely has data for, derived from the series
+    itself so it can never drift from reality. Metric filtering is applied
+    first: a region that only carries metrics this chart doesn't plot is not
+    coverage. Returns UI_GEOS order, not data order."""
+    df = load_series(chart["series_id"])
+    if df is None or len(df) == 0:
+        return []
+    if chart.get("metrics"):
+        df = df[df["metric"].isin(chart["metrics"])]
+    mode = chart.get("region_mode", "geo")
+    if mode.startswith("fixed:"):
+        df = df[df["region"] == mode.split(":", 1)[1]]
+    present = set(df["region"].dropna().unique())
+    return [g for g in UI_GEOS if g in present]
+
 
 def load_series(sid: str) -> pd.DataFrame:
     p = DATA / "series" / f"{sid}.csv"
@@ -200,10 +221,13 @@ def build_site(ls: Loader, lm: Loader, today: date,
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sections": [list(s) for s in SECTIONS],
-        "charts": [{k: c[k] for k in ("id", "section", "title", "series_id",
-                                      "metrics", "region_mode", "percent",
-                                      "markers", "annotate", "note",
-                                      "modal_metrics", "source_name")} for c in CHARTS],
+        "charts": [{**{k: c[k] for k in ("id", "section", "title", "series_id",
+                                         "metrics", "region_mode", "percent",
+                                         "markers", "annotate", "note",
+                                         "modal_metrics", "source_name")},
+                    "scope": c["scope"],
+                    "geos": chart_geos(c, ls)}
+                   for c in CHARTS],
         "findings": build_findings(ls, lm),
         "series": {sid: _series_entry(sid, ls, lm) for sid in sids},
         "hero": _hero(ls, lm, today),
