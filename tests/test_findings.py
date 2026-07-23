@@ -423,26 +423,60 @@ def test_world_summary_returns_text_and_quiet_flag_together():
     assert is_quiet2 is False
 
 
-def test_world_summary_matches_independently_derived_mover_on_real_data():
-    """Task 2: the pre-refactor "unchanged against real data" comparison no
-    longer applies by design — the old algorithm sourced its text from
-    findings_out[chart_id], which under the per-geo model is permanently {}
-    for every World chart (all are region_mode "fixed:global", and "global"
-    is deliberately outside UI_GEOS). _world_summary now computes its
-    sentence directly via _finding_for instead.
+def test_world_summary_names_the_biggest_mover_against_a_frozen_fixture():
+    """The independent, PERMANENT regression guard on the World mover's
+    sentence-building path (_finding_for -> _generic -> _primary_frame).
 
-    This still locks in the real behaviour end-to-end: independently
-    re-derive which World chart is the biggest mover over the committed
-    data/ directory (the same loaders test_export.py's real end-to-end test
-    uses). The mover-selection loop below intentionally duplicates
-    _world_summary's own (pre-existing, not this task's to fix) — but the
-    expected TEXT is a hardcoded literal, not re-derived via _finding_for:
-    an `expected = findings._finding_for(...)` comparison here would call
-    the exact same function the exact same way _world_summary itself does
-    (pipeline/findings.py), making the assertion tautological — able to
-    catch only a transcription slip in how _world_summary invokes
-    _finding_for, never a real bug inside _finding_for/_primary_frame
-    (precisely the code this task rewrote)."""
+    This deliberately does NOT run against the committed data/ directory —
+    data/ is rewritten every day by the scheduled GitHub Action
+    (update.yml's cron), so any assertion pinning a specific number,
+    percentage, or month against real data goes stale within a day of being
+    written (a test that goes red daily trains everyone to ignore CI, and
+    breaks on `main` the moment this branch merges). A hand-built,
+    deterministic fixture — values chosen so the winner and its exact
+    wording are knowable in advance — gives independence (the expected
+    string below is typed out by hand from fmt_value/fmt_period's own
+    documented rules, never obtained by calling _finding_for/_generic) AND
+    permanent stability, since the fixture never changes. See
+    test_world_summary_smoke_test_against_real_committed_data, below, for
+    the complementary end-to-end guard that intentionally asserts nothing
+    that a data refresh could invalidate."""
+    ls, lm = _loaders({
+        "intl_fred": _df([
+            # 0.25% change: below WORLD_QUIET_PCT (1.0%) -> not a mover.
+            ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
+            ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
+            # 0.01 pp change: below WORLD_QUIET_PP (0.15 pp) -> not a mover.
+            ("2026-06-30", "global", "us_10y_treasury", 4.20, "percent"),
+            ("2026-07-31", "global", "us_10y_treasury", 4.21, "percent"),
+        ]),
+        "intl_commodities": _df([
+            # A genuine mover (~5.6%, above the 1.0% floor) but smaller than
+            # iron ore's — proves the BIGGEST mover is picked, not just the
+            # only one present.
+            ("2026-06-30", "global", "copper", 9.00, "USD/tonne"),
+            ("2026-07-31", "global", "copper", 9.50, "USD/tonne"),
+            # The biggest mover: (115/95 - 1) * 100 = 21.0526...% -> "21.1%"
+            # at the sentence's 1dp display precision.
+            ("2026-06-30", "global", "iron_ore", 95.0, "USD/dmtu"),
+            ("2026-07-31", "global", "iron_ore", 115.0, "USD/dmtu"),
+        ]),
+    })
+    text, is_quiet = findings._world_summary(ls, lm)
+    assert text == "Iron ore rose 21.1% to US$115 in Jul 2026"
+    assert is_quiet is False
+
+
+def test_world_summary_smoke_test_against_real_committed_data():
+    """End-to-end guard that the real pipeline still produces a coherent
+    World summary from the committed data/ directory — deliberately asserts
+    NOTHING volatile (no number, percentage, or month), because that
+    directory is rewritten daily by the scheduled GitHub Action
+    (update.yml's cron): pinning any live value here would go stale within a
+    day (see test_world_summary_names_the_biggest_mover_against_a_frozen_fixture,
+    above, for the independent, permanent guard on the actual
+    sentence-building logic that this smoke test intentionally does not
+    duplicate)."""
     best = None
     for chart in findings.CHARTS:
         if chart["section"] != "world":
@@ -464,16 +498,24 @@ def test_world_summary_matches_independently_derived_mover_on_real_data():
         if best is None or mag > best[0]:
             best = (mag, chart)
     assert best is not None, "sanity: real data must have a genuine mover today"
-    assert best[1]["id"] == "brent"  # independently-derived mover, pinned below
 
     text, is_quiet = findings._world_summary(export.load_series, export.load_meta)
-    # Literal, verified against the committed data/ directory on 2026-07-23:
-    #   >>> findings._world_summary(export.load_series, export.load_meta)
-    #   ('Brent crude rose 9.8% to US$82 in Jul 2026', False)
-    assert text == "Brent crude rose 9.8% to US$82 in Jul 2026"
-    # Sanity: real data has a genuine mover today, not the quiet fallback —
-    # otherwise this test would pass vacuously.
+    assert isinstance(text, str) and text
     assert is_quiet is False
+    # The sentence must open with the winning chart's own subject — a real
+    # sentence-source mismatch (wrong chart's text) still fails this test —
+    # without pinning to any number/percentage/month a daily refresh would
+    # change. World charts never use a custom builder (none are in
+    # _CUSTOM), so every one's sentence is built by _generic, which always
+    # opens with chart["noun"] (falling back to chart["title"] only when
+    # noun is unset — never true for World's six charts). noun and title
+    # diverge for two of them (aud_usd: title "AUD/USD" vs noun "The
+    # Australian dollar"; ust10: title "US 10-year Treasury" vs noun "The
+    # US 10-year yield"), so noun — not title — is the only prefix that's
+    # correct regardless of which chart wins on a given day.
+    winner = best[1]
+    subject = winner["noun"] or winner["title"]
+    assert text.startswith(subject)
 
 
 def test_hvi_near_zero_mom_reads_as_held_flat_not_a_fake_move():
