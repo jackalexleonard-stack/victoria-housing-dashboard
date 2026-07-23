@@ -1,11 +1,11 @@
 {
   "series_id": "vic_approvals",
   "source_name": "ABS Building Approvals (BA_GCCSA)",
-  "source_url": "https://data.api.abs.gov.au/rest/data/BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M",
+  "source_url": "https://data.api.abs.gov.au/rest/data/BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M",
   "frequency": "monthly",
   "status": "ok",
-  "last_fetched": "2026-07-22T05:45:31Z",
+  "last_fetched": "2026-07-23T07:28:16Z",
   "error": null,
   "last_data_date": "2026-05-31",
-  "last_changed": "2026-07-16T03:45:54Z"
+  "last_changed": "2026-07-23T07:28:16Z"
 }

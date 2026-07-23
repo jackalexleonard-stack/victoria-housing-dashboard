@@ -16,7 +16,12 @@ from pipeline import common
 ABS_BASE = "https://data.api.abs.gov.au/rest/data"
 
 # Shared region-code -> tidy label maps.
-_REGION_GCCSA_VIC = {"2": "vic", "2GMEL": "melbourne", "2RVIC": "regional_vic"}
+_REGION_GCCSA_VIC = {
+    "2": "vic",
+    "2GMEL": "melbourne",
+    "2RVIC": "regional_vic",
+    "AUS": "australia",
+}
 _REGION_STATE = {"2": "vic", "AUS": "australia"}
 
 
@@ -51,12 +56,13 @@ def _tidy(df: pd.DataFrame, *, metric_col, metric_map, unit,
 # ---------------------------------------------------------------------------
 # vic_approvals — Building Approvals (BA_GCCSA), number of new dwelling units
 # key order: MEASURE.VALUE.SECTOR.WORK_TYPE.BUILDING_TYPE.TSEST.REGION.FREQ
-# GET .../BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M
+# GET .../BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M
 #   1 Number of dwelling units · 1 Total value-range · 9 Total Sectors ·
 #   WORK_TYPE 1 New · BUILDING_TYPE 110 Houses / 150 Total Other Residential /
-#   100 Total Residential · TSEST 10 Original · REGION Vic/GtrMelb/RestOfVic · M
+#   100 Total Residential · TSEST 10 Original ·
+#   REGION Vic/GtrMelb/RestOfVic/Australia · M
 # ---------------------------------------------------------------------------
-_APPROVALS_KEY = "1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M"
+_APPROVALS_KEY = "1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M"
 _APPROVALS_METRIC = {
     "100": "approvals_dwellings_total",
     "110": "approvals_houses",

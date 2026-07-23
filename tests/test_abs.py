@@ -35,6 +35,12 @@ def test_parse_approvals_offline():
     assert (diff.abs() < 1e-6).all()
 
 
+def test_approvals_key_requests_the_national_aggregate():
+    from pipeline.sources.abs import _APPROVALS_KEY, _REGION_GCCSA_VIC
+    assert "AUS" in _APPROVALS_KEY
+    assert _REGION_GCCSA_VIC["AUS"] == "australia"
+
+
 def test_parse_activity_offline():
     raw = (FIX / "abs_building_activity.csv").read_text(encoding="utf-8")
     df = absrc.parse_activity(raw)
