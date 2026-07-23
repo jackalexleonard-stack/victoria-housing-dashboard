@@ -370,6 +370,12 @@ def test_a_missing_or_empty_series_yields_no_geos():
     assert chart_geos(chart, lambda _sid: None) == []
 
 
+def test_an_empty_dataframe_yields_no_geos():
+    empty = pd.DataFrame(columns=["date", "region", "metric", "value", "unit"])
+    chart = {"id": "c", "series_id": "s", "region_mode": "geo", "metrics": None}
+    assert chart_geos(chart, lambda _sid: empty) == []
+
+
 def test_metric_filtering_applies_before_region_derivation():
     # A region that only carries a metric this chart doesn't plot must not
     # count as coverage for the chart.

@@ -120,6 +120,15 @@ CHARTS: list[dict] = [
     _c("approvals", "supply", "Dwelling approvals", "vic_approvals",
        region_mode="geo", noun="Dwelling approvals",
        primary="approvals_dwellings_total"),
+    # region_mode="geo", NOT "fixed:vic": vic_activity carries both `vic` and
+    # `australia` rows, and pinning it to vic would hide the national data
+    # from chart_geos entirely — this is the fix for the audit defect where
+    # this chart fell back to showing vic under an Australia selection.
+    # scope="state" because no metro/regional split of this series is
+    # published; under Melbourne/Regional geo it belongs in the wider-
+    # context band, rendered at its own vic geo (contrast: waitlist below
+    # correctly keeps region_mode="fixed:vic" — its series has only vic
+    # rows, so nothing is hidden by pinning it).
     _c("activity", "supply", "Commencements, completions, pipeline",
        "vic_activity", region_mode="geo", scope="state",
        noun="Dwellings commenced", primary="dwellings_commenced"),
