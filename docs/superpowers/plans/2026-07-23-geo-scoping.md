@@ -716,6 +716,26 @@ Import `GEO_LABEL` from `./lib/selectors` if not already imported. Keep the exis
 `id === 'news'` / `id === 'world'` special-case branches ahead of this block exactly as they are —
 this replaces only the default (chart-grid) branch.
 
+- [ ] **Step 4.4b: Make section summaries geo-honest**
+
+`pipeline/findings.py`'s `build_section_summaries_full` collapses its per-geo findings to ONE sentence
+via `next(iter(per_geo.values()), None)` — i.e. Melbourne-first whenever Melbourne has data. Section
+movers like `median_rent`, `vacancy`, `mean_price`, `approvals`, `lending` and `population` are all
+`region_mode="geo"`, so that summary always quotes Melbourne regardless of the selected geo. Today the
+only consumer is `WorldTiles.tsx` (World is geo-independent), so it is not yet visible — but it is the
+same Melbourne-bias defect this whole project exists to remove, one level up, and it becomes live the
+moment any non-World section summary is rendered beside the geo selector.
+
+Fix it now rather than leaving the landmine: make `section_summaries` per-geo (`section → geo →
+sentence`), mirroring `findings`, and update the single consumer:
+```tsx
+// web/src/components/WorldTiles.tsx — was site.section_summaries?.world
+{site.section_summaries?.world?.[geo] ??
+  Object.values(site.section_summaries?.world ?? {})[0]}
+```
+Update `export.py`'s section-summary validation to the nested shape, and add a pytest asserting a
+section whose mover has both melbourne and regional_vic data yields DIFFERENT sentences for the two.
+
 - [ ] **Step 4.5: Run and commit**
 
 ```powershell
@@ -740,6 +760,10 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `web/src/components/ChartCard.tsx`, `web/src/components/DetailView.tsx`
+- Modify: `web/src/components/TodaySection.tsx` — **it renders `site.findings[chartId]` directly
+  as a string (the conveyor's LeadCard/SecondaryCard). After Task 2 that value is a `{geo: sentence}`
+  object, so this WILL render broken unless updated. Today is default-view-only, so resolve it at
+  the chart's own first geo: `site.findings[chartId]?.[chart.geos[0]]`, or the site default geo.**
 - Modify: `web/src/App.tsx` (DetailView finding lookup)
 - Test: `web/src/components/ChartCard.test.tsx`, `DetailView.test.tsx`
 
