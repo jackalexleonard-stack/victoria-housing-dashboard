@@ -1069,9 +1069,14 @@ the pipeline, pytest, commit.
 **Interfaces:** Consumes everything above.
 
 - [ ] **Step 15.1** Fix the misleading titles in `CHARTS`:
-- `land`: `"Greenfield land supply"` → `"Greenfield land supply (Melbourne growth areas)"` — and if
-  Task 9 landed regional data, `"Greenfield land supply"` with both regions is correct instead;
-  choose based on what `data/series/vic_land.csv` actually contains and say which you chose.
+- `land`: Task 9 DID land regional data (`data/series/vic_land.csv` now has both `melbourne` and
+  `regional_vic`). So: (a) **flip `region_mode` from `"fixed:melbourne"` to `"geo"`** — while it stays
+  `fixed:melbourne`, `chart_geos` returns only `[melbourne]` and the regional rows sit dormant; the
+  flip is what makes the chart a genuine metro-vs-regional pair. (b) Retitle to just
+  `"Greenfield land supply"` (the Melbourne-only qualifier is now wrong). (c) Add a `note=` recording
+  that the two regions are published on DIFFERENT cadences (metro annual to Dec; regional a half-year
+  "Titled H1" snapshot to Jun) — Task 9 flagged this and it must be disclosed, not annualised away.
+  Verify the export afterwards: `land` geos must become `['melbourne','regional_vic']`.
 - `credit`: `"Housing credit growth"` → `"Housing credit growth (Australia)"`.
 
 - [ ] **Step 15.2** Add the e2e guard — append to `web/e2e/smoke.spec.ts`:
