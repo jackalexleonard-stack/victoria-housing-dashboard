@@ -287,7 +287,7 @@ function withWorldTiles(base: object) {
     ],
   }
   for (const id of ['brent', 'aud_usd', 'ust10', 'iron_ore', 'copper', 'sawnwood']) {
-    mutated.findings[id] = 'f'
+    mutated.findings[id] = { melbourne: 'f' }
   }
   // T4: section_summaries is per-geo now ({section: {geo: sentence}}) —
   // World is geo-independent, so WorldTiles resolves it under DEFAULT_GEO.

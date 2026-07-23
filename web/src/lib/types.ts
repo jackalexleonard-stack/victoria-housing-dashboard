@@ -105,10 +105,15 @@ export function assertSiteData(x: unknown): SiteData {
   if (!s.generated_at || typeof s.generated_at !== 'string') bad('generated_at')
   if (!s.series || typeof s.series !== 'object') bad('series')
   if (!Array.isArray(s.charts) || s.charts.length === 0) bad('charts')
-  // T3: findings is now nested per-geo (object-of-objects, see SiteData
-  // above) — still validated shallowly here, matching every other
-  // object-shaped field in this function; per-entry shape isn't re-walked.
-  if (!s.findings || typeof s.findings !== 'object') bad('findings')
+  // T3/T5: findings is nested per-geo (object-of-objects, see SiteData
+  // above). Task 3 had to revert a stricter check here because renderers and
+  // fixtures still expected the old flat {chartId: sentence} shape; now that
+  // Task 4 has migrated every consumer and fixture, reject that flat shape
+  // at the boundary too, not just check that findings is *an* object.
+  if (s.findings == null || typeof s.findings !== 'object' ||
+      Object.values(s.findings).some(v => v == null || typeof v !== 'object')) {
+    bad('findings')
+  }
   if (!Array.isArray(s.hero) || s.hero.length !== 5) bad('hero')
   for (const [sid, e] of Object.entries(s.series)) {
     if (e.status !== 'ok' && e.status !== 'failed') bad(`status of ${sid}`)
