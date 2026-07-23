@@ -135,6 +135,30 @@ def test_parse_population_offline():
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
 
 
+def test_res_dwell_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_res_dwell
+
+    raw = (FIX / "abs_res_dwell.csv").read_text(encoding="utf-8")
+    df = parse_res_dwell(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    assert set(df["region"]) == {"melbourne", "regional_vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray (the raw
+    # fixture also carries transfer-count measures 1/2 — dropped, not charted).
+    assert set(df["metric"]) == {"median_price_house", "median_price_attached"}
+    # (3) A spot value hand-verified against the fixture (MEASURE=3 "Median
+    # Price of Established House Transfers", REGION=2GMEL, TIME_PERIOD=2026-Q1,
+    # OBS_VALUE=850, UNIT_MULT=3 -> 850 * 10**3 = 850000).
+    row = df[(df.region == "melbourne") & (df.date == "2026-03-31")
+             & (df.metric == "median_price_house")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 850000
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()
+
+
 def test_parse_dwelling_stock_offline():
     raw = (FIX / "abs_res_dwell_st.csv").read_text(encoding="utf-8")
     df = absrc.parse_dwelling_stock(raw)

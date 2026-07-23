@@ -256,6 +256,49 @@ def parse_dwelling_stock(raw: str) -> pd.DataFrame:
     return out.dropna(subset=["region", "metric", "unit"]).reset_index(drop=True)
 
 
+# ---------------------------------------------------------------------------
+# vic_res_dwell — Residential Dwellings: Median Price of Transfers (RES_DWELL)
+# key order: MEASURE.REGION.FREQ · GET .../RES_DWELL/1+2+3+4.2GMEL+2RVIC.Q
+#   MEASURE 3 Median Price of Established House Transfers / 4 Median Price of
+#   Attached Dwelling Transfers (1/2 are transfer COUNTS for the same two
+#   dwelling types — fetched for live verification, dropped by the metric
+#   map: no chart plots them, and the shared tidy schema has no room for a
+#   stray metric) · REGION Greater Melbourne / Rest of Vic · Quarterly.
+#   UNIT_MULT is 3 (thousands) for the two price measures; scale by
+#   10^UNIT_MULT to whole dollars, same as parse_dwelling_stock above.
+#   This dataflow publishes RAW (unstratified) transaction medians split by
+#   dwelling type — there is no single "all dwellings" median in RES_DWELL,
+#   so we do NOT derive/combine house + attached into one figure (that would
+#   be fabrication); both published medians are emitted as separate metrics.
+# ---------------------------------------------------------------------------
+_RES_DWELL_KEY = "1+2+3+4.2GMEL+2RVIC.Q"
+_RES_DWELL_METRIC = {
+    "3": "median_price_house",
+    "4": "median_price_attached",
+}
+
+
+def fetch_res_dwell() -> str:
+    return abs_csv("RES_DWELL", _RES_DWELL_KEY)
+
+
+def parse_res_dwell(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[df["OBS_VALUE"].notna()]
+    mult = pd.to_numeric(df["UNIT_MULT"], errors="coerce").fillna(0)
+    metric = df["MEASURE"].astype(str).map(_RES_DWELL_METRIC)
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": df["REGION"].astype(str).map(_REGION_GCCSA_VIC),
+            "metric": metric,
+            "value": (pd.to_numeric(df["OBS_VALUE"]) * (10.0 ** mult)).round(),
+            "unit": "aud",
+        }
+    )
+    return out.dropna(subset=["region", "metric"]).reset_index(drop=True)
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -304,5 +347,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_dwelling_stock,
         parse=parse_dwelling_stock,
+    ),
+    common.Series(
+        id="vic_res_dwell",
+        source_name="ABS Residential Dwellings: Median Price of Transfers (RES_DWELL)",
+        source_url=f"{ABS_BASE}/RES_DWELL/{_RES_DWELL_KEY}",
+        frequency="quarterly",
+        fetch=fetch_res_dwell,
+        parse=parse_res_dwell,
     ),
 ]

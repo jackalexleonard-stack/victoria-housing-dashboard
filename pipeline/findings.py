@@ -96,6 +96,15 @@ CHARTS: list[dict] = [
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
        region_mode="geo", noun="The median house price",
        primary="median_house_price"),
+    # ABS RES_DWELL — the geo audit's worst single gap: Regional Victoria had
+    # ZERO dwelling-price data of any kind. Published as separate house /
+    # attached-dwelling medians (do NOT blend into one figure — not
+    # published); primary=median_price_house drives the headline, mirroring
+    # median_rent_by_type's primary=rent_3br_house convention below.
+    _c("median_price", "prices", "Median dwelling price", "vic_res_dwell",
+       metrics=["median_price_house", "median_price_attached"],
+       region_mode="geo", primary="median_price_house",
+       noun="The median house price"),
     _c("auctions", "prices", "Auction clearance — Melbourne", "vic_auctions",
        metrics=["clearance_rate"], region_mode="fixed:melbourne", percent=True,
        noun="The clearance rate"),
@@ -491,6 +500,7 @@ METRIC_LABELS: dict[str, str] = {
     # prices
     "mean_price": "Mean price", "dwelling_count": "Dwelling count",
     "clearance_rate": "Clearance rate", "median_house_price": "Median house price",
+    "median_price_house": "House", "median_price_attached": "Attached dwelling",
     # cash rate
     "cash_rate": "Cash rate",
     # world
