@@ -290,10 +290,15 @@ def test_section_summaries_all_quiet_when_no_data():
     out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
     assert set(out) == {"prices", "rents", "supply", "money", "people",
                         "social", "world"}
-    assert all(isinstance(v, str) and v for v in out.values())
-    assert out["world"] == findings.WORLD_QUIET_SUMMARY
-    assert out["prices"] == "No notable moves in Prices this week."
-    assert out["people"] == "No notable moves in People this week."
+    # T4 Step 4.4b: section_summaries is per-geo now ({section: {geo:
+    # sentence}}), mirroring findings.
+    assert all(isinstance(v, dict) and v for v in out.values())
+    for per_geo in out.values():
+        assert all(isinstance(s, str) and s for s in per_geo.values())
+    from pipeline.export import UI_GEOS
+    assert out["world"] == {g: findings.WORLD_QUIET_SUMMARY for g in UI_GEOS}
+    assert out["prices"] == {g: "No notable moves in Prices this week." for g in UI_GEOS}
+    assert out["people"] == {g: "No notable moves in People this week." for g in UI_GEOS}
 
 
 def test_section_summaries_uses_the_sections_scoreable_chart():
@@ -303,7 +308,9 @@ def test_section_summaries_uses_the_sections_scoreable_chart():
     ls, lm = _loaders({"au_cash_rate": _df(rows_cash)},
                       {"au_cash_rate": {"frequency": "monthly"}})
     out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
-    assert out["money"] == findings.build_findings(ls, lm)["cash_rate"]["australia"]
+    # T4 Step 4.4b: now the mover's OWN per-geo findings dict, not one
+    # sentence collapsed from it — the fix for the Melbourne-first bias.
+    assert out["money"] == findings.build_findings(ls, lm)["cash_rate"]
 
 
 def test_section_summaries_world_quiet_state():
@@ -320,7 +327,10 @@ def test_section_summaries_world_quiet_state():
         ]),
     })
     out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
-    assert out["world"] == findings.WORLD_QUIET_SUMMARY
+    # T4 Step 4.4b: World's single sentence is replicated across every UI
+    # geo (genuinely geo-independent — see _world_summary's docstring).
+    from pipeline.export import UI_GEOS
+    assert out["world"] == {g: findings.WORLD_QUIET_SUMMARY for g in UI_GEOS}
 
 
 def test_section_summaries_world_names_the_biggest_mover():
@@ -339,9 +349,35 @@ def test_section_summaries_world_names_the_biggest_mover():
     # deliberately outside UI_GEOS, so build_findings()["iron_ore"] is
     # always {} (see test_global_regions_never_appear_as_a_ui_geo in
     # test_export.py). The expected sentence is computed the same way
-    # _world_summary computes it: directly via _finding_for.
+    # _world_summary computes it: directly via _finding_for — T4 Step 4.4b
+    # replicates that one sentence across every UI geo.
+    from pipeline.export import UI_GEOS
     iron_ore = next(c for c in findings.CHARTS if c["id"] == "iron_ore")
-    assert out["world"] == findings._finding_for(iron_ore, ls, lm, "global")
+    expected = findings._finding_for(iron_ore, ls, lm, "global")
+    assert out["world"] == {g: expected for g in UI_GEOS}
+
+
+def test_section_summaries_are_per_geo_not_melbourne_first():
+    """T4 Step 4.4b: the defect this step closes. median_rent (rents'
+    scoreable mover chart, region_mode="geo") has genuinely different
+    melbourne vs regional_vic data below — the section summary must carry
+    BOTH sentences, not collapse to Melbourne's alone (the same bias Task 2
+    already fixed for per-chart findings, recreated here one level up)."""
+    rows = [
+        ("2026-05-31", "melbourne", "median_rent", 560, "aud"),
+        ("2026-06-30", "melbourne", "median_rent", 580, "aud"),
+        ("2026-05-31", "regional_vic", "median_rent", 420, "aud"),
+        ("2026-06-30", "regional_vic", "median_rent", 400, "aud"),
+    ]
+    ls, lm = _loaders({"vic_rents": _df(rows)},
+                      {"vic_rents": {"frequency": "quarterly"}})
+    text, quiet = findings.build_section_summaries_full(ls, lm, date(2026, 7, 18))
+    assert quiet["rents"] is False
+    # Same dict build_findings computes for median_rent directly — the
+    # section summary no longer collapses it to one entry.
+    assert text["rents"] == findings.build_findings(ls, lm)["median_rent"]
+    assert set(text["rents"]) == {"melbourne", "regional_vic"}
+    assert text["rents"]["melbourne"] != text["rents"]["regional_vic"]
 
 
 # --- T6: section_summary_quiet — the honesty-override flag, derived in
@@ -367,7 +403,9 @@ def test_section_summaries_full_flags_a_real_finding_section_not_quiet():
                       {"au_cash_rate": {"frequency": "monthly"}})
     text, quiet = findings.build_section_summaries_full(ls, lm, date(2026, 7, 18))
     assert quiet["money"] is False
-    assert text["money"] == findings.build_findings(ls, lm)["cash_rate"]["australia"]
+    # T4 Step 4.4b: the mover's own per-geo findings dict, not one sentence
+    # collapsed from it.
+    assert text["money"] == findings.build_findings(ls, lm)["cash_rate"]
     # Sections with no scoreable chart at all stay flagged quiet.
     assert quiet["people"] is True
 

@@ -67,7 +67,12 @@ export interface SiteData {
   hero_lead?: string
   extra_tiles?: ExtraTile[]
   metric_labels?: Record<string, string>
-  section_summaries?: Record<string, string>
+  // T4 Step 4.4b: per-geo, mirroring `findings` — {section: {geo: sentence}}.
+  // Was a flat {section: sentence} (always Melbourne-first whenever
+  // Melbourne had data, since the mover chart behind most sections is
+  // region_mode="geo") — the same defect this whole project exists to
+  // remove, one level up from per-chart findings.
+  section_summaries?: Record<string, Record<string, string>>
   // True when section_summaries[id] is the pipeline's own generic quiet/
   // no-data sentinel (T6: derived in Python where the sentinel is authored,
   // replacing sections.ts's old byte-match-the-prose approach).

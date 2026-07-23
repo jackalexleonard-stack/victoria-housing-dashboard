@@ -614,57 +614,55 @@ _SUMMARY_SECTIONS = ("prices", "rents", "supply", "money", "people", "social", "
 
 
 def build_section_summaries_full(load_series: Loader, load_meta: Loader,
-                                 today: date) -> tuple[dict[str, str], dict[str, bool]]:
+                                 today: date) -> tuple[dict[str, dict[str, str]], dict[str, bool]]:
     """(section_summaries, section_summary_quiet) in one pass — the quiet
     flag is derived right here, where the _QUIET_SUMMARY/WORLD_QUIET_SUMMARY
     sentinels are authored, rather than by string-matching the rendered
     sentence later (design review honesty-override upgrade, T6): the
     collapsed-section override must not depend on prose staying byte-
-    identical to these two constants."""
+    identical to these two constants.
+
+    T4 Step 4.4b: section_summaries is per-geo ({section: {geo: sentence}}),
+    mirroring `findings` — this used to collapse to ONE sentence via
+    `next(iter(per_geo.values()), None)`, which always quoted Melbourne
+    whenever Melbourne had data (every non-World section's mover chart —
+    median_rent, vacancy, mean_price, approvals, lending, population, ... —
+    is region_mode="geo"). That was the same Melbourne-bias defect Task 2
+    fixed for per-chart headlines, recreated here one level up. Fixed by
+    using the mover's own per-geo findings dict directly instead of
+    collapsing it — a section whose mover has data for multiple geos now
+    genuinely has a different sentence per geo."""
+    from pipeline.export import UI_GEOS   # local import avoids a cycle
+
     findings_out = build_findings(load_series, load_meta)
     titles = dict(SECTIONS)
-    text: dict[str, str] = {}
+    text: dict[str, dict[str, str]] = {}
     quiet: dict[str, bool] = {}
     for section_id in _SUMMARY_SECTIONS:
         if section_id == "world":
             summary, is_quiet = _world_summary(load_series, load_meta)
-            text[section_id] = summary
+            # World's charts are all region_mode="fixed:global" — genuinely
+            # geo-independent (see _world_summary's own docstring) — so the
+            # one sentence applies equally under every UI geo.
+            text[section_id] = {g: summary for g in UI_GEOS}
             quiet[section_id] = is_quiet
             continue
         mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
-        # findings_out[mover] is keyed by geo (build_findings, Task 2); the
-        # section summary shows one representative sentence, so take the
-        # first geo in UI_GEOS priority order (the dict's insertion order —
-        # build_findings walks chart_geos(chart, load_series), which already
-        # returns UI_GEOS order).
-        #
-        # !!! WARNING — MELBOURNE-FIRST COLLAPSE, GEO-BLIND BY DESIGN !!!
-        # "First in UI_GEOS order" means Melbourne whenever Melbourne has
-        # data — every non-World section's mover chart (median_rent,
-        # vacancy, mean_price, approvals, lending, population, ...) is
-        # region_mode="geo", so this sentence ALWAYS quotes Melbourne's own
-        # number, never whichever geo a viewer has selected. That is
-        # exactly the class of defect Task 2 just fixed for the per-chart
-        # headlines, recreated here one level up for section summaries.
-        # It is safe ONLY today, ONLY because the sole consumer of
-        # section_summaries is WorldTiles, and World is geo-independent
-        # (region_mode="fixed:global" everywhere, never Melbourne-first).
-        # Before wiring section_summaries into ANY geo-aware surface (a
-        # collapsed-section row, a homepage card, anything rendered beside
-        # the geo selector), section_summaries must become per-geo first —
-        # this is scheduled as Phase B plan Task 4, Step 4.4b. Do NOT read
-        # this dict as "the finding for the user's selected geo" until that
-        # lands.
+        # findings_out[mover] is already {geo: sentence} (build_findings,
+        # Task 2) — using it directly, rather than collapsing to one entry,
+        # is exactly what makes this section-summary honestly per-geo.
         per_geo = (findings_out.get(mover) or {}) if mover else {}
-        found = next(iter(per_geo.values()), None)
-        is_quiet = not found
-        text[section_id] = found if not is_quiet \
-            else _QUIET_SUMMARY.format(title=titles[section_id])
+        is_quiet = not per_geo
+        if is_quiet:
+            quiet_sentence = _QUIET_SUMMARY.format(title=titles[section_id])
+            text[section_id] = {g: quiet_sentence for g in UI_GEOS}
+        else:
+            text[section_id] = dict(per_geo)
         quiet[section_id] = is_quiet
     return text, quiet
 
 
 def build_section_summaries(load_series: Loader, load_meta: Loader,
-                            today: date) -> dict[str, str]:
+                            today: date) -> dict[str, dict[str, str]]:
     text, _ = build_section_summaries_full(load_series, load_meta, today)
     return text

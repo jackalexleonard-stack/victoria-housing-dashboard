@@ -213,7 +213,11 @@ def build_site(ls: Loader, lm: Loader, today: date,
                news_items: Optional[list[dict]] = None) -> dict:
     sids = series_ids if series_ids is not None else repo_series_ids()
     section_summaries, section_summary_quiet = build_section_summaries_full(ls, lm, today)
-    section_summaries["news"] = _news_section_summary(news_items or [], today)
+    # T4 Step 4.4b: section_summaries is per-geo now — News, like World, is
+    # geo-independent (the feed isn't region-tagged), so the same sentence
+    # applies under every UI geo.
+    news_summary = _news_section_summary(news_items or [], today)
+    section_summaries["news"] = {g: news_summary for g in UI_GEOS}
     # News uses its own "N stories this week" sentence, never the generic
     # quiet sentinel — always non-quiet by this mechanism.
     section_summary_quiet["news"] = False
@@ -320,12 +324,18 @@ def validate_site(site: dict) -> None:
         _fail("hero_lead")
     if not isinstance(site.get("metric_labels"), dict):
         _fail("metric_labels")
+    # T4 Step 4.4b: section_summaries is per-geo now ({section: {geo:
+    # sentence}}), mirroring findings — validated the same shallow way as
+    # findings above: non-empty dict of non-empty dicts of non-empty strings.
     section_summaries = site.get("section_summaries")
     if not isinstance(section_summaries, dict) or not section_summaries:
         _fail("section_summaries")
-    for sec_id, text in section_summaries.items():
-        if not isinstance(text, str) or not text:
-            _fail(f"empty section_summary for {sec_id}")
+    for sec_id, per_geo in section_summaries.items():
+        if not isinstance(per_geo, dict) or not per_geo:
+            _fail(f"section_summaries[{sec_id}] must be a non-empty object keyed by geo")
+        for geo, text in per_geo.items():
+            if not isinstance(text, str) or not text:
+                _fail(f"empty section_summary for {sec_id}/{geo}")
     section_summary_quiet = site.get("section_summary_quiet")
     if not isinstance(section_summary_quiet, dict) or not section_summary_quiet:
         _fail("section_summary_quiet")

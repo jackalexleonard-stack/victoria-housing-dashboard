@@ -242,7 +242,8 @@ describe('default-closed sections (2.5)', () => {
 
 function worldChart(id: string, title: string, seriesId: string, metric: string, percent = false) {
   return { id, section: 'world', title, series_id: seriesId, metrics: [metric],
-           region_mode: 'fixed:global', percent, markers: false, annotate: false }
+           region_mode: 'fixed:global', scope: 'global', geos: [],
+           percent, markers: false, annotate: false }
 }
 
 function withWorldTiles(base: object) {
@@ -288,8 +289,10 @@ function withWorldTiles(base: object) {
   for (const id of ['brent', 'aud_usd', 'ust10', 'iron_ore', 'copper', 'sawnwood']) {
     mutated.findings[id] = 'f'
   }
+  // T4: section_summaries is per-geo now ({section: {geo: sentence}}) —
+  // World is geo-independent, so WorldTiles resolves it under DEFAULT_GEO.
   mutated.section_summaries = { ...mutated.section_summaries,
-    world: 'Brent crude rose 9.8% to US$82 in Jul 2026' }
+    world: { melbourne: 'Brent crude rose 9.8% to US$82 in Jul 2026' } }
   return mutated
 }
 
@@ -326,37 +329,55 @@ describe('World KPI tile row (D1f)', () => {
 // --- D2(e): dangling last card spans full width ---
 
 describe('trailing card grid (D2e)', () => {
-  test('an even-remainder section (fixture Money: 3 cards) does not dangle its last card', async () => {
+  // T4: Money's own cash_rate/mortgage_rates are national-scope (their data
+  // is australia-only) -> under the default melbourne geo they now sit in
+  // the "Wider context" band, not the grid (see the 'geo banding' describe
+  // below) — the grid band ends up holding only 'lending'. Context-band
+  // cards never dangle-span (App.tsx's context.map applies no col-span
+  // logic at all), so D2(e)'s dangling rule is only exercised by whatever
+  // lands in `grid`; these two tests still cover the SAME dangling/lead
+  // col-span-2 rule and the "context cards never span" behaviour, just with
+  // the post-banding composition spelled out below instead of the pre-T4
+  // flat 3-/4-card layout.
+  test('an even-remainder section: money\'s single grid card (lending) spans as the lead; its national-scope siblings (context) never span', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     const section = await openSection('Money & credit')
     const articles = within(section).getAllByRole('article')
-    expect(articles).toHaveLength(3)   // cash_rate, lending, mortgage_rates
-    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // the lead card
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // last, but pairs evenly
+    expect(articles).toHaveLength(3)   // lending (grid), cash_rate + mortgage_rates (context)
+    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // lending — the grid's lead (and only) card
+    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
   })
 
-  test('an odd-remainder section (4 cards) spans the dangling last card full width', async () => {
+  test('an odd-remainder grid (2 grid cards): lead and dangle rules coincide, so both span full width', async () => {
     history.replaceState(null, '', '/')
     const mutated = JSON.parse(JSON.stringify(siteEdge))
+    // scope 'geo' + geos ['melbourne']: a synthetic Melbourne-specific mover
+    // (unlike the real cash_rate/mortgage_rates, national-scope and thus
+    // context-band under melbourne — see the describe-level comment above),
+    // so this one joins 'lending' in the grid band, making it a 2-card grid.
     mutated.charts.push({
       id: 'credit', section: 'money', title: 'Housing credit growth',
       series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+      scope: 'geo', geos: ['melbourne'],
       percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     })
-    mutated.findings.credit = 'f'
+    mutated.findings.credit = { melbourne: 'f' }
     mockFetch(mutated)
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
     await screen.findByText('Victorian Housing')
     const section = await openSection('Money & credit')
     const articles = within(section).getAllByRole('article')
-    expect(articles).toHaveLength(4)
-    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')       // the lead card
-    expect(articles[1].parentElement).not.toHaveClass('sm:col-span-2')
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')
-    expect(articles[3].parentElement).toHaveClass('sm:col-span-2')       // the dangling last card
+    expect(articles).toHaveLength(4)   // lending, credit (grid) + cash_rate, mortgage_rates (context)
+    expect(articles[0].parentElement).toHaveClass('sm:col-span-2')       // lending — grid lead (i === 0)
+    // grid.length is 2 here, so (grid.length - 1) % 2 === 1: the "odd
+    // remainder" dangle condition is true for the LAST grid card too —
+    // with only 2 cards in the grid, lead and dangle are the same card.
+    expect(articles[1].parentElement).toHaveClass('sm:col-span-2')       // credit — grid's dangling last card
+    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // cash_rate — context band, never spans
+    expect(articles[3].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
   })
 })
 
@@ -527,4 +548,49 @@ describe('shared-outage section notice', () => {
       const section = await openSection('Money & credit')
       expect(within(section).queryByText(/source unavailable — data to/)).not.toBeInTheDocument()
     })
+})
+
+describe('geo banding', () => {
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
+
+  async function openAll() {
+    for (const t of screen.getAllByRole('button', { expanded: false })) await userEvent.click(t)
+  }
+
+  test('a chart with no data for the selected geo is not rendered in the grid', async () => {
+    history.replaceState(null, '', '/?geo=regional_vic&sections=prices')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    // fixture: `land` has melbourne data only -> hidden under regional_vic
+    expect(screen.queryByText(/Greenfield land supply/i)).not.toBeInTheDocument()
+  })
+
+  test('the footnote names the hidden charts for this geography', async () => {
+    history.replaceState(null, '', '/?geo=regional_vic&sections=prices')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    // openAll() expands every section, not just 'prices' — the edge fixture's
+    // rents/money charts are also melbourne-only geo-scope data, so under
+    // regional_vic each of prices/rents/money legitimately renders its OWN
+    // footnote (one per section, correctly, since bandFor is a per-section
+    // decision) rather than a single page-wide one.
+    const notes = screen.getAllByTestId('geo-footnote')
+    expect(notes.length).toBeGreaterThan(0)
+    for (const note of notes) expect(note).toHaveTextContent(/not published for Regional Vic/i)
+  })
+
+  test('national charts appear in the context band under a Victorian geo', async () => {
+    history.replaceState(null, '', '/?geo=melbourne&sections=money')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    const band = screen.getByTestId('context-band')
+    expect(within(band).getByText(/RBA cash rate/i)).toBeInTheDocument()
+    expect(within(band).getAllByText('Australia').length).toBeGreaterThan(0)
+  })
 })

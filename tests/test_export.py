@@ -179,13 +179,18 @@ def test_section_summaries_news_uses_top_story_tag_and_count():
     site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS),
                              news_items=items)
     export.validate_site(site)
-    assert site["section_summaries"]["news"] == "2 stories this week — Policy leads"
+    # T4 Step 4.4b: section_summaries is per-geo now — News is geo-
+    # independent (the feed isn't region-tagged), so the same sentence
+    # applies under every UI geo.
+    assert site["section_summaries"]["news"] == {
+        g: "2 stories this week — Policy leads" for g in export.UI_GEOS}
 
 
 def test_section_summaries_news_no_stories():
     ls, lm = _loaders()
     site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
-    assert site["section_summaries"]["news"] == "No stories this week."
+    assert site["section_summaries"]["news"] == {
+        g: "No stories this week." for g in export.UI_GEOS}
 
 
 def test_nan_is_rejected_not_serialized():

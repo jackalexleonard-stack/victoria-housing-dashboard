@@ -4,6 +4,8 @@ import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate, fmtPeriod } from './lib/format'
 import { sectionOutageNotice, type SectionState } from './lib/sections'
+import { bandFor, hiddenTitles, SCOPE_BADGE } from './lib/geoBands'
+import { GEO_LABEL } from './lib/selectors'
 import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead, type FailedSource } from './components/Masthead'
@@ -264,27 +266,69 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   // each tile still opens the same detail modal (full line +
                   // provenance) on tap, unchanged from before.
                   <WorldTiles site={site} charts={charts} now={now} onOpen={openDetail} />
-                ) : (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {charts.map((c, i) => {
-                      // D2(e): the first card always spans full width (the
-                      // section's lead chart); everything else pairs up
-                      // 2-per-row. When the remaining count (charts.length -
-                      // 1) is odd, the LAST card is left alone in its own row
-                      // with the right half of the grid empty — span it full
-                      // width too instead of leaving it dangling.
-                      const dangling = i === charts.length - 1 &&
-                        (charts.length - 1) % 2 === 1
-                      return (
-                        <div key={c.id} className={i === 0 || dangling ? 'sm:col-span-2' : ''}>
-                          <ChartCard site={site} chart={c} finding={site.findings[c.id]}
-                                     range={state.range} geo={state.geo} now={now}
-                                     onOpen={openDetail} quietOutage={!!outageNotice} />
+                ) : (() => {
+                  // T4: geo banding (spec §2) — a chart with no data for the
+                  // selected geo either belongs in the "Wider context" band
+                  // (broader scope than the selected geo, still legitimate)
+                  // or is a genuine gap for this geography, named in the
+                  // footnote instead of rendering a dead-looking card.
+                  const sectionCharts = site.charts.filter(c => c.section === id)
+                  const grid = sectionCharts.filter(c => bandFor(c, state.geo) === 'grid')
+                  const context = sectionCharts.filter(c => bandFor(c, state.geo) === 'context')
+                  const hidden = hiddenTitles(sectionCharts, state.geo)
+                  return (
+                    <>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        {grid.map((c, i) => {
+                          // D2(e): the first card always spans full width (the
+                          // section's lead chart); everything else pairs up
+                          // 2-per-row. When the remaining count (grid.length -
+                          // 1) is odd, the LAST card is left alone in its own row
+                          // with the right half of the grid empty — span it full
+                          // width too instead of leaving it dangling.
+                          const dangling = i === grid.length - 1 && (grid.length - 1) % 2 === 1
+                          return (
+                            <div key={c.id} className={i === 0 || dangling ? 'sm:col-span-2' : ''}>
+                              <ChartCard site={site} chart={c} finding={site.findings[c.id]?.[state.geo] ?? ''}
+                                         range={state.range} geo={state.geo} now={now}
+                                         onOpen={openDetail} quietOutage={!!outageNotice} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {context.length > 0 && (
+                        <div data-testid="context-band" className="mt-6">
+                          <h3 className="text-xs text-faint uppercase tracking-wide mb-2">
+                            Wider context</h3>
+                          <div className="grid sm:grid-cols-2 gap-4">
+                            {context.map(c => {
+                              // A context card is NOT about the selected geo — render it at its
+                              // OWN primary geo, for both the data and the finding. Passing
+                              // state.geo here would filter a region_mode='geo' context chart
+                              // (e.g. `activity` under melbourne) down to zero rows and render
+                              // an empty card that falsely reads as a source outage.
+                              const own = (c.geos[0] ?? state.geo) as typeof state.geo
+                              return (
+                                <div key={c.id}>
+                                  <ChartCard site={site} chart={c}
+                                             finding={site.findings[c.id]?.[own] ?? ''}
+                                             range={state.range} geo={own} now={now}
+                                             onOpen={openDetail} quietOutage={!!outageNotice}
+                                             scopeBadge={SCOPE_BADGE[c.scope]} />
+                                </div>
+                              )
+                            })}
+                          </div>
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                      )}
+                      {hidden.length > 0 && (
+                        <p data-testid="geo-footnote" className="text-xs text-faint mt-3">
+                          Not published for {GEO_LABEL[state.geo] ?? state.geo}: {hidden.join(', ')}.
+                        </p>
+                      )}
+                    </>
+                  )
+                })()}
               </>
             ) : null}
           </section>
@@ -299,7 +343,8 @@ export default function App({ now = new Date() }: { now?: Date }) {
       )}
       {!showWelcome && detailChart && (
         <DetailView site={site} chart={detailChart}
-                    finding={site.findings[detailChart.id]}
+                    finding={site.findings[detailChart.id]?.[state.geo] ??
+                             site.findings[detailChart.id]?.[detailChart.geos[0]] ?? ''}
                     range={state.range} geo={state.geo} compare={state.compare}
                     now={now} onClose={closeDetail} onCompare={setCompare} />
       )}

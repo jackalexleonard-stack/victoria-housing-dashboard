@@ -59,7 +59,9 @@ function baseSite(): SiteData {
     },
     hero: [], whats_new: [],
     annotations: { cash_rate_moves: [], accord_start: '2024-07-01' },
-    section_summaries: { world: 'Brent crude rose 9.8% to US$82 in Jul 2026' },
+    // T4: section_summaries is per-geo ({section: {geo: sentence}}) now —
+    // World resolves under DEFAULT_GEO ('melbourne'), see WorldTiles.tsx.
+    section_summaries: { world: { melbourne: 'Brent crude rose 9.8% to US$82 in Jul 2026' } },
   }
 }
 
