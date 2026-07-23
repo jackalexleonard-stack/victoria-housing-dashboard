@@ -184,6 +184,15 @@ Extend the docstring with:
 
 Then set `scope=` on the non-`geo` charts (leave the rest at the default `"geo"`):
 - `scope="state"` → `activity`, `waitlist`
+
+**`activity` also needs `region_mode` changed from `"fixed:vic"` to `"geo"`.** `fixed:vic` pins the
+chart to Victorian rows, so `chart_geos` can never see the `australia` rows already present in
+`vic_activity.csv`, and Step 1.6's required `['vic','australia']` would be unreachable. This is
+deliberate and is the fix for the audit defect "activity falls back to vic under australia
+(MISLEADING)" — under the finished model the chart shows real national data when Australia is
+selected, and sits in the context band (badged Victoria-wide, rendered at its own `vic` geo) under
+Melbourne/Regional. Add a comment at the chart saying so, so it is not "tidied" back. `waitlist`
+keeps `fixed:vic` — its series has only `vic` rows, so nothing is hidden by pinning it.
 - `scope="national"` → `hvi_australia`, `accord`, `cash_rate`, `mortgage_rates`, `credit`
 - `scope="global"` → `brent`, `aud_usd`, `ust10`, `iron_ore`, `copper`, `sawnwood`
 
@@ -674,15 +683,23 @@ with a banded split, and render the context band after the grid:
                         <h3 className="text-xs text-faint uppercase tracking-wide mb-2">
                           Wider context</h3>
                         <div className="grid sm:grid-cols-2 gap-4">
-                          {context.map(c => (
-                            <div key={c.id}>
-                              <ChartCard site={site} chart={c}
-                                         finding={site.findings[c.id]?.[c.geos[0]] ?? ''}
-                                         range={state.range} geo={state.geo} now={now}
-                                         onOpen={openDetail} quietOutage={!!outageNotice}
-                                         scopeBadge={SCOPE_BADGE[c.scope]} />
-                            </div>
-                          ))}
+                          {context.map(c => {
+                            // A context card is NOT about the selected geo — render it at its
+                            // OWN primary geo, for both the data and the finding. Passing
+                            // state.geo here would filter a region_mode='geo' context chart
+                            // (e.g. `activity` under melbourne) down to zero rows and render
+                            // an empty card that falsely reads as a source outage.
+                            const own = (c.geos[0] ?? state.geo) as typeof state.geo
+                            return (
+                              <div key={c.id}>
+                                <ChartCard site={site} chart={c}
+                                           finding={site.findings[c.id]?.[own] ?? ''}
+                                           range={state.range} geo={own} now={now}
+                                           onOpen={openDetail} quietOutage={!!outageNotice}
+                                           scopeBadge={SCOPE_BADGE[c.scope]} />
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )}
