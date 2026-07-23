@@ -33,7 +33,7 @@ def test_generic_finding_rise():
         ("2026-05-31", "vic", "approvals_dwellings_total", 4400, "dwellings"),
     ])})
     out = findings.build_findings(ls, lm)
-    assert out["approvals"] == "Dwelling approvals rose 10.0% to 4,400 in May 2026"
+    assert out["approvals"]["vic"] == "Dwelling approvals rose 10.0% to 4,400 in May 2026"
 
 
 def test_generic_finding_fall_and_flat():
@@ -42,7 +42,7 @@ def test_generic_finding_fall_and_flat():
         ("2026-03-31", "vic", "dwellings_commenced", 11400, "dwellings"),
     ])}, {"vic_activity": {"frequency": "quarterly"}})
     out = findings.build_findings(ls, lm)
-    assert out["activity"] == "Dwellings commenced fell 5.0% to 11,400 in Mar qtr 2026"
+    assert out["activity"]["vic"] == "Dwellings commenced fell 5.0% to 11,400 in Mar qtr 2026"
 
 
 def test_cash_rate_held_wording():
@@ -50,17 +50,22 @@ def test_cash_rate_held_wording():
     ls, lm = _loaders({"au_cash_rate": _df(rows)},
                       {"au_cash_rate": {"frequency": "monthly"}})
     out = findings.build_findings(ls, lm)
-    assert out["cash_rate"] == "The cash rate has held at 3.85% since Jan 2026"
+    assert out["cash_rate"]["australia"] == "The cash rate has held at 3.85% since Jan 2026"
 
 
 def test_hvi_finding_uses_mom():
     ls, lm = _loaders({"vic_hvi": _df([
+        # chart_geos derives coverage from the chart's *declared* metrics
+        # (hvi_index — what's plotted), not the mom/yoy columns _hvi actually
+        # reads for its sentence, so a real fixture needs an hvi_index row
+        # for the geo to be detected at all.
+        ("2026-06-30", "melbourne", "hvi_index", 183.4, "index"),
         ("2026-05-31", "melbourne", "hvi_change_mom", 0.2, "percent"),
         ("2026-06-30", "melbourne", "hvi_change_mom", -1.0, "percent"),
         ("2026-06-30", "melbourne", "hvi_change_yoy", -0.9, "percent"),
     ])}, {"vic_hvi": {"frequency": "daily"}})
     out = findings.build_findings(ls, lm)
-    assert out["hvi_melbourne"] == \
+    assert out["hvi_melbourne"]["melbourne"] == \
         "Melb dwelling values fell 1.0% in Jun 2026 (-0.9% over the year)"
 
 
@@ -70,7 +75,7 @@ def test_accord_finding_vs_target():
         ("2026-03-31", "australia", "accord_cumulative_target", 180000, "dwellings"),
     ])}, {"au_accord": {"frequency": "quarterly"}})
     out = findings.build_findings(ls, lm)
-    assert out["accord"] == \
+    assert out["accord"]["australia"] == \
         "Completions trail the Accord track by 46,545 homes as at Mar qtr 2026"
 
 
@@ -81,14 +86,18 @@ def test_median_rent_by_type_finding_uses_3br_house_primary():
         ("2025-09-30", "melbourne", "rent_1br_flat", 500, "AUD/week"),
     ])}, {"vic_rents": {"frequency": "quarterly"}})
     out = findings.build_findings(ls, lm)
-    assert out["median_rent_by_type"] == \
+    assert out["median_rent_by_type"]["melbourne"] == \
         "The median 3-bedroom-house rent rose 1.9% to $550/wk in Sep qtr 2025"
 
 
-def test_failed_series_gets_no_data_finding():
+def test_failed_series_produces_no_findings_entries_for_any_geo():
+    """Under the per-geo model a chart with no data at all has no geos
+    (chart_geos), so build_findings produces an empty per-geo dict rather
+    than a NO_DATA_FINDING sentinel string — the front end renders its own
+    no-data state per geo instead."""
     ls, lm = _loaders({}, {"vic_auctions": {"frequency": "weekly", "status": "failed"}})
     out = findings.build_findings(ls, lm)
-    assert out["auctions"] == "No recent data — source currently unavailable"
+    assert out["auctions"] == {}
 
 
 def test_exactly_four_charts_carry_a_note():
@@ -122,16 +131,22 @@ def test_hvi_charts_use_the_canonical_short_name_everywhere():
         findings._strip_cadence_code(scoring.REGISTRY["au_dwelling_values"]["label"])
 
     ls, lm = _loaders({"vic_hvi": _df([
+        # hvi_index row needed for chart_geos to detect the melbourne geo
+        # (it filters on the chart's declared metrics, not mom/yoy).
+        ("2026-06-30", "melbourne", "hvi_index", 183.4, "index"),
         ("2026-06-30", "melbourne", "hvi_change_mom", 0.5, "percent"),
         ("2026-06-30", "melbourne", "hvi_change_yoy", 2.1, "percent"),
     ])}, {"vic_hvi": {"frequency": "daily"}})
-    assert findings.build_findings(ls, lm)["hvi_melbourne"].startswith("Melb dwelling values ")
+    assert findings.build_findings(ls, lm)["hvi_melbourne"]["melbourne"] \
+        .startswith("Melb dwelling values ")
 
     ls2, lm2 = _loaders({"au_hvi": _df([
+        ("2026-06-30", "australia", "hvi_index", 210.0, "index"),
         ("2026-06-30", "australia", "hvi_change_mom", -0.2, "percent"),
         ("2026-06-30", "australia", "hvi_change_yoy", 1.0, "percent"),
     ])}, {"au_hvi": {"frequency": "daily"}})
-    assert findings.build_findings(ls2, lm2)["hvi_australia"].startswith("AU dwelling values ")
+    assert findings.build_findings(ls2, lm2)["hvi_australia"]["australia"] \
+        .startswith("AU dwelling values ")
 
 
 def test_fred_charts_carry_distinct_per_chart_source_names():
@@ -200,7 +215,7 @@ def test_held_threshold_aligned_to_display_precision():
         ("2026-05-31", "australia", "credit_housing_yoy", 7.52, "percent"),
     ])}, {"au_credit": {"frequency": "monthly"}})
     out = findings.build_findings(ls, lm)
-    assert out["credit"] == "Housing credit growth held at 7.52% in May 2026"
+    assert out["credit"]["australia"] == "Housing credit growth held at 7.52% in May 2026"
 
 
 def test_level_only_finding_uses_was_not_is():
@@ -210,14 +225,14 @@ def test_level_only_finding_uses_was_not_is():
         ("2024-12-31", "melbourne", "greenfield_years_of_supply", 18.0, "years"),
     ])}, {"vic_land": {"frequency": "annual"}})
     out = findings.build_findings(ls, lm)
-    assert out["land"] == "Greenfield years of supply was 18.0 yrs in 2024"
+    assert out["land"]["melbourne"] == "Greenfield years of supply was 18.0 yrs in 2024"
 
     ls2, lm2 = _loaders({"vic_approvals": _df([
         ("2026-04-30", "vic", "approvals_dwellings_total", 0, "dwellings"),
         ("2026-05-31", "vic", "approvals_dwellings_total", 4400, "dwellings"),
     ])})
     out2 = findings.build_findings(ls2, lm2)
-    assert out2["approvals"] == "Dwelling approvals was 4,400 in May 2026"
+    assert out2["approvals"]["vic"] == "Dwelling approvals was 4,400 in May 2026"
 
 
 def test_metric_labels_spot_checks():
@@ -288,7 +303,7 @@ def test_section_summaries_uses_the_sections_scoreable_chart():
     ls, lm = _loaders({"au_cash_rate": _df(rows_cash)},
                       {"au_cash_rate": {"frequency": "monthly"}})
     out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
-    assert out["money"] == findings.build_findings(ls, lm)["cash_rate"]
+    assert out["money"] == findings.build_findings(ls, lm)["cash_rate"]["australia"]
 
 
 def test_section_summaries_world_quiet_state():
@@ -320,7 +335,13 @@ def test_section_summaries_world_names_the_biggest_mover():
         ]),
     })
     out = findings.build_section_summaries(ls, lm, date(2026, 7, 18))
-    assert out["world"] == findings.build_findings(ls, lm)["iron_ore"]
+    # World charts are all region_mode "fixed:global" — "global" is
+    # deliberately outside UI_GEOS, so build_findings()["iron_ore"] is
+    # always {} (see test_global_regions_never_appear_as_a_ui_geo in
+    # test_export.py). The expected sentence is computed the same way
+    # _world_summary computes it: directly via _finding_for.
+    iron_ore = next(c for c in findings.CHARTS if c["id"] == "iron_ore")
+    assert out["world"] == findings._finding_for(iron_ore, ls, lm, "global")
 
 
 # --- T6: section_summary_quiet — the honesty-override flag, derived in
@@ -346,7 +367,7 @@ def test_section_summaries_full_flags_a_real_finding_section_not_quiet():
                       {"au_cash_rate": {"frequency": "monthly"}})
     text, quiet = findings.build_section_summaries_full(ls, lm, date(2026, 7, 18))
     assert quiet["money"] is False
-    assert text["money"] == findings.build_findings(ls, lm)["cash_rate"]
+    assert text["money"] == findings.build_findings(ls, lm)["cash_rate"]["australia"]
     # Sections with no scoreable chart at all stay flagged quiet.
     assert quiet["people"] is True
 
@@ -375,15 +396,19 @@ def test_world_summary_returns_text_and_quiet_flag_together():
     """Backlog cleanup: _world_summary chooses its bool flag WITH the text
     it returns (a (text, is_quiet) tuple) instead of the caller re-deriving
     "was this quiet?" by string-comparing the result against
-    WORLD_QUIET_SUMMARY after the fact."""
+    WORLD_QUIET_SUMMARY after the fact.
+
+    _world_summary now takes (load_series, load_meta) directly — World's
+    charts are all "fixed:global", permanently absent from build_findings'
+    per-geo output (global is outside UI_GEOS), so there is no findings_out
+    to hand it any more; it computes its own sentence via _finding_for."""
     quiet_ls, quiet_lm = _loaders({
         "intl_fred": _df([
             ("2026-06-30", "global", "brent_crude", 80.0, "USD/barrel"),
             ("2026-07-31", "global", "brent_crude", 80.2, "USD/barrel"),
         ]),
     })
-    findings_out = findings.build_findings(quiet_ls, quiet_lm)
-    text, is_quiet = findings._world_summary(quiet_ls, findings_out)
+    text, is_quiet = findings._world_summary(quiet_ls, quiet_lm)
     assert (text, is_quiet) == (findings.WORLD_QUIET_SUMMARY, True)
 
     mover_ls, mover_lm = _loaders({
@@ -392,52 +417,55 @@ def test_world_summary_returns_text_and_quiet_flag_together():
             ("2026-07-31", "global", "iron_ore", 115.0, "USD/tonne"),
         ]),
     })
-    findings_out2 = findings.build_findings(mover_ls, mover_lm)
-    text2, is_quiet2 = findings._world_summary(mover_ls, findings_out2)
-    assert text2 == findings_out2["iron_ore"]
+    text2, is_quiet2 = findings._world_summary(mover_ls, mover_lm)
+    iron_ore = next(c for c in findings.CHARTS if c["id"] == "iron_ore")
+    assert text2 == findings._finding_for(iron_ore, mover_ls, mover_lm, "global")
     assert is_quiet2 is False
 
 
-def test_world_summary_unchanged_against_real_committed_data():
-    """Locks in the refactor's own "must not change current exported
-    values" requirement: runs both the OLD (pre-refactor, string-equality)
-    algorithm and the NEW (text, is_quiet)-tuple one over the real committed
+def test_world_summary_matches_independently_derived_mover_on_real_data():
+    """Task 2: the pre-refactor "unchanged against real data" comparison no
+    longer applies by design — the old algorithm sourced its text from
+    findings_out[chart_id], which under the per-geo model is permanently {}
+    for every World chart (all are region_mode "fixed:global", and "global"
+    is deliberately outside UI_GEOS). _world_summary now computes its
+    sentence directly via _finding_for instead.
+
+    This still locks in the real behaviour end-to-end: independently
+    re-derive which World chart is the biggest mover over the committed
     data/ directory (the same loaders test_export.py's real end-to-end test
-    uses) and asserts they agree byte-for-byte."""
-    today = date(2026, 7, 21)
-    findings_out = findings.build_findings(export.load_series, export.load_meta)
+    uses), and assert _world_summary's text is exactly what calling
+    _finding_for on that chart produces."""
+    best = None
+    for chart in findings.CHARTS:
+        if chart["section"] != "world":
+            continue
+        geo = chart["region_mode"].split(":", 1)[1]
+        df = findings._primary_frame(chart, export.load_series, geo)
+        if len(df) < 2:
+            continue
+        v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
+        unit = str(df["unit"].iloc[-1])
+        if unit == "percent":
+            mag, floor = abs(v - p), findings.WORLD_QUIET_PP
+        else:
+            if p == 0:
+                continue
+            mag, floor = abs((v / p - 1) * 100), findings.WORLD_QUIET_PCT
+        if mag < floor:
+            continue
+        if best is None or mag > best[0]:
+            best = (mag, chart)
+    assert best is not None, "sanity: real data must have a genuine mover today"
 
-    def old_world_summary(load_series, findings_out):
-        best = None
-        for chart in findings.CHARTS:
-            if chart["section"] != "world":
-                continue
-            df = findings._primary_frame(chart, load_series)
-            if len(df) < 2:
-                continue
-            v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
-            unit = str(df["unit"].iloc[-1])
-            if unit == "percent":
-                mag, floor = abs(v - p), findings.WORLD_QUIET_PP
-            else:
-                if p == 0:
-                    continue
-                mag, floor = abs((v / p - 1) * 100), findings.WORLD_QUIET_PCT
-            if mag < floor:
-                continue
-            if best is None or mag > best[0]:
-                best = (mag, chart["id"])
-        if best is None:
-            return findings.WORLD_QUIET_SUMMARY
-        return findings_out.get(best[1]) or findings.WORLD_QUIET_SUMMARY
-
-    old_text = old_world_summary(export.load_series, findings_out)
-    old_quiet = old_text == findings.WORLD_QUIET_SUMMARY
-    new_text, new_quiet = findings._world_summary(export.load_series, findings_out)
-    assert (new_text, new_quiet) == (old_text, old_quiet)
+    expected = findings._finding_for(
+        best[1], export.load_series, export.load_meta,
+        best[1]["region_mode"].split(":", 1)[1])
+    text, is_quiet = findings._world_summary(export.load_series, export.load_meta)
+    assert text == expected
     # Sanity: real data has a genuine mover today, not the quiet fallback —
     # otherwise this test would pass vacuously.
-    assert new_quiet is False
+    assert is_quiet is False
 
 
 def test_hvi_near_zero_mom_reads_as_held_flat_not_a_fake_move():
@@ -447,15 +475,48 @@ def test_hvi_near_zero_mom_reads_as_held_flat_not_a_fake_move():
     display-precision threshold. Both sides of the boundary."""
     def hvi_finding(mom):
         ls, lm = _loaders({"vic_hvi": _df([
+            # hvi_index row needed for chart_geos to detect the melbourne geo.
+            ("2026-06-30", "melbourne", "hvi_index", 183.4, "index"),
             ("2026-05-31", "melbourne", "hvi_change_mom", 1.0, "percent"),
             ("2026-06-30", "melbourne", "hvi_change_mom", mom, "percent"),
         ])}, {"vic_hvi": {"frequency": "daily"}})
-        return findings.build_findings(ls, lm)["hvi_melbourne"]
+        return findings.build_findings(ls, lm)["hvi_melbourne"]["melbourne"]
 
     # Just inside the threshold (0.03 < 0.05) -> "held flat", not "rose 0.0%".
     assert hvi_finding(0.03) == "Melb dwelling values held flat in Jun 2026"
     # Just outside it (0.06 >= 0.05) -> a real move, rounded to 1dp as usual.
     assert hvi_finding(0.06) == "Melb dwelling values rose 0.1% in Jun 2026"
+
+
+def test_findings_are_keyed_by_geo_and_use_that_geo_s_own_data(tmp_path):
+    import pandas as pd
+    from pipeline.findings import build_findings
+
+    df = pd.DataFrame([
+        ("2026-03-31", "melbourne", "median_rent", 575.0, "aud_per_week"),
+        ("2026-06-30", "melbourne", "median_rent", 590.0, "aud_per_week"),
+        ("2026-03-31", "regional_vic", "median_rent", 460.0, "aud_per_week"),
+        ("2026-06-30", "regional_vic", "median_rent", 470.0, "aud_per_week"),
+    ], columns=["date", "region", "metric", "value", "unit"])
+
+    out = build_findings(lambda _s: df, lambda _s: {"frequency": "quarterly"})
+    mr = out["median_rent"]
+    assert set(mr) >= {"melbourne", "regional_vic"}
+    # The regional sentence must quote the REGIONAL number, never Melbourne's.
+    assert "470" in mr["regional_vic"]
+    assert "590" not in mr["regional_vic"]
+    assert "590" in mr["melbourne"]
+
+
+def test_no_finding_is_produced_for_a_geo_the_chart_has_no_data_for():
+    import pandas as pd
+    from pipeline.findings import build_findings
+
+    df = pd.DataFrame([
+        ("2026-06-30", "melbourne", "median_rent", 590.0, "aud_per_week"),
+    ], columns=["date", "region", "metric", "value", "unit"])
+    out = build_findings(lambda _s: df, lambda _s: {"frequency": "quarterly"})
+    assert "regional_vic" not in out["median_rent"]
 
 
 def test_fmt_value_full_unit_vocabulary():

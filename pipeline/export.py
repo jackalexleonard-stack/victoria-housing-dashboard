@@ -296,9 +296,14 @@ def validate_site(site: dict) -> None:
     chart_ids = [c["id"] for c in site.get("charts", [])]
     if not chart_ids or len(chart_ids) != len(set(chart_ids)):
         _fail("charts missing or ids not unique")
-    for cid in chart_ids:
-        if not site.get("findings", {}).get(cid):
-            _fail(f"missing finding for chart {cid}")
+    for c in site.get("charts", []):
+        cid, geos = c["id"], c.get("geos", [])
+        f = site.get("findings", {}).get(cid)
+        if not isinstance(f, dict):
+            _fail(f"findings[{cid}] must be an object keyed by geo")
+        missing = [g for g in geos if g not in f]
+        if missing:
+            _fail(f"findings[{cid}] missing geo(s): {missing}")
     for sid, entry in site["series"].items():
         if entry.get("status") not in ("ok", "failed"):
             _fail(f"bad status for {sid}")

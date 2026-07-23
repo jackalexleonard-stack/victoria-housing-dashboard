@@ -251,7 +251,7 @@ def fmt_value(v: float, unit: str) -> str:
     return f"{v:,.2f}"
 
 
-def _primary_frame(chart: dict, load_series: Loader) -> pd.DataFrame:
+def _primary_frame(chart: dict, load_series: Loader, geo: str) -> pd.DataFrame:
     df = load_series(chart["series_id"])
     if df is None or len(df) == 0:
         return pd.DataFrame(columns=["date", "region", "metric", "value", "unit"])
@@ -259,12 +259,10 @@ def _primary_frame(chart: dict, load_series: Loader) -> pd.DataFrame:
     mode = chart["region_mode"]
     if mode.startswith("fixed:"):
         df = df[df["region"] == mode.split(":", 1)[1]]
-    elif mode == "geo":
-        for r in ("melbourne", "vic", "australia"):  # finding uses default view
-            sub = df[df["region"] == r]
-            if len(sub):
-                df = sub
-                break
+    else:
+        # Exactly the requested geo — never a fallback. A geo with no rows
+        # yields an empty frame, and the caller emits no finding for it.
+        df = df[df["region"] == geo]
     df = df.dropna(subset=["value"]).copy()
     df["date"] = pd.to_datetime(df["date"])
     return df.sort_values("date")
@@ -279,8 +277,9 @@ HELD_THRESHOLD_PP = 0.05     # percent-unit (pp) branch — was 0.005, too tight
 HELD_THRESHOLD_PCT = 0.05    # percent-of-value branch — already aligned
 
 
-def _generic(chart: dict, load_series: Loader, load_meta: Loader) -> Optional[str]:
-    df = _primary_frame(chart, load_series)
+def _generic(chart: dict, load_series: Loader, load_meta: Loader,
+             geo: str) -> Optional[str]:
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     freq = (load_meta(chart["series_id"]) or {}).get("frequency", "monthly")
@@ -341,8 +340,8 @@ def _hvi(chart, load_series, load_meta):
     return f"{subject} {verb} {abs(v):.1f}% in {period}{tail}"
 
 
-def _cash_rate(chart, load_series, load_meta):
-    df = _primary_frame(chart, load_series)
+def _cash_rate(chart, load_series, load_meta, geo):
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     v = float(df["value"].iloc[-1])
@@ -375,8 +374,8 @@ def _accord(chart, load_series, load_meta):
     return f"Completions run {abs(gap):,.0f} homes ahead of the Accord track as at {period}"
 
 
-def _vacancy(chart, load_series, load_meta):
-    df = _primary_frame(chart, load_series)
+def _vacancy(chart, load_series, load_meta, geo):
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     freq = (load_meta(chart["series_id"]) or {}).get("frequency", "monthly")
@@ -384,7 +383,7 @@ def _vacancy(chart, load_series, load_meta):
     period = fmt_period(df["date"].iloc[-1], freq)
     if v <= float(df["value"].min()) + 0.1:
         return f"Vacancy holds near record lows at {v:g}% in {period}"
-    return _generic({**chart, "noun": "The vacancy rate"}, load_series, load_meta)
+    return _generic({**chart, "noun": "The vacancy rate"}, load_series, load_meta, geo)
 
 
 _CUSTOM = {
@@ -395,16 +394,40 @@ _CUSTOM = {
     "vacancy": _vacancy,
 }
 
+# Which _CUSTOM builders reach _primary_frame (and so need geo threaded
+# through). _hvi and _accord read load_series directly and are already
+# pinned to a single region via chart["region_mode"] ("fixed:melbourne" /
+# "fixed:australia" for _hvi; "fixed:australia" for _accord) — they keep
+# their original 3-arg form.
+_GEO_AWARE_CUSTOM = {"cash_rate", "vacancy"}
+
 NO_DATA_FINDING = "No recent data — source currently unavailable"
 
 
-def build_findings(load_series: Loader, load_meta: Loader) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _finding_for(chart: dict, load_series: Loader, load_meta: Loader,
+                 geo: str) -> Optional[str]:
+    """The per-chart dispatch (custom-builder lookup falling back to
+    _generic), now geo-aware: every path that reaches _primary_frame is
+    threaded this exact geo, never a fallback region."""
+    cid = chart["id"]
+    fn = _CUSTOM.get(cid)
+    if fn is None:
+        return _generic(chart, load_series, load_meta, geo)
+    if cid in _GEO_AWARE_CUSTOM:
+        return fn(chart, load_series, load_meta, geo)
+    return fn(chart, load_series, load_meta)
+
+
+def build_findings(load_series: Loader, load_meta: Loader) -> dict[str, dict[str, str]]:
+    from pipeline.export import chart_geos     # local import avoids a cycle
+    out: dict[str, dict[str, str]] = {}
     for chart in CHARTS:
-        fn = _CUSTOM.get(chart["id"])
-        text = fn(chart, load_series, load_meta) if fn \
-            else _generic(chart, load_series, load_meta)
-        out[chart["id"]] = text or NO_DATA_FINDING
+        per_geo: dict[str, str] = {}
+        for geo in chart_geos(chart, load_series):
+            sentence = _finding_for(chart, load_series, load_meta, geo)
+            if sentence:
+                per_geo[geo] = sentence
+        out[chart["id"]] = per_geo
     return out
 
 
@@ -543,18 +566,26 @@ def _section_mover_chart_id(section_id: str, load_series: Loader, load_meta: Loa
     return best_id
 
 
-def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> tuple[str, bool]:
+def _world_summary(load_series: Loader, load_meta: Loader) -> tuple[str, bool]:
     """(summary text, is_quiet) — chosen together, right where
     WORLD_QUIET_SUMMARY is authored, rather than leaving the caller to
     recover "was this actually quiet?" later by re-comparing the returned
     text against the sentinel string (design review honesty-override class,
     T6 — the same drift risk that motivated section_summary_quiet in the
-    first place, just for World's bespoke path instead of the generic one)."""
-    best = None  # (magnitude, chart_id)
+    first place, just for World's bespoke path instead of the generic one).
+
+    Every World chart is region_mode "fixed:global", and "global" is
+    deliberately excluded from UI_GEOS (chart_geos never lists it — see
+    export.UI_GEOS) — so build_findings' per-geo output never carries an
+    entry for any of these six charts. The mover's sentence is therefore
+    computed directly here via _finding_for rather than looked up from a
+    findings dict that is permanently empty for this section."""
+    best = None  # (magnitude, chart)
     for chart in CHARTS:
         if chart["section"] != "world":
             continue
-        df = _primary_frame(chart, load_series)
+        geo = chart["region_mode"].split(":", 1)[1]  # ignored by the fixed-
+        df = _primary_frame(chart, load_series, geo)  # mode branch below
         if len(df) < 2:
             continue
         v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
@@ -568,10 +599,12 @@ def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> tuple[s
         if mag < floor:
             continue
         if best is None or mag > best[0]:
-            best = (mag, chart["id"])
+            best = (mag, chart)
     if best is None:
         return WORLD_QUIET_SUMMARY, True
-    text = findings_out.get(best[1])
+    winner = best[1]
+    text = _finding_for(winner, load_series, load_meta,
+                        winner["region_mode"].split(":", 1)[1])
     if not text:
         return WORLD_QUIET_SUMMARY, True
     return text, False
@@ -594,12 +627,18 @@ def build_section_summaries_full(load_series: Loader, load_meta: Loader,
     quiet: dict[str, bool] = {}
     for section_id in _SUMMARY_SECTIONS:
         if section_id == "world":
-            summary, is_quiet = _world_summary(load_series, findings_out)
+            summary, is_quiet = _world_summary(load_series, load_meta)
             text[section_id] = summary
             quiet[section_id] = is_quiet
             continue
         mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
-        found = findings_out.get(mover) if mover else None
+        # findings_out[mover] is keyed by geo (build_findings, Task 2); the
+        # section summary shows one representative sentence, so take the
+        # first geo in UI_GEOS priority order (the dict's insertion order —
+        # build_findings walks chart_geos(chart, load_series), which already
+        # returns UI_GEOS order).
+        per_geo = (findings_out.get(mover) or {}) if mover else {}
+        found = next(iter(per_geo.values()), None)
         is_quiet = not found or found == NO_DATA_FINDING
         text[section_id] = found if not is_quiet \
             else _QUIET_SUMMARY.format(title=titles[section_id])
