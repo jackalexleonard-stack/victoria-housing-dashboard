@@ -9,7 +9,8 @@ const NOW = new Date('2026-07-21T00:00:00Z')
 function chart(id: string, title: string, seriesId: string, metric: string,
                percent = false): ChartSpec {
   return { id, section: 'world', title, series_id: seriesId, metrics: [metric],
-           region_mode: 'fixed:global', percent, markers: false, annotate: false }
+           region_mode: 'fixed:global', scope: 'global', geos: [],
+           percent, markers: false, annotate: false }
 }
 
 const worldCharts: ChartSpec[] = [
@@ -58,7 +59,9 @@ function baseSite(): SiteData {
     },
     hero: [], whats_new: [],
     annotations: { cash_rate_moves: [], accord_start: '2024-07-01' },
-    section_summaries: { world: 'Brent crude rose 9.8% to US$82 in Jul 2026' },
+    // T4: section_summaries is per-geo ({section: {geo: sentence}}) now —
+    // World resolves under DEFAULT_GEO ('melbourne'), see WorldTiles.tsx.
+    section_summaries: { world: { melbourne: 'Brent crude rose 9.8% to US$82 in Jul 2026' } },
   }
 }
 

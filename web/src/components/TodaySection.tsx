@@ -33,7 +33,11 @@ function LeadCard({ site, leadKey, onOpen }: {
   site: SiteData; leadKey: string; onOpen: (id: string) => void }) {
   const tile = site.hero.find(t => t.key === leadKey)
   const chartId = TILE_CHART[leadKey]
-  const finding = chartId ? site.findings[chartId] : undefined
+  // T4: findings is now per-geo ({chartId: {geo: sentence}}) — Today is
+  // default-view-only (2.4), so resolve at the chart's own first geo rather
+  // than the (nonexistent, here) selected geo.
+  const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
+  const finding = chart ? site.findings[chartId]?.[chart.geos[0]] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
   const fmt = TILE_FMT[leadKey]
   const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
@@ -74,7 +78,9 @@ function SecondaryCard({ site, tileKey, onOpen }: {
   site: SiteData; tileKey: string; onOpen: (id: string) => void }) {
   const tile = site.hero.find(t => t.key === tileKey)
   const chartId = TILE_CHART[tileKey]
-  const finding = chartId ? site.findings[chartId] : undefined
+  // T4: same per-geo resolution as LeadCard, above.
+  const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
+  const finding = chart ? site.findings[chartId]?.[chart.geos[0]] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
   const fmt = TILE_FMT[tileKey]
   const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null

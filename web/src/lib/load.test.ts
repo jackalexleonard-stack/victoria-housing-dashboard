@@ -102,3 +102,20 @@ test('guard rejects wrongly-typed scan-batch fields when present', () => {
   expect(() => assertSiteData({ ...siteEdge as object, section_summary_quiet: 'nope' }))
     .toThrow(/unexpected data shape/)
 })
+
+// T5: findings is now nested per-geo ({chartId: {geo: sentence}}) — the
+// guard must reject the old flat pre-geo shape ({chartId: sentence}),
+// not just check that findings is *an* object. validSite is built from the
+// migrated siteEdge fixture so every other field stays valid and the reject
+// test fails specifically on findings, not on some unrelated field.
+test('rejects the pre-geo flat findings shape', () => {
+  const validSite = siteEdge as object
+  const flat = { ...validSite, findings: { cash_rate: 'The cash rate held at 3.60%.' } }
+  expect(() => assertSiteData(flat)).toThrow(/findings/)
+})
+
+test('accepts the nested per-geo findings shape', () => {
+  const validSite = siteEdge as object
+  const nested = { ...validSite, findings: { cash_rate: { australia: 'The cash rate held at 3.60%.' } } }
+  expect(() => assertSiteData(nested)).not.toThrow()
+})

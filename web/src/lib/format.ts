@@ -86,7 +86,7 @@ export function fmtUnit(v: number, unit: string): string {
     const body = abs < 10 ? abs.toFixed(2) : n0(abs)
     return v < 0 ? `-US$${body}` : `US$${body}`
   }
-  if (['dwellings', 'applications', 'number', 'persons', 'lots'].includes(u)) return n0(v)
+  if (['dwellings', 'applications', 'number', 'persons', 'lots', 'applicants'].includes(u)) return n0(v)
   return v.toLocaleString('en-AU', { maximumFractionDigits: 2 })
 }
 

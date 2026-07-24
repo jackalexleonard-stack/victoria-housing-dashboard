@@ -15,6 +15,10 @@ export interface SeriesEntry {
 export interface ChartSpec {
   id: string; section: string; title: string; series_id: string
   metrics: string[] | null; region_mode: string
+  // T1/T3: pipeline-derived scope classification and the UI geos this chart
+  // genuinely has data for (§2/geoBands.ts) — never hardcoded per-chart, so
+  // a chart can never claim a geography it doesn't actually have rows for.
+  scope: string; geos: string[]
   percent: boolean; markers: boolean; annotate: boolean
   note?: string | null
   // Extra series shown only in the detail modal — mixed-scale split charts
@@ -51,7 +55,10 @@ export interface ExtraTile {
 export interface SiteData {
   schema_version: 1; generated_at: string
   sections: [string, string][]
-  charts: ChartSpec[]; findings: Record<string, string>
+  // T2/T3: per-geo findings — {chartId: {geo: sentence}}, keyed by the geo
+  // the sentence was written for (a chart can read differently per geo, e.g.
+  // "Melbourne rents held" vs "Regional Vic rents rose").
+  charts: ChartSpec[]; findings: Record<string, Record<string, string>>
   series: Record<string, SeriesEntry>
   hero: HeroTile[]; whats_new: HeroTile[]
   annotations: { cash_rate_moves: { date: string; delta: number }[]; accord_start: string }
@@ -60,7 +67,12 @@ export interface SiteData {
   hero_lead?: string
   extra_tiles?: ExtraTile[]
   metric_labels?: Record<string, string>
-  section_summaries?: Record<string, string>
+  // T4 Step 4.4b: per-geo, mirroring `findings` — {section: {geo: sentence}}.
+  // Was a flat {section: sentence} (always Melbourne-first whenever
+  // Melbourne had data, since the mover chart behind most sections is
+  // region_mode="geo") — the same defect this whole project exists to
+  // remove, one level up from per-chart findings.
+  section_summaries?: Record<string, Record<string, string>>
   // True when section_summaries[id] is the pipeline's own generic quiet/
   // no-data sentinel (T6: derived in Python where the sentinel is authored,
   // replacing sections.ts's old byte-match-the-prose approach).
@@ -93,7 +105,15 @@ export function assertSiteData(x: unknown): SiteData {
   if (!s.generated_at || typeof s.generated_at !== 'string') bad('generated_at')
   if (!s.series || typeof s.series !== 'object') bad('series')
   if (!Array.isArray(s.charts) || s.charts.length === 0) bad('charts')
-  if (!s.findings || typeof s.findings !== 'object') bad('findings')
+  // T3/T5: findings is nested per-geo (object-of-objects, see SiteData
+  // above). Task 3 had to revert a stricter check here because renderers and
+  // fixtures still expected the old flat {chartId: sentence} shape; now that
+  // Task 4 has migrated every consumer and fixture, reject that flat shape
+  // at the boundary too, not just check that findings is *an* object.
+  if (s.findings == null || typeof s.findings !== 'object' ||
+      Object.values(s.findings).some(v => v == null || typeof v !== 'object')) {
+    bad('findings')
+  }
   if (!Array.isArray(s.hero) || s.hero.length !== 5) bad('hero')
   for (const [sid, e] of Object.entries(s.series)) {
     if (e.status !== 'ok' && e.status !== 'failed') bad(`status of ${sid}`)

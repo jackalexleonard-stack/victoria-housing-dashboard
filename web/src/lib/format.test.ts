@@ -46,11 +46,14 @@ test('fmtUnit covers the full real unit vocabulary', () => {
   expect(fmtUnit(4.35, 'percent')).toBe('4.35%')
   expect(fmtUnit(9.70, 'percent')).toBe('9.7%')
   expect(fmtUnit(3.0, 'percent')).toBe('3%')
-  // dwellings / applications / persons / lots / number: thousands, 0dp.
+  // dwellings / applications / persons / lots / number / applicants: thousands, 0dp.
   expect(fmtUnit(4400, 'applications')).toBe('4,400')
   expect(fmtUnit(4400, 'persons')).toBe('4,400')
   expect(fmtUnit(4400, 'lots')).toBe('4,400')
   expect(fmtUnit(4400, 'number')).toBe('4,400')
+  // RoGS public-housing waitlist counts (rogs.py) — regression: this unit
+  // was missing from the integer list, so counts rendered "56,230.00".
+  expect(fmtUnit(56230, 'applicants')).toBe('56,230')
   // index: 1dp, unchanged.
   expect(fmtUnit(183.4, 'index')).toBe('183.4')
   // aud: unchanged.

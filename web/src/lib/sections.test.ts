@@ -19,7 +19,7 @@ function entry(over: Partial<SeriesEntry['meta']> & { status?: SeriesEntry['stat
 
 function chart(over: Partial<ChartSpec> & Pick<ChartSpec, 'id' | 'series_id'>): ChartSpec {
   return { section: 'x', title: over.id, metrics: null, region_mode: 'geo',
-           percent: false, markers: false, annotate: false, ...over }
+           scope: 'geo', geos: [], percent: false, markers: false, annotate: false, ...over }
 }
 
 function site(series: Record<string, SeriesEntry>): SiteData {

@@ -86,7 +86,7 @@ test('a chart-level source_name override shows in the modal instead of the serie
     percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     source_name: 'FRED — Brent crude (DCOILBRENTEU)',
   })
-  mutated.findings.brent_test = 'f'
+  mutated.findings.brent_test = { melbourne: 'f' }
   const s = assertSiteData(mutated)
   const brentChart = s.charts.find(c => c.id === 'brent_test')!
   render(<DetailView site={s} chart={brentChart} finding="f"

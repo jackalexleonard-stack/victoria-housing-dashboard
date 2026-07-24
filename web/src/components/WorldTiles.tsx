@@ -32,10 +32,18 @@ const WORLD_TILE_COLOR = PALETTE.muted
 
 export function WorldTiles({ site, charts, now, onOpen }: {
   site: SiteData; charts: ChartSpec[]; now: Date; onOpen: (chartId: string) => void }) {
+  // T4 Step 4.4b: section_summaries is now per-geo ({section: {geo:
+  // sentence}}), mirroring findings. World's own charts are all
+  // region_mode="fixed:global" — genuinely geo-independent — so there is no
+  // real per-viewer geo to key off here (World never receives one); DEFAULT_GEO
+  // is just the pipeline's own arbitrary key for its one sentence, with a
+  // fallback to whichever key IS present in case that ever changes.
+  const worldSummary = site.section_summaries?.world?.[DEFAULT_GEO] ??
+    Object.values(site.section_summaries?.world ?? {})[0]
   return (
     <>
-      {site.section_summaries?.world && (
-        <p className="font-display text-lg mb-3">{site.section_summaries.world}</p>
+      {worldSummary && (
+        <p className="font-display text-lg mb-3">{worldSummary}</p>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {charts.map(c => {

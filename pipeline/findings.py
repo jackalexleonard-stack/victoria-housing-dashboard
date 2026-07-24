@@ -24,8 +24,8 @@ SECTIONS: list[tuple[str, str]] = [
 
 
 def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
-       percent=False, markers=False, annotate=False, noun=None, primary=None,
-       note=None, modal_metrics=None, source_name=None):
+       scope="geo", percent=False, markers=False, annotate=False, noun=None,
+       primary=None, note=None, modal_metrics=None, source_name=None):
     """noun: subject of the generic finding sentence; primary: metric it uses
     (defaults to metrics[0]); both ignored by charts with custom rules.
     note: optional short disclosure/methodology line shown under the chart
@@ -38,10 +38,16 @@ def _c(id, section, title, series_id, *, metrics=None, region_mode="geo",
     single series_id whose own instruments deserve separate citations (the
     three FRED world charts all read intl_fred, but Brent/AUD-USD/US-10yr
     are different instruments); None for every chart happy with its series'
-    single shared source string."""
+    single shared source string.
+    scope: the FINEST geography this chart is ever available at —
+    "geo" (metro/regional specific), "state" (Victoria-wide only; no
+    metro/regional split is published), "national" (no sub-national version
+    exists), "global" (world context). Drives band placement: a chart whose
+    selected geo is absent from its derived `geos` is hidden-and-footnoted
+    when scope=="geo", but shown in the badged context band otherwise."""
     return dict(id=id, section=section, title=title, series_id=series_id,
-                metrics=metrics, region_mode=region_mode, percent=percent,
-                markers=markers, annotate=annotate, noun=noun,
+                metrics=metrics, region_mode=region_mode, scope=scope,
+                percent=percent, markers=markers, annotate=annotate, noun=noun,
                 primary=primary or (metrics[0] if metrics else None),
                 note=note, modal_metrics=modal_metrics, source_name=source_name)
 
@@ -50,6 +56,17 @@ _HVI_NOTE = ("Daily index — the free Cotality feed covers a rolling year; "
              "history accumulates from Jul 2025.")
 _MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
                      "grouping differs slightly from pre-2026 snapshot figures.")
+_POP_GCCSA_NOTE = ("Annual ABS data (components of population change by "
+                   "GCCSA) — a separate, less-frequent series from the "
+                   "quarterly Victoria/Australia population figures above.")
+# Task 9/15: the two regions publish on different cadences — Melbourne a full
+# year to Dec, Regional Victoria a running half-year "Titled H1" snapshot to
+# Jun — disclosed here rather than annualised to match (that would fabricate
+# data the source never published; see pipeline/sources/udp.py's caveat).
+_LAND_NOTE = ("Melbourne and Regional Victoria publish on different "
+              "cadences — Melbourne a full year to Dec, Regional a "
+              "half-year \"Titled H1\" snapshot to Jun — not annualised "
+              "to match.")
 
 
 def _strip_cadence_code(label: str) -> str:
@@ -85,11 +102,20 @@ CHARTS: list[dict] = [
        metrics=["hvi_index"], region_mode="fixed:melbourne", annotate=True,
        note=_HVI_NOTE),
     _c("hvi_australia", "prices", SERIES_SHORT_NAMES["hvi_australia"], "au_hvi",
-       metrics=["hvi_index"], region_mode="fixed:australia", annotate=True,
-       note=_HVI_NOTE),
+       metrics=["hvi_index"], region_mode="fixed:australia", scope="national",
+       annotate=True, note=_HVI_NOTE),
     _c("reiv_median", "prices", "REIV quarterly medians", "vic_median_price",
        region_mode="geo", noun="The median house price",
        primary="median_house_price"),
+    # ABS RES_DWELL — the geo audit's worst single gap: Regional Victoria had
+    # ZERO dwelling-price data of any kind. Published as separate house /
+    # attached-dwelling medians (do NOT blend into one figure — not
+    # published); primary=median_price_house drives the headline, mirroring
+    # median_rent_by_type's primary=rent_3br_house convention below.
+    _c("median_price", "prices", "Median dwelling price", "vic_res_dwell",
+       metrics=["median_price_house", "median_price_attached"],
+       region_mode="geo", primary="median_price_house",
+       noun="The median house price"),
     _c("auctions", "prices", "Auction clearance — Melbourne", "vic_auctions",
        metrics=["clearance_rate"], region_mode="fixed:melbourne", percent=True,
        noun="The clearance rate"),
@@ -100,6 +126,18 @@ CHARTS: list[dict] = [
     _c("median_rent", "rents", "Median weekly rent", "vic_rents",
        metrics=["median_rent"], region_mode="geo",
        noun="The median rent", note=_MEDIAN_RENT_NOTE),
+    # Australia-wide rents: this is an ABS CPI PRICE INDEX (weighted average
+    # of the eight capital cities), not a bond-based median in dollars — a
+    # SEPARATE series/chart from median_rent above, never combined with it.
+    # region_mode="fixed:australia" + scope="geo" (not "national"): this
+    # only ever carries `australia` rows, so it belongs in the Australia
+    # grid, hidden-and-footnoted under Melbourne/Regional/Victoria — exactly
+    # like the Victorian rent charts are hidden-and-footnoted under Australia.
+    _c("au_rent_index", "rents", "Rent price index — capital cities", "au_rents",
+       metrics=["rent_index"], region_mode="fixed:australia", scope="geo",
+       note="ABS CPI rents index for the weighted average of eight capital "
+            "cities — an index, not a bond-based median; not comparable "
+            "with the Victorian median rents above."),
     _c("affordable_share", "rents", "Affordable lettings share", "vic_rents",
        metrics=["affordable_share"], region_mode="geo", percent=True,
        noun="The affordable share of new lettings"),
@@ -114,34 +152,62 @@ CHARTS: list[dict] = [
     _c("approvals", "supply", "Dwelling approvals", "vic_approvals",
        region_mode="geo", noun="Dwelling approvals",
        primary="approvals_dwellings_total"),
+    # region_mode="geo", NOT "fixed:vic": vic_activity carries both `vic` and
+    # `australia` rows, and pinning it to vic would hide the national data
+    # from chart_geos entirely — this is the fix for the audit defect where
+    # this chart fell back to showing vic under an Australia selection.
+    # scope="state" because no metro/regional split of this series is
+    # published; under Melbourne/Regional geo it belongs in the wider-
+    # context band, rendered at its own vic geo (contrast: waitlist below
+    # correctly keeps region_mode="fixed:vic" — its series has only vic
+    # rows, so nothing is hidden by pinning it).
     _c("activity", "supply", "Commencements, completions, pipeline",
-       "vic_activity", region_mode="fixed:vic", noun="Dwellings commenced",
-       primary="dwellings_commenced"),
+       "vic_activity", region_mode="geo", scope="state",
+       noun="Dwellings commenced", primary="dwellings_commenced"),
     _c("accord", "supply", "Housing Accord tracker", "au_accord",
        metrics=["accord_cumulative_actual", "accord_cumulative_target"],
-       region_mode="fixed:australia",
+       region_mode="fixed:australia", scope="national",
        modal_metrics=["accord_quarterly_actual", "accord_quarterly_target"]),
+    # Task 9 landed regional_vic rows; Task 15 flips region_mode from
+    # "fixed:melbourne" to "geo" so chart_geos actually picks them up (they
+    # sat dormant under the fixed pin) — this is what turns the chart into a
+    # genuine metro-vs-regional pair. See _LAND_NOTE for the cadence caveat.
     _c("land", "supply", "Greenfield land supply", "vic_land",
-       region_mode="fixed:melbourne", noun="Greenfield years of supply",
-       primary="greenfield_years_of_supply"),
+       region_mode="geo", noun="Greenfield years of supply",
+       primary="greenfield_years_of_supply", note=_LAND_NOTE),
     _c("input_costs", "supply", "Construction input costs — Melbourne",
        "vic_input_costs", region_mode="fixed:melbourne",
        noun="Input costs", primary="input_all_groups"),
+    # ABS PPI OUTPUT index — what builders CHARGE for building construction,
+    # a different concept from input_costs above (what Melbourne builders PAY
+    # for materials). Separate series (vic_construction_costs), separate
+    # chart card, state-level `vic` region (this dataflow publishes no
+    # Melbourne/regional split for OUTPUT) — title, note, and metric labels
+    # all say "output" explicitly so the two charts are never mistaken for
+    # one another, sitting directly below input_costs for easy comparison.
+    _c("output_costs", "supply", "Construction output costs — Victoria",
+       "vic_construction_costs", region_mode="fixed:vic", scope="state",
+       metrics=["output_house_construction", "output_building_construction",
+                "output_other_residential"],
+       noun="House construction output prices", primary="output_house_construction",
+       note="ABS OUTPUT price index — what builders charge, not what they "
+            "pay for materials (see input costs above); a different measure, "
+            "never combined with it."),
     # --- money ---
     _c("cash_rate", "money", "RBA cash rate target", "au_cash_rate",
-       metrics=["cash_rate"], region_mode="fixed:australia", percent=True,
-       annotate=True),
+       metrics=["cash_rate"], region_mode="fixed:australia", scope="national",
+       percent=True, annotate=True),
     _c("mortgage_rates", "money", "Mortgage rates (owner-occupier)",
-       "au_mortgage_rates", region_mode="fixed:australia", percent=True,
-       noun="The average new mortgage rate", primary="mortgage_new"),
+       "au_mortgage_rates", region_mode="fixed:australia", scope="national",
+       percent=True, noun="The average new mortgage rate", primary="mortgage_new"),
     _c("lending", "money", "New housing loan commitments", "au_lending",
        region_mode="geo", annotate=True, noun="Owner-occupier lending",
        primary="lending_owner_occupier"),
-    _c("credit", "money", "Housing credit growth", "au_credit",
+    _c("credit", "money", "Housing credit growth (Australia)", "au_credit",
        metrics=["credit_housing_yoy", "credit_investor_yoy",
                 "credit_owner_occupier_yoy"],
-       region_mode="fixed:australia", percent=True, annotate=True,
-       noun="Housing credit growth", primary="credit_housing_yoy",
+       region_mode="fixed:australia", scope="national", percent=True,
+       annotate=True, noun="Housing credit growth", primary="credit_housing_yoy",
        modal_metrics=["credit_housing_yoy", "credit_investor_yoy",
                       "credit_owner_occupier_yoy", "credit_housing_mom",
                       "credit_investor_mom", "credit_owner_occupier_mom"]),
@@ -153,10 +219,37 @@ CHARTS: list[dict] = [
        metrics=["net_overseas_migration", "natural_increase"],
        region_mode="geo", noun="Net overseas migration",
        primary="net_overseas_migration"),
+    # Melbourne/Regional Vic components of population change (ABS GCCSA,
+    # ANNUAL) — a separate series/chart from "population" above (which is
+    # quarterly, vic/australia only). ERP is excluded from metrics for the
+    # same reason as "population" above: it is millions vs the other
+    # components' tens of thousands, so plotting it alongside them would
+    # flatten the chart and the finding sentence (design review P0-5).
+    _c("population_gccsa", "people", "Population & migration — Melbourne/Regional Vic",
+       "vic_population_gccsa",
+       metrics=["net_overseas_migration", "net_internal_migration", "natural_increase"],
+       region_mode="geo", noun="Net overseas migration",
+       primary="net_overseas_migration", note=_POP_GCCSA_NOTE),
     # --- social ---
     _c("waitlist", "social", "Victorian Housing Register", "vic_social_waitlist",
-       region_mode="fixed:vic", noun="Housing Register applications",
-       primary="vhr_total"),
+       region_mode="fixed:vic", scope="state",
+       noun="Housing Register applications", primary="vhr_total"),
+    # Productivity Commission RoGS Part G §18 — public-housing dwelling stock
+    # and waitlist, Victoria + Australia. region_mode="geo" (not "fixed:vic"):
+    # the series carries both `vic` and `australia` rows, same reasoning as
+    # "activity" above — pinning it would hide the national figure from
+    # chart_geos entirely. scope="state": RoGS publishes no metro/regional
+    # split, only per-jurisdiction. A DIFFERENT figure from the VHR waitlist
+    # above — RoGS' own cross-jurisdiction public-housing count, not Homes
+    # Victoria's VHR count — never combined with it.
+    _c("social_housing_rogs", "social", "Public housing — dwellings & waitlist",
+       "au_social_housing",
+       metrics=["social_dwellings_public", "social_waitlist_public"],
+       region_mode="geo", scope="state",
+       noun="The public housing waitlist", primary="social_waitlist_public",
+       note="Productivity Commission Report on Government Services (RoGS), "
+            "annual — public housing only, not all social housing; a "
+            "separate figure from the Victorian Housing Register above."),
     # --- world ---
     # source_name: intl_fred's one shared meta.source_name ("FRED — Brent
     # crude, US 10yr Treasury, AUD/USD") reads fine on the card caption
@@ -165,21 +258,23 @@ CHARTS: list[dict] = [
     # string on every one of these three cards (design review d2). Each
     # chart cites its own FRED series id instead.
     _c("brent", "world", "Brent crude", "intl_fred", metrics=["brent_crude"],
-       region_mode="fixed:global", noun="Brent crude",
+       region_mode="fixed:global", scope="global", noun="Brent crude",
        source_name="FRED — Brent crude (DCOILBRENTEU)"),
     _c("aud_usd", "world", "AUD/USD", "intl_fred", metrics=["aud_usd"],
-       region_mode="fixed:global", noun="The Australian dollar",
+       region_mode="fixed:global", scope="global", noun="The Australian dollar",
        source_name="FRED — AUD/USD (DEXUSAL)"),
     _c("ust10", "world", "US 10-year Treasury", "intl_fred",
-       metrics=["us_10y_treasury"], region_mode="fixed:global", percent=True,
-       noun="The US 10-year yield",
+       metrics=["us_10y_treasury"], region_mode="fixed:global", scope="global",
+       percent=True, noun="The US 10-year yield",
        source_name="FRED — US 10-year Treasury (DGS10)"),
     _c("iron_ore", "world", "Iron ore", "intl_commodities",
-       metrics=["iron_ore"], region_mode="fixed:global", noun="Iron ore"),
+       metrics=["iron_ore"], region_mode="fixed:global", scope="global",
+       noun="Iron ore"),
     _c("copper", "world", "Copper", "intl_commodities", metrics=["copper"],
-       region_mode="fixed:global", noun="Copper"),
+       region_mode="fixed:global", scope="global", noun="Copper"),
     _c("sawnwood", "world", "Sawnwood", "intl_commodities",
-       metrics=["sawnwood"], region_mode="fixed:global", noun="Sawnwood"),
+       metrics=["sawnwood"], region_mode="fixed:global", scope="global",
+       noun="Sawnwood"),
 ]
 
 Loader = Callable[[str], object]
@@ -229,12 +324,12 @@ def fmt_value(v: float, unit: str) -> str:
         return f"{v:,.2f}"
     if u.startswith("usd"):  # any USD-per-commodity money unit
         return f"US${v:,.2f}" if abs(v) < 10 else f"US${v:,.0f}"
-    if u in ("dwellings", "applications", "number", "persons", "lots"):
+    if u in ("dwellings", "applications", "number", "persons", "lots", "applicants"):
         return f"{v:,.0f}"
     return f"{v:,.2f}"
 
 
-def _primary_frame(chart: dict, load_series: Loader) -> pd.DataFrame:
+def _primary_frame(chart: dict, load_series: Loader, geo: str) -> pd.DataFrame:
     df = load_series(chart["series_id"])
     if df is None or len(df) == 0:
         return pd.DataFrame(columns=["date", "region", "metric", "value", "unit"])
@@ -242,12 +337,10 @@ def _primary_frame(chart: dict, load_series: Loader) -> pd.DataFrame:
     mode = chart["region_mode"]
     if mode.startswith("fixed:"):
         df = df[df["region"] == mode.split(":", 1)[1]]
-    elif mode == "geo":
-        for r in ("melbourne", "vic", "australia"):  # finding uses default view
-            sub = df[df["region"] == r]
-            if len(sub):
-                df = sub
-                break
+    else:
+        # Exactly the requested geo — never a fallback. A geo with no rows
+        # yields an empty frame, and the caller emits no finding for it.
+        df = df[df["region"] == geo]
     df = df.dropna(subset=["value"]).copy()
     df["date"] = pd.to_datetime(df["date"])
     return df.sort_values("date")
@@ -262,8 +355,9 @@ HELD_THRESHOLD_PP = 0.05     # percent-unit (pp) branch — was 0.005, too tight
 HELD_THRESHOLD_PCT = 0.05    # percent-of-value branch — already aligned
 
 
-def _generic(chart: dict, load_series: Loader, load_meta: Loader) -> Optional[str]:
-    df = _primary_frame(chart, load_series)
+def _generic(chart: dict, load_series: Loader, load_meta: Loader,
+             geo: str) -> Optional[str]:
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     freq = (load_meta(chart["series_id"]) or {}).get("frequency", "monthly")
@@ -324,8 +418,8 @@ def _hvi(chart, load_series, load_meta):
     return f"{subject} {verb} {abs(v):.1f}% in {period}{tail}"
 
 
-def _cash_rate(chart, load_series, load_meta):
-    df = _primary_frame(chart, load_series)
+def _cash_rate(chart, load_series, load_meta, geo):
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     v = float(df["value"].iloc[-1])
@@ -358,8 +452,8 @@ def _accord(chart, load_series, load_meta):
     return f"Completions run {abs(gap):,.0f} homes ahead of the Accord track as at {period}"
 
 
-def _vacancy(chart, load_series, load_meta):
-    df = _primary_frame(chart, load_series)
+def _vacancy(chart, load_series, load_meta, geo):
+    df = _primary_frame(chart, load_series, geo)
     if df.empty:
         return None
     freq = (load_meta(chart["series_id"]) or {}).get("frequency", "monthly")
@@ -367,7 +461,7 @@ def _vacancy(chart, load_series, load_meta):
     period = fmt_period(df["date"].iloc[-1], freq)
     if v <= float(df["value"].min()) + 0.1:
         return f"Vacancy holds near record lows at {v:g}% in {period}"
-    return _generic({**chart, "noun": "The vacancy rate"}, load_series, load_meta)
+    return _generic({**chart, "noun": "The vacancy rate"}, load_series, load_meta, geo)
 
 
 _CUSTOM = {
@@ -378,16 +472,40 @@ _CUSTOM = {
     "vacancy": _vacancy,
 }
 
+# Which _CUSTOM builders reach _primary_frame (and so need geo threaded
+# through). _hvi and _accord read load_series directly and are already
+# pinned to a single region via chart["region_mode"] ("fixed:melbourne" /
+# "fixed:australia" for _hvi; "fixed:australia" for _accord) — they keep
+# their original 3-arg form.
+_GEO_AWARE_CUSTOM = {"cash_rate", "vacancy"}
+
 NO_DATA_FINDING = "No recent data — source currently unavailable"
 
 
-def build_findings(load_series: Loader, load_meta: Loader) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _finding_for(chart: dict, load_series: Loader, load_meta: Loader,
+                 geo: str) -> Optional[str]:
+    """The per-chart dispatch (custom-builder lookup falling back to
+    _generic), now geo-aware: every path that reaches _primary_frame is
+    threaded this exact geo, never a fallback region."""
+    cid = chart["id"]
+    fn = _CUSTOM.get(cid)
+    if fn is None:
+        return _generic(chart, load_series, load_meta, geo)
+    if cid in _GEO_AWARE_CUSTOM:
+        return fn(chart, load_series, load_meta, geo)
+    return fn(chart, load_series, load_meta)
+
+
+def build_findings(load_series: Loader, load_meta: Loader) -> dict[str, dict[str, str]]:
+    from pipeline.export import chart_geos     # local import avoids a cycle
+    out: dict[str, dict[str, str]] = {}
     for chart in CHARTS:
-        fn = _CUSTOM.get(chart["id"])
-        text = fn(chart, load_series, load_meta) if fn \
-            else _generic(chart, load_series, load_meta)
-        out[chart["id"]] = text or NO_DATA_FINDING
+        per_geo: dict[str, str] = {}
+        for geo in chart_geos(chart, load_series):
+            sentence = _finding_for(chart, load_series, load_meta, geo)
+            if sentence:
+                per_geo[geo] = sentence
+        out[chart["id"]] = per_geo
     return out
 
 
@@ -410,7 +528,7 @@ METRIC_LABELS: dict[str, str] = {
     "rent_1br_flat": "1-bed flat", "rent_2br_flat": "2-bed flat",
     "rent_3br_flat": "3-bed flat", "rent_2br_house": "2-bed house",
     "rent_3br_house": "3-bed house", "rent_4br_house": "4-bed house",
-    "vacancy_rate": "Vacancy rate",
+    "vacancy_rate": "Vacancy rate", "rent_index": "Rent price index",
     # mortgage rates — new/outstanding x fixed/variable
     "mortgage_new": "New (average)", "mortgage_new_fixed": "New — fixed",
     "mortgage_new_variable": "New — variable",
@@ -424,18 +542,26 @@ METRIC_LABELS: dict[str, str] = {
     "accord_quarterly_target": "Target (quarterly)",
     # population & migration
     "net_overseas_migration": "Net overseas migration",
+    "net_internal_migration": "Net internal migration",
     "natural_increase": "Natural increase",
     "population_erp": "Resident population",
     "population_growth_qtr": "Quarterly growth",
     # social housing register
     "vhr_total": "Total applications", "vhr_priority": "Priority applications",
     "vhr_register_of_interest": "Register of interest",
+    # RoGS public housing (dwellings & waitlist)
+    "social_dwellings_public": "Public housing dwellings",
+    "social_waitlist_public": "Public housing waitlist",
     # greenfield land supply
     "greenfield_lot_supply": "Lot supply", "greenfield_lots_titled": "Lots titled",
     "greenfield_years_of_supply": "Years of supply",
     # construction input costs
     "input_all_groups": "All groups", "input_cement": "Cement",
     "input_steel": "Steel", "input_timber": "Timber",
+    # construction output costs (what builders charge, vs input above)
+    "output_house_construction": "House construction (output)",
+    "output_other_residential": "Other residential (output)",
+    "output_building_construction": "All building construction (output)",
     # dwelling activity
     "dwellings_commenced": "Commenced", "dwellings_completed": "Completed",
     "dwellings_under_construction": "Under construction",
@@ -451,6 +577,7 @@ METRIC_LABELS: dict[str, str] = {
     # prices
     "mean_price": "Mean price", "dwelling_count": "Dwelling count",
     "clearance_rate": "Clearance rate", "median_house_price": "Median house price",
+    "median_price_house": "House", "median_price_attached": "Attached dwelling",
     # cash rate
     "cash_rate": "Cash rate",
     # world
@@ -526,18 +653,26 @@ def _section_mover_chart_id(section_id: str, load_series: Loader, load_meta: Loa
     return best_id
 
 
-def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> tuple[str, bool]:
+def _world_summary(load_series: Loader, load_meta: Loader) -> tuple[str, bool]:
     """(summary text, is_quiet) — chosen together, right where
     WORLD_QUIET_SUMMARY is authored, rather than leaving the caller to
     recover "was this actually quiet?" later by re-comparing the returned
     text against the sentinel string (design review honesty-override class,
     T6 — the same drift risk that motivated section_summary_quiet in the
-    first place, just for World's bespoke path instead of the generic one)."""
-    best = None  # (magnitude, chart_id)
+    first place, just for World's bespoke path instead of the generic one).
+
+    Every World chart is region_mode "fixed:global", and "global" is
+    deliberately excluded from UI_GEOS (chart_geos never lists it — see
+    export.UI_GEOS) — so build_findings' per-geo output never carries an
+    entry for any of these six charts. The mover's sentence is therefore
+    computed directly here via _finding_for rather than looked up from a
+    findings dict that is permanently empty for this section."""
+    best = None  # (magnitude, chart)
     for chart in CHARTS:
         if chart["section"] != "world":
             continue
-        df = _primary_frame(chart, load_series)
+        geo = chart["region_mode"].split(":", 1)[1]  # ignored by the fixed-
+        df = _primary_frame(chart, load_series, geo)  # mode branch below
         if len(df) < 2:
             continue
         v, p = float(df["value"].iloc[-1]), float(df["value"].iloc[-2])
@@ -551,10 +686,12 @@ def _world_summary(load_series: Loader, findings_out: dict[str, str]) -> tuple[s
         if mag < floor:
             continue
         if best is None or mag > best[0]:
-            best = (mag, chart["id"])
+            best = (mag, chart)
     if best is None:
         return WORLD_QUIET_SUMMARY, True
-    text = findings_out.get(best[1])
+    winner = best[1]
+    text = _finding_for(winner, load_series, load_meta,
+                        winner["region_mode"].split(":", 1)[1])
     if not text:
         return WORLD_QUIET_SUMMARY, True
     return text, False
@@ -564,33 +701,55 @@ _SUMMARY_SECTIONS = ("prices", "rents", "supply", "money", "people", "social", "
 
 
 def build_section_summaries_full(load_series: Loader, load_meta: Loader,
-                                 today: date) -> tuple[dict[str, str], dict[str, bool]]:
+                                 today: date) -> tuple[dict[str, dict[str, str]], dict[str, bool]]:
     """(section_summaries, section_summary_quiet) in one pass — the quiet
     flag is derived right here, where the _QUIET_SUMMARY/WORLD_QUIET_SUMMARY
     sentinels are authored, rather than by string-matching the rendered
     sentence later (design review honesty-override upgrade, T6): the
     collapsed-section override must not depend on prose staying byte-
-    identical to these two constants."""
+    identical to these two constants.
+
+    T4 Step 4.4b: section_summaries is per-geo ({section: {geo: sentence}}),
+    mirroring `findings` — this used to collapse to ONE sentence via
+    `next(iter(per_geo.values()), None)`, which always quoted Melbourne
+    whenever Melbourne had data (every non-World section's mover chart —
+    median_rent, vacancy, mean_price, approvals, lending, population, ... —
+    is region_mode="geo"). That was the same Melbourne-bias defect Task 2
+    fixed for per-chart headlines, recreated here one level up. Fixed by
+    using the mover's own per-geo findings dict directly instead of
+    collapsing it — a section whose mover has data for multiple geos now
+    genuinely has a different sentence per geo."""
+    from pipeline.export import UI_GEOS   # local import avoids a cycle
+
     findings_out = build_findings(load_series, load_meta)
     titles = dict(SECTIONS)
-    text: dict[str, str] = {}
+    text: dict[str, dict[str, str]] = {}
     quiet: dict[str, bool] = {}
     for section_id in _SUMMARY_SECTIONS:
         if section_id == "world":
-            summary, is_quiet = _world_summary(load_series, findings_out)
-            text[section_id] = summary
+            summary, is_quiet = _world_summary(load_series, load_meta)
+            # World's charts are all region_mode="fixed:global" — genuinely
+            # geo-independent (see _world_summary's own docstring) — so the
+            # one sentence applies equally under every UI geo.
+            text[section_id] = {g: summary for g in UI_GEOS}
             quiet[section_id] = is_quiet
             continue
         mover = _section_mover_chart_id(section_id, load_series, load_meta, today)
-        found = findings_out.get(mover) if mover else None
-        is_quiet = not found or found == NO_DATA_FINDING
-        text[section_id] = found if not is_quiet \
-            else _QUIET_SUMMARY.format(title=titles[section_id])
+        # findings_out[mover] is already {geo: sentence} (build_findings,
+        # Task 2) — using it directly, rather than collapsing to one entry,
+        # is exactly what makes this section-summary honestly per-geo.
+        per_geo = (findings_out.get(mover) or {}) if mover else {}
+        is_quiet = not per_geo
+        if is_quiet:
+            quiet_sentence = _QUIET_SUMMARY.format(title=titles[section_id])
+            text[section_id] = {g: quiet_sentence for g in UI_GEOS}
+        else:
+            text[section_id] = dict(per_geo)
         quiet[section_id] = is_quiet
     return text, quiet
 
 
 def build_section_summaries(load_series: Loader, load_meta: Loader,
-                            today: date) -> dict[str, str]:
+                            today: date) -> dict[str, dict[str, str]]:
     text, _ = build_section_summaries_full(load_series, load_meta, today)
     return text

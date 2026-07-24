@@ -56,7 +56,10 @@ test('data table disclosure exposes the values', async () => {
   expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
 })
 
-test('scope chip appears when geo falls back', () => {
+test.skip('scope chip appears when geo falls back', () => {
+  // Task 3 deleted the FALLBACK substitution this asserted (audit D2). Rewrite
+  // in Task 4/5 once bandFor() decides whether a hidden-band card renders at
+  // all; a fallback chip has no meaning now that no fallback exists.
   render(<ChartCard site={site} chart={chart('median_rent')} finding="f"
                     range="all" geo="regional_vic" now={NOW} onOpen={() => {}} />)
   expect(screen.getByText('Melbourne', { selector: 'span' })).toBeInTheDocument()
@@ -93,7 +96,7 @@ test('a chart-level source_name override wins over the series’ shared meta.sou
     percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     source_name: 'FRED — Brent crude (DCOILBRENTEU)',
   })
-  mutated.findings.brent_test = 'f'
+  mutated.findings.brent_test = { melbourne: 'f' }
   const s = assertSiteData(mutated)
   render(<ChartCard site={s} chart={s.charts.find(c => c.id === 'brent_test')!}
                     finding="f" range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
@@ -261,7 +264,7 @@ function siteWithLandChart(pointsPerMetric: 1 | 2) {
       ...series('greenfield_years_of_supply', [16, 18]),
     ],
   }
-  mutated.findings.land = 'Greenfield years of supply sits at 18.0 years'
+  mutated.findings.land = { melbourne: 'Greenfield years of supply sits at 18.0 years' }
   return assertSiteData(mutated)
 }
 
@@ -306,7 +309,7 @@ test('a MIXED chart (one line short, others long) still renders the chart, not a
       { date: '2025-12-31', region: 'melbourne', metric: 'greenfield_years_of_supply', value: 18 },
     ],
   }
-  mutated.findings.land = 'f'
+  mutated.findings.land = { melbourne: 'f' }
   const landSite = assertSiteData(mutated)
   const { container } = render(
     <ChartCard site={landSite} chart={landSite.charts.find(c => c.id === 'land')!}

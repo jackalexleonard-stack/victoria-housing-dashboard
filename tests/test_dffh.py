@@ -28,7 +28,7 @@ def test_parse_tables_offline():
     df = dffh.parse_tables(raw)
 
     common.validate_tidy(df)
-    assert set(df.region) == {"melbourne", "regional_vic"}
+    assert set(df.region) == {"vic", "melbourne", "regional_vic"}
     assert set(df.unit) == {"percent"}
     # This workbook now supplies only the two genuine time series. The
     # overall median-rent snapshot (Table 1) and the dwelling-type snapshot
@@ -49,6 +49,7 @@ def test_parse_tables_offline():
 
     # Current-quarter snapshot (September Quarter 2025).
     snap = df[df.date == "2025-09-30"].set_index(["region", "metric"])["value"]
+    assert snap[("vic", "affordable_share")] == pytest.approx(14.4, abs=0.05)
     assert snap[("melbourne", "affordable_share")] == pytest.approx(9.7, abs=0.05)
     assert snap[("regional_vic", "affordable_share")] == pytest.approx(36.4, abs=0.05)
     assert snap[("melbourne", "rent_growth_annual")] == pytest.approx(3.53, abs=0.02)
@@ -81,7 +82,7 @@ def test_parse_lga_medians_offline():
     df = dffh.parse_lga_medians(raw)
 
     common.validate_tidy(df)
-    assert set(df.region) == {"melbourne", "regional_vic"}
+    assert set(df.region) == {"vic", "melbourne", "regional_vic"}
     expected_metrics = {
         "median_rent", "rent_1br_flat", "rent_2br_flat", "rent_3br_flat",
         "rent_2br_house", "rent_3br_house", "rent_4br_house",
@@ -94,6 +95,7 @@ def test_parse_lga_medians_offline():
     for m in expected_metrics:
         assert counts[(m, "melbourne")] >= 100
         assert counts[(m, "regional_vic")] >= 100
+        assert counts[(m, "vic")] >= 100
 
     # Full 26-year span: Jun 1999 (period-end) -> Sep 2025 (period-end),
     # for every metric, not just the overall median_rent.
@@ -108,28 +110,70 @@ def test_parse_lga_medians_offline():
     # First quarter in the sheet — overall + two dwelling types.
     assert snap[("1999-06-30", "melbourne", "median_rent")] == 170
     assert snap[("1999-06-30", "regional_vic", "median_rent")] == 125
+    assert snap[("1999-06-30", "vic", "median_rent")] == 160
     assert snap[("1999-06-30", "melbourne", "rent_1br_flat")] == 130
     assert snap[("1999-06-30", "regional_vic", "rent_1br_flat")] == 80
+    assert snap[("1999-06-30", "vic", "rent_1br_flat")] == 120
     assert snap[("1999-06-30", "melbourne", "rent_3br_house")] == 180
     assert snap[("1999-06-30", "regional_vic", "rent_3br_house")] == 140
+    assert snap[("1999-06-30", "vic", "rent_3br_house")] == 165
 
-    # Latest quarter in the sheet (Metro/Non-Metro LGA aggregate — distinct
-    # from Table 1's differently-grouped statistical-region snapshot).
+    # Latest quarter in the sheet (Metro/Non-Metro/Victoria LGA aggregate —
+    # distinct from Table 1's differently-grouped statistical-region
+    # snapshot). The Victoria figure is the workbook's own published
+    # statewide row, not derived from Metro/Non-Metro.
     assert snap[("2025-09-30", "melbourne", "median_rent")] == 575
     assert snap[("2025-09-30", "regional_vic", "median_rent")] == 470
+    assert snap[("2025-09-30", "vic", "median_rent")] == 550
     assert snap[("2025-09-30", "melbourne", "rent_1br_flat")] == 500
     assert snap[("2025-09-30", "regional_vic", "rent_1br_flat")] == 300
+    assert snap[("2025-09-30", "vic", "rent_1br_flat")] == 500
     assert snap[("2025-09-30", "melbourne", "rent_2br_flat")] == 600
     assert snap[("2025-09-30", "regional_vic", "rent_2br_flat")] == 390
+    assert snap[("2025-09-30", "vic", "rent_2br_flat")] == 595
     assert snap[("2025-09-30", "melbourne", "rent_3br_flat")] == 690
     assert snap[("2025-09-30", "regional_vic", "rent_3br_flat")] == 470
+    assert snap[("2025-09-30", "vic", "rent_3br_flat")] == 660
     assert snap[("2025-09-30", "melbourne", "rent_2br_house")] == 575
     assert snap[("2025-09-30", "regional_vic", "rent_2br_house")] == 400
+    assert snap[("2025-09-30", "vic", "rent_2br_house")] == 515
     assert snap[("2025-09-30", "melbourne", "rent_3br_house")] == 550
     assert snap[("2025-09-30", "regional_vic", "rent_3br_house")] == 480
+    assert snap[("2025-09-30", "vic", "rent_3br_house")] == 530
     assert snap[("2025-09-30", "melbourne", "rent_4br_house")] == 595
     assert snap[("2025-09-30", "regional_vic", "rent_4br_house")] == 550
+    assert snap[("2025-09-30", "vic", "rent_4br_house")] == 580
 
     # Sanity range: wide enough to cover an entry-level 1br flat in 1999
     # (regional_vic was $80/wk) through a 4br house in 2025.
     assert df.value.between(50, 2000).all()
+
+
+def test_dffh_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.dffh import parse_vic_rents
+
+    raw = {
+        "tables": (FIX / "dffh_rental_report.xlsx").read_bytes(),
+        "lga_medians": (FIX / "dffh_lga_medians.xlsx").read_bytes(),
+    }
+    df = parse_vic_rents(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    assert set(df["region"]) == {"vic", "melbourne", "regional_vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray.
+    assert set(df["metric"]) == {
+        "rent_growth_annual", "affordable_share", "median_rent",
+        "rent_1br_flat", "rent_2br_flat", "rent_3br_flat",
+        "rent_2br_house", "rent_3br_house", "rent_4br_house",
+    }
+    # (3) A spot value hand-verified against the fixture (Victoria row 94 of
+    # the "All Properties" sheet in dffh_lga_medians.xlsx, Sep 2025 median
+    # column), so the test would fail if the parser mis-maps a column or an
+    # axis.
+    row = df[(df.region == "vic") & (df.date == "2025-09-30") & (df.metric == "median_rent")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 550
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()

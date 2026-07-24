@@ -274,8 +274,8 @@ test('fewer than 3 findings: static row, no conveyor controls', () => {
     ...siteEdge,
     hero_lead: 'empty',
     findings: {
-      cash_rate: (siteEdge as { findings: Record<string, string> }).findings.cash_rate,
-      hvi_melbourne: (siteEdge as { findings: Record<string, string> }).findings.hvi_melbourne,
+      cash_rate: (siteEdge as { findings: Record<string, Record<string, string>> }).findings.cash_rate,
+      hvi_melbourne: (siteEdge as { findings: Record<string, Record<string, string>> }).findings.hvi_melbourne,
     },
   })
   render(<TodaySection site={small} news={news} now={NOW} onOpen={() => {}} />)

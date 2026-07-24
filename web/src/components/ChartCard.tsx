@@ -69,14 +69,19 @@ function visibleAnnotationCount(
   }).length
 }
 
-export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quietOutage }: {
+export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quietOutage,
+                            scopeBadge }: {
   site: SiteData; chart: ChartSpec; finding: string; range: Range; geo: Geo
   now: Date; onOpen: (id: string) => void
   // Design review P1-outage: set when this card's section has a hoisted,
   // section-level shared-outage notice (see sectionOutageNotice) — the
   // card's own chip then drops to the quieter "{period} · unavailable"
   // form instead of repeating the full staleness sentence.
-  quietOutage?: boolean }) {
+  quietOutage?: boolean
+  // T4: set by App's "Wider context" band — the chart's real scope
+  // ('Victoria-wide'/'Australia'/'Global'), so a context card is never
+  // mistaken for the selected geography.
+  scopeBadge?: string }) {
   const { entry, lines, scopeNote, unitByName, primaryMetric, unit, st } =
     useChartData(site, chart, range, geo, now)
   const annotations = chart.annotate
@@ -230,6 +235,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           <span>{chart.title}</span>
           {sourceToken}
           {statusChip}
+          {scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}
           {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
           <DataTable lines={lines} unit={unit} unitByName={unitByName} />
         </div>
@@ -237,6 +243,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
         <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-2">
           {sourceToken}
           {statusChip}
+          {scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}
         </div>
       )}
       {showBandCaption && <p className="text-xs text-faint mt-1">{BAND_CAPTION}</p>}

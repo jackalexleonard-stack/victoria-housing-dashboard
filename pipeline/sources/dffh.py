@@ -7,14 +7,18 @@ links fresh on each run rather than hardcoding them):
 * "Tables from Rental Report - <Quarter> <Year>.xlsx" — ``fetch_tables`` /
   ``parse_tables``. Two genuine time series:
   * ``rent_growth_annual`` — Rent Index annual % change        (Fig 1 source, 2000Q2->)
-  * ``affordable_share``   — affordable lettings % of new lets (Fig 8 source, 2020Q3->)
+  * ``affordable_share``   — affordable lettings % of new lets (Fig 8 source, 2020Q3->,
+    published for Victoria/Metro/Regional — Victoria % is column 1, taken as-is,
+    NOT derived from the Metro/Regional columns)
   (Table 1's current-quarter median-rent snapshot and Table 3's current-quarter
   dwelling-type snapshot are deliberately NOT read any more — both are
   superseded by full-history equivalents from the other workbook below.)
 * "Quarterly median rents by Local Government Area.xlsx" — ``fetch_lga_medians`` /
   ``parse_lga_medians``. Every sheet shares the same METRO NON-METRO aggregate
-  layout (Metro/Non-Metro rows, one quarter-pair of columns each, back to
-  Jun 1999, ~106 quarters):
+  layout (Metro/Non-Metro/Victoria rows, one quarter-pair of columns each, back
+  to Jun 1999, ~106 quarters). The Victoria row is a published statewide
+  aggregate, not an average of the Metro/Non-Metro rows (these are medians —
+  the mean of two medians is not a median) — taken as-is:
   * ``All Properties`` sheet -> ``median_rent`` — overall median rent, new lettings
   * the 6 dwelling-type sheets -> ``rent_<size>_<type>`` (one metric per sheet,
     see ``_LGA_DWELLING_SHEET`` for the sheet-name -> metric mapping; these are
@@ -152,7 +156,9 @@ def parse_tables(raw: bytes) -> pd.DataFrame:
     # reading both would give those metrics two (slightly different) sources
     # for the same quarter.
     rows += _timeseries(wb["Fig 1 source"], {1: "melbourne", 2: "regional_vic"}, "rent_growth_annual")
-    rows += _timeseries(wb["Fig 8 source"], {2: "melbourne", 3: "regional_vic"}, "affordable_share")
+    rows += _timeseries(
+        wb["Fig 8 source"], {1: "vic", 2: "melbourne", 3: "regional_vic"}, "affordable_share"
+    )
 
     return pd.DataFrame(rows, columns=common.TIDY_COLUMNS)
 
@@ -161,7 +167,7 @@ def parse_tables(raw: bytes) -> pd.DataFrame:
 # Parse: "Quarterly median rents by Local Government Area" workbook
 # --------------------------------------------------------------------------
 _LGA_SHEET = "All Properties"
-_LGA_REGION = {"metro": "melbourne", "non-metro": "regional_vic"}
+_LGA_REGION = {"metro": "melbourne", "non-metro": "regional_vic", "victoria": "vic"}
 # Dwelling-type sheet name (exact, as openpyxl reports it — casing is
 # inconsistent in the source workbook, e.g. '1br flat' vs '2br Flat') -> the
 # same tidy metric names Table 3 used to emit as a single-quarter snapshot.
@@ -197,10 +203,10 @@ def _lga_quarter_columns(header_row: tuple) -> dict[int, str]:
 
 def _lga_metro_trend(ws, metric: str) -> list[tuple]:
     """Label-scan one sheet of the LGA-medians workbook for the METRO
-    NON-METRO section's Metro / Non-Metro aggregate rows (NOT fixed row
-    numbers — the sheet grows a suburb/LGA row occasionally), then walk every
-    quarter-pair column to emit ``metric``'s full history for melbourne /
-    regional_vic. Shared by the ``All Properties`` sheet (-> ``median_rent``)
+    NON-METRO section's Metro / Non-Metro / Victoria aggregate rows (NOT
+    fixed row numbers — the sheet grows a suburb/LGA row occasionally), then
+    walk every quarter-pair column to emit ``metric``'s full history for
+    melbourne / regional_vic / vic. Shared by the ``All Properties`` sheet (-> ``median_rent``)
     and each of the 6 dwelling-type sheets (-> ``rent_<size>_<type>``) — same
     layout in every one of the 7 sheets.
     """

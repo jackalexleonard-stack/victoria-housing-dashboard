@@ -29,6 +29,27 @@ EMPTY_TILE = {"key": "empty", "label": "—", "value": None,
 
 Loader = Callable[[str], object]
 
+# The four selectable geographies, in display order. `global` is deliberately
+# absent: it is a data-side region token, never a UI selection.
+UI_GEOS = ("melbourne", "regional_vic", "vic", "australia")
+
+
+def chart_geos(chart: dict, load_series: Loader) -> list[str]:
+    """The UI geos this chart genuinely has data for, derived from the series
+    itself so it can never drift from reality. Metric filtering is applied
+    first: a region that only carries metrics this chart doesn't plot is not
+    coverage. Returns UI_GEOS order, not data order."""
+    df = load_series(chart["series_id"])
+    if df is None or len(df) == 0:
+        return []
+    if chart.get("metrics"):
+        df = df[df["metric"].isin(chart["metrics"])]
+    mode = chart.get("region_mode", "geo")
+    if mode.startswith("fixed:"):
+        df = df[df["region"] == mode.split(":", 1)[1]]
+    present = set(df["region"].dropna().unique())
+    return [g for g in UI_GEOS if g in present]
+
 
 def load_series(sid: str) -> pd.DataFrame:
     p = DATA / "series" / f"{sid}.csv"
@@ -192,7 +213,11 @@ def build_site(ls: Loader, lm: Loader, today: date,
                news_items: Optional[list[dict]] = None) -> dict:
     sids = series_ids if series_ids is not None else repo_series_ids()
     section_summaries, section_summary_quiet = build_section_summaries_full(ls, lm, today)
-    section_summaries["news"] = _news_section_summary(news_items or [], today)
+    # T4 Step 4.4b: section_summaries is per-geo now — News, like World, is
+    # geo-independent (the feed isn't region-tagged), so the same sentence
+    # applies under every UI geo.
+    news_summary = _news_section_summary(news_items or [], today)
+    section_summaries["news"] = {g: news_summary for g in UI_GEOS}
     # News uses its own "N stories this week" sentence, never the generic
     # quiet sentinel — always non-quiet by this mechanism.
     section_summary_quiet["news"] = False
@@ -200,10 +225,13 @@ def build_site(ls: Loader, lm: Loader, today: date,
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sections": [list(s) for s in SECTIONS],
-        "charts": [{k: c[k] for k in ("id", "section", "title", "series_id",
-                                      "metrics", "region_mode", "percent",
-                                      "markers", "annotate", "note",
-                                      "modal_metrics", "source_name")} for c in CHARTS],
+        "charts": [{**{k: c[k] for k in ("id", "section", "title", "series_id",
+                                         "metrics", "region_mode", "percent",
+                                         "markers", "annotate", "note",
+                                         "modal_metrics", "source_name")},
+                    "scope": c["scope"],
+                    "geos": chart_geos(c, ls)}
+                   for c in CHARTS],
         "findings": build_findings(ls, lm),
         "series": {sid: _series_entry(sid, ls, lm) for sid in sids},
         "hero": _hero(ls, lm, today),
@@ -272,9 +300,14 @@ def validate_site(site: dict) -> None:
     chart_ids = [c["id"] for c in site.get("charts", [])]
     if not chart_ids or len(chart_ids) != len(set(chart_ids)):
         _fail("charts missing or ids not unique")
-    for cid in chart_ids:
-        if not site.get("findings", {}).get(cid):
-            _fail(f"missing finding for chart {cid}")
+    for c in site.get("charts", []):
+        cid, geos = c["id"], c.get("geos", [])
+        f = site.get("findings", {}).get(cid)
+        if not isinstance(f, dict):
+            _fail(f"findings[{cid}] must be an object keyed by geo")
+        missing = [g for g in geos if g not in f]
+        if missing:
+            _fail(f"findings[{cid}] missing geo(s): {missing}")
     for sid, entry in site["series"].items():
         if entry.get("status") not in ("ok", "failed"):
             _fail(f"bad status for {sid}")
@@ -291,12 +324,18 @@ def validate_site(site: dict) -> None:
         _fail("hero_lead")
     if not isinstance(site.get("metric_labels"), dict):
         _fail("metric_labels")
+    # T4 Step 4.4b: section_summaries is per-geo now ({section: {geo:
+    # sentence}}), mirroring findings — validated the same shallow way as
+    # findings above: non-empty dict of non-empty dicts of non-empty strings.
     section_summaries = site.get("section_summaries")
     if not isinstance(section_summaries, dict) or not section_summaries:
         _fail("section_summaries")
-    for sec_id, text in section_summaries.items():
-        if not isinstance(text, str) or not text:
-            _fail(f"empty section_summary for {sec_id}")
+    for sec_id, per_geo in section_summaries.items():
+        if not isinstance(per_geo, dict) or not per_geo:
+            _fail(f"section_summaries[{sec_id}] must be a non-empty object keyed by geo")
+        for geo, text in per_geo.items():
+            if not isinstance(text, str) or not text:
+                _fail(f"empty section_summary for {sec_id}/{geo}")
     section_summary_quiet = site.get("section_summary_quiet")
     if not isinstance(section_summary_quiet, dict) or not section_summary_quiet:
         _fail("section_summary_quiet")

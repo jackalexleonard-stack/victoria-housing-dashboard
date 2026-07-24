@@ -16,7 +16,12 @@ from pipeline import common
 ABS_BASE = "https://data.api.abs.gov.au/rest/data"
 
 # Shared region-code -> tidy label maps.
-_REGION_GCCSA_VIC = {"2": "vic", "2GMEL": "melbourne", "2RVIC": "regional_vic"}
+_REGION_GCCSA_VIC = {
+    "2": "vic",
+    "2GMEL": "melbourne",
+    "2RVIC": "regional_vic",
+    "AUS": "australia",
+}
 _REGION_STATE = {"2": "vic", "AUS": "australia"}
 
 
@@ -51,12 +56,13 @@ def _tidy(df: pd.DataFrame, *, metric_col, metric_map, unit,
 # ---------------------------------------------------------------------------
 # vic_approvals — Building Approvals (BA_GCCSA), number of new dwelling units
 # key order: MEASURE.VALUE.SECTOR.WORK_TYPE.BUILDING_TYPE.TSEST.REGION.FREQ
-# GET .../BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M
+# GET .../BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M
 #   1 Number of dwelling units · 1 Total value-range · 9 Total Sectors ·
 #   WORK_TYPE 1 New · BUILDING_TYPE 110 Houses / 150 Total Other Residential /
-#   100 Total Residential · TSEST 10 Original · REGION Vic/GtrMelb/RestOfVic · M
+#   100 Total Residential · TSEST 10 Original ·
+#   REGION Vic/GtrMelb/RestOfVic/Australia · M
 # ---------------------------------------------------------------------------
-_APPROVALS_KEY = "1.1.9.1.110+150+100.10.2+2GMEL+2RVIC.M"
+_APPROVALS_KEY = "1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M"
 _APPROVALS_METRIC = {
     "100": "approvals_dwellings_total",
     "110": "approvals_houses",
@@ -137,6 +143,42 @@ def parse_input_costs(raw: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# vic_construction_costs — Producer Price Indexes (PPI), OUTPUT prices for
+# Victorian building construction (what builders CHARGE, vs vic_input_costs
+# above which is what Melbourne builders PAY for materials — a different
+# concept; kept as its own series/chart, never blended with the input index).
+# key order: MEASURE.INDEX.TYPE.FREQ
+# GET .../PPI/1.1450001+1451374+1451550.OUTPUT.Q
+#   MEASURE 1 Index Number · INDEX (Victoria state-level series):
+#   1450001 "3011 House construction Victoria" / 1451374 "3019 Other
+#   residential building construction Victoria" / 1451550 "30 Building
+#   construction Victoria" (the parent group, covers all building types, not
+#   just residential) · TYPE OUTPUT · Quarterly. Region is state-level `vic`
+#   (this dataflow does not publish a Melbourne/regional split for OUTPUT,
+#   unlike the Melbourne-only INPUT index above) — no derivation/combination.
+# ---------------------------------------------------------------------------
+_OUTPUT_KEY = "1.1450001+1451374+1451550.OUTPUT.Q"
+_OUTPUT_METRIC = {
+    "1450001": "output_house_construction",
+    "1451374": "output_other_residential",
+    "1451550": "output_building_construction",
+}
+
+
+def fetch_construction_costs() -> str:
+    return abs_csv("PPI", _OUTPUT_KEY)
+
+
+def parse_construction_costs(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_const="vic",
+        metric_col="INDEX", metric_map=_OUTPUT_METRIC,
+        unit="index",
+    )
+
+
+# ---------------------------------------------------------------------------
 # au_lending — Lending Indicators, Housing Finance (LEND_HOUSING), quarterly
 # key: MEASURE.DATA_ITEM.LOAN_TYPE.LOAN_PURPOSE.LENDER_TYPE.HOUSING_PURPOSE.TSEST.REGION.FREQ
 # GET .../LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT.DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q
@@ -144,6 +186,27 @@ def parse_input_costs(raw: str) -> pd.DataFrame:
 #   Seasonally Adjusted, Victoria + Australia.  Borrower split is HOUSING_PURPOSE:
 #   OO / Investor / Total sit under LOAN_PURPOSE=TOTDWELL, First-home-buyer under
 #   TOTHOUS — each borrower type has a unique HOUSING_PURPOSE, so we map on that.
+#
+# DERIVED SERIES (the only derivation driven by the additive-dollars
+# guardrail in this module — population_growth_qtr further down this file
+# and au_accord in pipeline/sources/accord.py are also derived, by other
+# means) — Victoria total lending.
+# HOUSING_PURPOSE=TOT is published ONLY for REGION=AUS on this dataflow; a
+# direct request for REGION=2 (Victoria) TOT returns 404 NoRecordsFound
+# (live-confirmed against
+#   .../LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL.TOT.TOT.20.2.Q).
+# Guardrail check before deriving anything: these are ADDITIVE dollar
+# commitments (sum of dollars is dollars — never do this for medians/rates/
+# indexes). Verified against LIVE real AUS data (2026-Q1): OO=61421.6m +
+# INV=41537.6m = 102959.2m == published TOT=102959.2m exactly (max abs
+# discrepancy across the whole AUS history is 0.1, i.e. rounding noise) — so
+# the published national total is genuinely OO+INV, not OO+INV+FHB (FHB is a
+# subset of OO, not a separate additive component: FHB=17913.9 <= OO at every
+# date). The same formula is therefore valid for Victoria:
+#   lending_total(vic) = lending_owner_occupier(vic) + lending_investor(vic)
+# Only same-date, same-unit pairs are summed; a date with either component
+# missing emits NO total row (no partial sums) — see
+# ``_derive_vic_lending_total``.
 # ---------------------------------------------------------------------------
 _LENDING_KEY = (
     "FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT."
@@ -155,19 +218,52 @@ _LENDING_METRIC = {
     "DV5167_FHB": "lending_first_home_buyer",
     "TOT": "lending_total",
 }
+_LENDING_DERIVED_NOTE = (
+    "lending_total (region=vic) = lending_owner_occupier + lending_investor "
+    "— additive $ commitments; verified vs published AUS total (OO+INV==TOT "
+    "exactly on live 2026-Q1 data). Victoria never publishes HOUSING_PURPOSE="
+    "TOT (404 NoRecordsFound), only AUS does."
+)
 
 
 def fetch_lending() -> str:
     return abs_csv("LEND_HOUSING", _LENDING_KEY)
 
 
+def _derive_vic_lending_total(df: pd.DataFrame) -> pd.DataFrame:
+    """Sum Victoria's owner-occupier + investor $ commitments into a
+    lending_total row per date, so the chart's total line (which only exists
+    natively for region=australia) also exists for region=vic. Same-date,
+    same-unit pairs only; a date missing either component is dropped (an
+    inner join), never partially summed. Rounded to 1dp to match the
+    source's own precision — an unrounded sum leaves float noise (e.g.
+    6063.700000000001) in the committed CSV."""
+    vic = df[df["region"] == "vic"]
+    oo = vic[vic["metric"] == "lending_owner_occupier"][["date", "unit", "value"]]
+    inv = vic[vic["metric"] == "lending_investor"][["date", "unit", "value"]]
+    merged = oo.merge(inv, on=["date", "unit"], suffixes=("_oo", "_inv"), how="inner")
+    if merged.empty:
+        return pd.DataFrame(columns=common.TIDY_COLUMNS)
+    return pd.DataFrame(
+        {
+            "date": merged["date"],
+            "region": "vic",
+            "metric": "lending_total",
+            "value": (merged["value_oo"] + merged["value_inv"]).round(1),
+            "unit": merged["unit"],
+        }
+    )[common.TIDY_COLUMNS]
+
+
 def parse_lending(raw: str) -> pd.DataFrame:
-    return _tidy(
+    df = _tidy(
         pd.read_csv(io.StringIO(raw)),
         region_col="REGION", region_map=_REGION_STATE,
         metric_col="HOUSING_PURPOSE", metric_map=_LENDING_METRIC,
         unit="aud_million",
     )
+    derived = _derive_vic_lending_total(df)
+    return pd.concat([df, derived], ignore_index=True)[common.TIDY_COLUMNS]
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +346,137 @@ def parse_dwelling_stock(raw: str) -> pd.DataFrame:
     return out.dropna(subset=["region", "metric", "unit"]).reset_index(drop=True)
 
 
+# ---------------------------------------------------------------------------
+# vic_res_dwell — Residential Dwellings: Median Price of Transfers (RES_DWELL)
+# key order: MEASURE.REGION.FREQ · GET .../RES_DWELL/1+2+3+4.2GMEL+2RVIC.Q
+#   MEASURE 3 Median Price of Established House Transfers / 4 Median Price of
+#   Attached Dwelling Transfers (1/2 are transfer COUNTS for the same two
+#   dwelling types — fetched for live verification, dropped by the metric
+#   map: no chart plots them, and the shared tidy schema has no room for a
+#   stray metric) · REGION Greater Melbourne / Rest of Vic · Quarterly.
+#   UNIT_MULT is 3 (thousands) for the two price measures; scale by
+#   10^UNIT_MULT to whole dollars, same as parse_dwelling_stock above.
+#   This dataflow publishes RAW (unstratified) transaction medians split by
+#   dwelling type — there is no single "all dwellings" median in RES_DWELL,
+#   so we do NOT derive/combine house + attached into one figure (that would
+#   be fabrication); both published medians are emitted as separate metrics.
+# ---------------------------------------------------------------------------
+_RES_DWELL_KEY = "1+2+3+4.2GMEL+2RVIC.Q"
+_RES_DWELL_METRIC = {
+    "3": "median_price_house",
+    "4": "median_price_attached",
+}
+
+
+def fetch_res_dwell() -> str:
+    return abs_csv("RES_DWELL", _RES_DWELL_KEY)
+
+
+def parse_res_dwell(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[df["OBS_VALUE"].notna()]
+    mult = pd.to_numeric(df["UNIT_MULT"], errors="coerce").fillna(0)
+    metric = df["MEASURE"].astype(str).map(_RES_DWELL_METRIC)
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": df["REGION"].astype(str).map(_REGION_GCCSA_VIC),
+            "metric": metric,
+            "value": (pd.to_numeric(df["OBS_VALUE"]) * (10.0 ** mult)).round(),
+            "unit": "aud",
+        }
+    )
+    return out.dropna(subset=["region", "metric"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# vic_population_gccsa — Population components by GCCSA
+# (ERP_COMP_SA_ASGS2021), ANNUAL — Greater Melbourne / Rest of Vic.
+#
+# This is a SEPARATE cadence from au_population above (ERP_COMP_Q, quarterly,
+# vic/australia only) — that dataflow does not publish a metro/regional
+# split, and this one does not publish a vic/australia aggregate. The two are
+# never merged into one series or chart: an annual print plotted next to
+# quarterly prints on the same line would misread as one consistent series.
+#
+# key order: POP_COMP.ASGS_2021(region type).REGION.FREQ
+# GET .../ERP_COMP_SA_ASGS2021/10+9+6+3.GCCSA.2GMEL+2RVIC.A
+#   POP_COMP 10 Estimated Resident Population / 9 Net Overseas Migration /
+#   6 Net Internal Migration / 3 Natural Increase · region type GCCSA ·
+#   REGION Greater Melbourne / Rest of Vic · Annual. OBS_VALUE is already
+#   whole persons on this dataflow (no UNIT_MULT column, unlike ERP_COMP_Q)
+#   — no scaling needed.
+# ---------------------------------------------------------------------------
+_POP_GCCSA_KEY = "10+9+6+3.GCCSA.2GMEL+2RVIC.A"
+_POP_GCCSA_METRIC = {
+    "10": "population_erp",
+    "9": "net_overseas_migration",
+    "6": "net_internal_migration",
+    "3": "natural_increase",
+}
+
+
+def fetch_population_gccsa() -> str:
+    return abs_csv("ERP_COMP_SA_ASGS2021", _POP_GCCSA_KEY)
+
+
+def parse_population_gccsa(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_col="REGION", region_map=_REGION_GCCSA_VIC,
+        metric_col="POP_COMP", metric_map=_POP_GCCSA_METRIC,
+        unit="persons",
+    )
+
+
+# ---------------------------------------------------------------------------
+# au_rents — CPI Rents index, weighted average of eight capital cities (CPI).
+#
+# This is a PRICE INDEX, not a median in dollars — a fundamentally different
+# concept from the DFFH median_rent series used for Victoria (bond-lodgement
+# medians in $/week). CPI rents tracks the *rate of change* of rents paid,
+# base-period-referenced, with no dollar value of its own. It is emitted as
+# its own series/chart and must NEVER be merged with, added to, or plotted
+# against median_rent.
+#
+# key order: MEASURE.INDEX.TSEST.REGION.FREQ
+# GET .../CPI/1+3.115522+131186+20003.10.50+2.M
+#   MEASURE 1 Index numbers / 3 %-change-from-previous-year (fetched together
+#   for live verification; only MEASURE=1 "Index numbers" is kept) ·
+#   INDEX 115522 Rents / 131186 New dwelling purchase by owner-occupiers /
+#   20003 Housing (the parent group — fetched alongside for confirmation;
+#   only 115522 "Rents" is kept) · TSEST 10 Original ·
+#   REGION 50 weighted average of eight capital cities (ABS labels this code
+#   "Australia" — there is NO plain "AUS" code on this dataflow) / 2 Melbourne
+#   (fetched for live confirmation only, dropped — not relabelled) · Monthly.
+# ---------------------------------------------------------------------------
+_RENTS_KEY = "1+3.115522+131186+20003.10.50+2.M"
+
+
+def fetch_au_rents() -> str:
+    return abs_csv("CPI", _RENTS_KEY)
+
+
+def parse_au_rents(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[
+        (df["MEASURE"].astype(str) == "1")
+        & (df["INDEX"].astype(str) == "115522")
+        & (df["REGION"].astype(str) == "50")
+    ]
+    df = df[df["OBS_VALUE"].notna()]
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": "australia",
+            "metric": "rent_index",
+            "value": pd.to_numeric(df["OBS_VALUE"]),
+            "unit": "index",
+        }
+    )
+    return out.reset_index(drop=True)
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -276,12 +503,22 @@ SERIES = [
         parse=parse_input_costs,
     ),
     common.Series(
+        id="vic_construction_costs",
+        source_name="ABS Producer Price Indexes — Victoria building construction "
+                     "outputs (PPI)",
+        source_url=f"{ABS_BASE}/PPI/{_OUTPUT_KEY}",
+        frequency="quarterly",
+        fetch=fetch_construction_costs,
+        parse=parse_construction_costs,
+    ),
+    common.Series(
         id="au_lending",
         source_name="ABS Lending Indicators — Housing Finance (LEND_HOUSING)",
         source_url=f"{ABS_BASE}/LEND_HOUSING/{_LENDING_KEY}",
         frequency="quarterly",
         fetch=fetch_lending,
         parse=parse_lending,
+        derived=_LENDING_DERIVED_NOTE,
     ),
     common.Series(
         id="au_population",
@@ -298,5 +535,30 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_dwelling_stock,
         parse=parse_dwelling_stock,
+    ),
+    common.Series(
+        id="vic_res_dwell",
+        source_name="ABS Residential Dwellings: Median Price of Transfers (RES_DWELL)",
+        source_url=f"{ABS_BASE}/RES_DWELL/{_RES_DWELL_KEY}",
+        frequency="quarterly",
+        fetch=fetch_res_dwell,
+        parse=parse_res_dwell,
+    ),
+    common.Series(
+        id="vic_population_gccsa",
+        source_name="ABS Population components by GCCSA (ERP_COMP_SA_ASGS2021)",
+        source_url=f"{ABS_BASE}/ERP_COMP_SA_ASGS2021/{_POP_GCCSA_KEY}",
+        frequency="annual",
+        fetch=fetch_population_gccsa,
+        parse=parse_population_gccsa,
+    ),
+    common.Series(
+        id="au_rents",
+        source_name="ABS Consumer Price Index — Rents, weighted average of "
+                     "eight capital cities (CPI)",
+        source_url=f"{ABS_BASE}/CPI/{_RENTS_KEY}",
+        frequency="monthly",
+        fetch=fetch_au_rents,
+        parse=parse_au_rents,
     ),
 ]

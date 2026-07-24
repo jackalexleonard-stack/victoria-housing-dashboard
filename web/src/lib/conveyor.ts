@@ -25,7 +25,14 @@ export function headlinePool(site: SiteData): string[] {
     if (k === 'empty' || seen.has(k)) continue
     seen.add(k)
     const chartId = TILE_CHART[k]
-    if (!chartId || !site.findings[chartId]) continue
+    // findings is per-geo now ({chartId: {geo: sentence}}) — a chart with
+    // no geos at all still gets a `{}` entry (migration rule), which is
+    // truthy in JS. Checking key count, not just presence, so a zero-geo
+    // chart correctly shrinks the pool instead of promoting a tile whose
+    // finding can never actually resolve to a sentence.
+    if (!chartId || !site.findings[chartId] || Object.keys(site.findings[chartId]).length === 0) {
+      continue
+    }
     if (!site.hero.some(t => t.key === k)) continue
     pool.push(k)
   }

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from pipeline import common
 from pipeline.sources import abs as absrc
 
@@ -33,6 +35,12 @@ def test_parse_approvals_offline():
         - piv["approvals_dwellings_total"]
     ).dropna()
     assert (diff.abs() < 1e-6).all()
+
+
+def test_approvals_key_requests_the_national_aggregate():
+    from pipeline.sources.abs import _APPROVALS_KEY, _REGION_GCCSA_VIC
+    assert "AUS" in _APPROVALS_KEY
+    assert _REGION_GCCSA_VIC["AUS"] == "australia"
 
 
 def test_parse_activity_offline():
@@ -99,6 +107,60 @@ def test_parse_lending_offline():
     assert (fhb["lending_first_home_buyer"] <= fhb["lending_owner_occupier"]).all()
 
 
+def test_parse_lending_derives_vic_total_from_owner_occupier_plus_investor():
+    """Victoria (REGION=2) never publishes HOUSING_PURPOSE=TOT on LEND_HOUSING
+    (live-confirmed: 404 NoRecordsFound) — only AUS does. Guardrail check
+    (live, real AUS data, 2026-03-31): TOT=102959.2, OO=61421.6, INV=41537.6,
+    OO+INV=102959.2 exact match -> TOT is additive dollar commitments, so the
+    same derivation is valid for Victoria. Fixture mirrors live values exactly
+    (OO=16808.9, INV=8889.6 at 2026-Q1)."""
+    raw = (FIX / "abs_lending_housing.csv").read_text(encoding="utf-8")
+    df = absrc.parse_lending(raw)
+
+    vic = df[df.region == "vic"]
+    assert "lending_total" in set(vic.metric)
+
+    row = vic[(vic.date == "2026-03-31") & (vic.metric == "lending_total")]
+    assert len(row) == 1
+    assert row.iloc[0]["value"] == 16808.9 + 8889.6  # == 25698.5
+    assert row.iloc[0]["unit"] == "aud_million"
+
+    # No fabricated partial sums anywhere: every derived vic total date must
+    # have had both components present (checked against the joined pivot).
+    piv = vic.pivot_table(index="date", columns="metric", values="value")
+    have_both = piv[["lending_owner_occupier", "lending_investor"]].dropna()
+    assert set(piv["lending_total"].dropna().index) == set(have_both.index)
+
+
+def test_derive_vic_lending_total_emits_no_row_when_a_component_is_missing():
+    from pipeline.sources.abs import _derive_vic_lending_total
+
+    df = pd.DataFrame(
+        [
+            # 2026-03-31: both components present -> total derived.
+            ["2026-03-31", "vic", "lending_owner_occupier", 100.0, "aud_million"],
+            ["2026-03-31", "vic", "lending_investor", 50.0, "aud_million"],
+            # 2026-06-30: investor missing -> NO total row (no partial sum).
+            ["2026-06-30", "vic", "lending_owner_occupier", 200.0, "aud_million"],
+            # unrelated region/metric noise, must be ignored.
+            ["2026-03-31", "australia", "lending_owner_occupier", 999.0, "aud_million"],
+        ],
+        columns=common.TIDY_COLUMNS,
+    )
+
+    out = absrc._derive_vic_lending_total(df)
+
+    assert list(out.columns) == common.TIDY_COLUMNS
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["date"] == "2026-03-31"
+    assert row["region"] == "vic"
+    assert row["metric"] == "lending_total"
+    assert row["value"] == 150.0
+    assert row["unit"] == "aud_million"
+    assert "2026-06-30" not in set(out["date"])
+
+
 def test_parse_population_offline():
     raw = (FIX / "abs_erp_comp_q.csv").read_text(encoding="utf-8")
     df = absrc.parse_population(raw)
@@ -129,6 +191,63 @@ def test_parse_population_offline():
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
 
 
+def test_res_dwell_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_res_dwell
+
+    raw = (FIX / "abs_res_dwell.csv").read_text(encoding="utf-8")
+    df = parse_res_dwell(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    assert set(df["region"]) == {"melbourne", "regional_vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray (the raw
+    # fixture also carries transfer-count measures 1/2 — dropped, not charted).
+    assert set(df["metric"]) == {"median_price_house", "median_price_attached"}
+    # (3) A spot value hand-verified against the fixture (MEASURE=3 "Median
+    # Price of Established House Transfers", REGION=2GMEL, TIME_PERIOD=2026-Q1,
+    # OBS_VALUE=850, UNIT_MULT=3 -> 850 * 10**3 = 850000).
+    row = df[(df.region == "melbourne") & (df.date == "2026-03-31")
+             & (df.metric == "median_price_house")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 850000
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()
+
+
+def test_population_gccsa_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_population_gccsa
+
+    raw = (FIX / "abs_erp_gccsa.csv").read_text(encoding="utf-8")
+    df = parse_population_gccsa(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    assert set(df["region"]) == {"melbourne", "regional_vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray.
+    assert set(df["metric"]) == {
+        "population_erp",
+        "net_overseas_migration",
+        "net_internal_migration",
+        "natural_increase",
+    }
+    assert (df.unit == "persons").all()
+
+    # (3) A spot value hand-verified against the fixture (POP_COMP=10 "ERP",
+    # REGION=2GMEL, TIME_PERIOD=2025, OBS_VALUE=5435590 — this dataflow has no
+    # UNIT_MULT column, so OBS_VALUE is already whole persons, no scaling).
+    row = df[(df.region == "melbourne") & (df.date == "2025-12-31")
+             & (df.metric == "population_erp")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 5435590
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()
+
+    # This dataflow is ANNUAL — period-end dates must land on 31 Dec only.
+    assert df.date.str.endswith("-12-31").all()
+
+
 def test_parse_dwelling_stock_offline():
     raw = (FIX / "abs_res_dwell_st.csv").read_text(encoding="utf-8")
     df = absrc.parse_dwelling_stock(raw)
@@ -147,3 +266,65 @@ def test_parse_dwelling_stock_offline():
     assert (df[df.metric == "mean_price"].unit == "aud").all()
     assert (df[df.metric == "dwelling_count"].unit == "dwellings").all()
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
+
+
+def test_au_rents_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_au_rents
+
+    raw = (FIX / "abs_cpi_rents.csv").read_text(encoding="utf-8")
+    df = parse_au_rents(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    # REGION=50 on this dataflow ("weighted average of eight capital cities")
+    # is the only Australia-wide code that exists here — there is no plain
+    # "AUS" code on CPI. REGION=2 (Melbourne) was fetched alongside for live
+    # confirmation only and must be dropped, not relabelled.
+    assert set(df["region"]) == {"australia"}
+    # (2) Metrics are the ones the chart will plot, nothing stray. This is a
+    # PRICE INDEX (MEASURE=1 "Index numbers"), not a median in dollars — the
+    # fixture also carries MEASURE=3 (%-change-from-previous-year) and two
+    # unrelated INDEX groups (131186 "New dwelling purchase by
+    # owner-occupiers", 20003 the parent "Housing" group), all fetched for
+    # live confirmation only and must be dropped, not blended in.
+    assert set(df["metric"]) == {"rent_index"}
+    assert (df["unit"] == "index").all()
+    # (3) A spot value hand-verified against the fixture (REGION=50,
+    # MEASURE=1, INDEX=115522 "Rents", TIME_PERIOD=2026-05, OBS_VALUE=102.33).
+    row = df[(df.region == "australia") & (df.date == "2026-05-31")
+             & (df.metric == "rent_index")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 102.33
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()
+
+
+def test_construction_output_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_construction_costs
+
+    raw = (FIX / "abs_ppi_output_vic.csv").read_text(encoding="utf-8")
+    df = parse_construction_costs(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the
+    # task. This is a state-level PPI OUTPUT index (what builders charge),
+    # not a GCCSA split — every row is region "vic".
+    assert set(df["region"]) == {"vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray.
+    assert set(df["metric"]) == {
+        "output_house_construction",
+        "output_other_residential",
+        "output_building_construction",
+    }
+    assert (df["unit"] == "index").all()
+    # (3) A spot value hand-verified against the fixture (INDEX=1450001 "3011
+    # House construction Victoria", TYPE=OUTPUT, TIME_PERIOD=2026-Q1,
+    # OBS_VALUE=163.5).
+    row = df[(df.region == "vic") & (df.date == "2026-03-31")
+             & (df.metric == "output_house_construction")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 163.5
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()

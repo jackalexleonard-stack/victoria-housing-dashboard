@@ -29,6 +29,7 @@ SOURCE_MODULES = [
     "pipeline.sources.sqm",
     "pipeline.sources.auctions",
     "pipeline.sources.reiv",
+    "pipeline.sources.rogs",
 ]
 
 log = logging.getLogger("pipeline")

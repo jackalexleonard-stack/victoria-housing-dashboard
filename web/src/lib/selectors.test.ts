@@ -6,7 +6,11 @@ const site = assertSiteData(siteEdge)
 const NOW = new Date('2026-07-18T00:00:00Z')
 const chart = (id: string) => site.charts.find(c => c.id === id)!
 
-test('fixed region mode ignores the geo filter', () => {
+test('fixed region mode ignores the geo filter, but notes the mismatch (audit D3)', () => {
+  // cash_rate is fixed:australia; geo is melbourne, so the chart still shows
+  // Australia's own data (region filter untouched by geo) but now must say
+  // so — a fixed-region chart shown outside its own geography used to say
+  // nothing at all (the D3 defect).
   const { lines, scopeNote } = chartPoints(site, chart('cash_rate'), 'all', 'melbourne', NOW)
   expect(lines).toHaveLength(1)
   // T2 (chart-internals scan batch) extended the fixture's au_cash_rate
@@ -15,15 +19,22 @@ test('fixed region mode ignores the geo filter', () => {
   // the new ChartCard 'latest-label' annotation test to have a visible
   // annotation to assert on. 5, not the old 2.
   expect(lines[0].pts).toHaveLength(5)
+  expect(scopeNote).toBe('Australia-wide')
+})
+
+test('fixed region mode notes nothing when the geo matches the fixed region', () => {
+  const { scopeNote } = chartPoints(site, chart('cash_rate'), 'all', 'australia', NOW)
   expect(scopeNote).toBeNull()
 })
 
-test('geo mode falls back with a scope note', () => {
+test('geo mode strictly filters to the selected geo — no fallback substitution (audit D2)', () => {
+  // vic_rents only has melbourne rows in this fixture; regional_vic has
+  // none. The old FALLBACK chain used to widen to melbourne here and quietly
+  // relabel it — now it must render nothing rather than borrow another
+  // region's numbers.
   const { lines, scopeNote } = chartPoints(site, chart('median_rent'), 'all', 'regional_vic', NOW)
-  // 2, not 1: D1(c) gave median_rent a second fixture point (melbourne data
-  // only, still — regional_vic itself has none, hence the fallback below).
-  expect(lines[0].pts).toHaveLength(2)
-  expect(scopeNote).toBe('Melbourne')        // fell back, so the note names it
+  expect(lines).toEqual([])
+  expect(scopeNote).toBeNull()
 })
 
 test('range cutoff filters points', () => {
@@ -50,4 +61,22 @@ test('chartPoints names lines via site.metric_labels when present', () => {
     metric_labels: { cash_rate: 'Cash rate target' } })
   const { lines } = chartPoints(labelled, chart('cash_rate'), 'all', 'melbourne', NOW)
   expect(lines[0].name).toBe('Cash rate target')
+})
+
+// Dedicated substitution regression (audit D2), isolated from the shared
+// fixture: a minimal series with ONLY melbourne rows, geo selected as
+// regional_vic. The old FALLBACK chain would have widened to melbourne and
+// silently shown its 575 — proving that can never happen again, not just
+// that this particular fixture's data happens to come out empty.
+test('never renders another region\'s data when the selected geo is absent', () => {
+  const site = {
+    series: { s: { points: [
+      { date: '2026-06-30', region: 'melbourne', metric: 'm', value: 575 },
+    ], units: { m: 'aud' }, meta: {} } },
+    metric_labels: {},
+  } as unknown as Parameters<typeof chartPoints>[0]
+  const chart = { id: 'c', series_id: 's', metrics: ['m'], region_mode: 'geo',
+                  scope: 'geo', geos: ['melbourne'] } as unknown as Parameters<typeof chartPoints>[1]
+  const { lines } = chartPoints(site, chart, 'all', 'regional_vic', new Date('2026-07-01'))
+  expect(lines).toEqual([])   // must be empty, NOT Melbourne's 575
 })

@@ -195,10 +195,18 @@ def update_meta(
     error: Optional[str] = None,
     changed: bool = False,
     last_data_date: Optional[str] = None,
+    derived: Optional[str] = None,
 ) -> dict:
     """Write ``data/meta/<series_id>.json``. On failure, existing data fields
-    (``last_changed``, ``last_data_date``) are preserved so the dashboard can
-    still render the last good vintage."""
+    (``last_changed``, ``last_data_date``, ``derived``) are preserved so the
+    dashboard can still render the last good vintage.
+
+    ``derived`` records, for auditability, the exact formula used for any
+    rows in this series that are computed rather than published verbatim
+    (e.g. ``"lending_total = owner_occupier + investor"``) — set once via
+    ``Series.derived`` and re-asserted on every successful run; a run that
+    doesn't pass it (e.g. ``mark_failed``) leaves any previously recorded
+    value untouched."""
     META_DIR.mkdir(parents=True, exist_ok=True)
     path = META_DIR / f"{series_id}.json"
     meta: dict = {}
@@ -218,6 +226,8 @@ def update_meta(
     )
     if last_data_date is not None:
         meta["last_data_date"] = last_data_date
+    if derived is not None:
+        meta["derived"] = derived
     if changed:
         meta["last_changed"] = now
     path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
@@ -237,6 +247,7 @@ class Series:
     frequency: str                         # monthly | quarterly | annual | daily | per_decision
     fetch: Callable[[], object]            # -> raw text/bytes (saved as fixtures)
     parse: Callable[[object], pd.DataFrame]  # raw -> tidy DataFrame
+    derived: Optional[str] = None          # formula note, only if some rows are computed
 
 
 @dataclass
@@ -260,7 +271,7 @@ def process_series(s: Series) -> Result:
     update_meta(
         s.id, source_name=s.source_name, source_url=s.source_url,
         frequency=s.frequency, status="ok", error=None,
-        changed=changed, last_data_date=last,
+        changed=changed, last_data_date=last, derived=s.derived,
     )
     return Result(s.id, "ok", changed=changed, rows=len(df), last_data_date=last)
 

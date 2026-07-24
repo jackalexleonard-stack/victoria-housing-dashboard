@@ -62,3 +62,21 @@ def test_update_meta_roundtrip(tmp_path, monkeypatch):
     assert m2["status"] == "failed"
     assert m2["error"] == "boom"
     assert m2["last_data_date"] == "2026-03-31"
+
+
+def test_update_meta_derived_field_is_recorded_and_survives_a_failed_run(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(common, "META_DIR", tmp_path)
+    formula = "lending_total = owner_occupier + investor"
+    m = common.update_meta(
+        "t", source_name="ABS", source_url="http://x", frequency="quarterly",
+        status="ok", derived=formula,
+    )
+    assert m["derived"] == formula
+    # a later run that doesn't pass derived (e.g. mark_failed) must not erase it
+    m2 = common.update_meta(
+        "t", source_name="ABS", source_url="http://x", frequency="quarterly",
+        status="failed", error="boom",
+    )
+    assert m2["derived"] == formula
