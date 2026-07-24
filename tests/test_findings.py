@@ -100,11 +100,11 @@ def test_failed_series_produces_no_findings_entries_for_any_geo():
     assert out["auctions"] == {}
 
 
-def test_exactly_five_charts_carry_a_note():
+def test_exactly_six_charts_carry_a_note():
     noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
     assert set(noted) == {"hvi_melbourne", "hvi_australia",
                            "median_rent", "median_rent_by_type",
-                           "population_gccsa"}
+                           "population_gccsa", "au_rent_index"}
     assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
         "Daily index — the free Cotality feed covers a rolling year; "
         "history accumulates from Jul 2025.")
@@ -115,8 +115,47 @@ def test_exactly_five_charts_carry_a_note():
         "Annual ABS data (components of population change by GCCSA) — a "
         "separate, less-frequent series from the quarterly Victoria/"
         "Australia population figures above.")
+    assert noted["au_rent_index"] == (
+        "ABS CPI rents index for the weighted average of eight capital "
+        "cities — an index, not a bond-based median; not comparable "
+        "with the Victorian median rents above.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
+
+
+def test_au_rent_index_is_a_separate_index_series_never_merged_with_median_rent():
+    """Task 11: au_rents (ABS CPI rents index, weighted average of eight
+    capital cities) must be a wholly separate series/chart from vic_rents'
+    median_rent (DFFH bond-lodgement dollar medians) — different series_id,
+    different unit ("index" vs "aud_per_week"), never combined, and its
+    finding sentence must never read as a dollar figure."""
+    median_rent = next(c for c in findings.CHARTS if c["id"] == "median_rent")
+    au_rent_index = next(c for c in findings.CHARTS if c["id"] == "au_rent_index")
+    assert median_rent["series_id"] == "vic_rents"
+    assert au_rent_index["series_id"] == "au_rents"
+    assert median_rent["series_id"] != au_rent_index["series_id"]
+    assert au_rent_index["metrics"] == ["rent_index"]
+    assert au_rent_index["title"] == "Rent price index — capital cities"
+    assert au_rent_index["region_mode"] == "fixed:australia"
+    assert au_rent_index["scope"] == "geo"
+
+    ls, lm = _loaders(
+        {"au_rents": _df([
+            ("2026-04-30", "australia", "rent_index", 101.90, "index"),
+            ("2026-05-31", "australia", "rent_index", 102.33, "index"),
+        ])},
+        {"au_rents": {"frequency": "monthly"}},
+    )
+    # Only the Australia-wide geo this source publishes — no melbourne/vic
+    # fallback, and never combined with vic_rents' geos.
+    assert export.chart_geos(au_rent_index, ls) == ["australia"]
+    out = findings.build_findings(ls, lm)
+    assert set(out["au_rent_index"]) == {"australia"}
+    # fmt_value's "index" branch (one-decimal, no currency sign) — proves the
+    # finding sentence cannot be mistaken for a dollar median.
+    sentence = out["au_rent_index"]["australia"]
+    assert findings.fmt_value(102.33, "index") == "102.3"
+    assert "102.3" in sentence and "$" not in sentence
 
 
 def test_population_gccsa_is_annual_and_separate_from_the_quarterly_population_chart():

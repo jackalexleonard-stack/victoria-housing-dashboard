@@ -210,3 +210,35 @@ def test_parse_dwelling_stock_offline():
     assert (df[df.metric == "mean_price"].unit == "aud").all()
     assert (df[df.metric == "dwelling_count"].unit == "dwellings").all()
     assert df.date.str.endswith(("-03-31", "-06-30", "-09-30", "-12-31")).all()
+
+
+def test_au_rents_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_au_rents
+
+    raw = (FIX / "abs_cpi_rents.csv").read_text(encoding="utf-8")
+    df = parse_au_rents(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    # REGION=50 on this dataflow ("weighted average of eight capital cities")
+    # is the only Australia-wide code that exists here — there is no plain
+    # "AUS" code on CPI. REGION=2 (Melbourne) was fetched alongside for live
+    # confirmation only and must be dropped, not relabelled.
+    assert set(df["region"]) == {"australia"}
+    # (2) Metrics are the ones the chart will plot, nothing stray. This is a
+    # PRICE INDEX (MEASURE=1 "Index numbers"), not a median in dollars — the
+    # fixture also carries MEASURE=3 (%-change-from-previous-year) and two
+    # unrelated INDEX groups (131186 "New dwelling purchase by
+    # owner-occupiers", 20003 the parent "Housing" group), all fetched for
+    # live confirmation only and must be dropped, not blended in.
+    assert set(df["metric"]) == {"rent_index"}
+    assert (df["unit"] == "index").all()
+    # (3) A spot value hand-verified against the fixture (REGION=50,
+    # MEASURE=1, INDEX=115522 "Rents", TIME_PERIOD=2026-05, OBS_VALUE=102.33).
+    row = df[(df.region == "australia") & (df.date == "2026-05-31")
+             & (df.metric == "rent_index")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 102.33
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()

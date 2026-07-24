@@ -118,6 +118,18 @@ CHARTS: list[dict] = [
     _c("median_rent", "rents", "Median weekly rent", "vic_rents",
        metrics=["median_rent"], region_mode="geo",
        noun="The median rent", note=_MEDIAN_RENT_NOTE),
+    # Australia-wide rents: this is an ABS CPI PRICE INDEX (weighted average
+    # of the eight capital cities), not a bond-based median in dollars — a
+    # SEPARATE series/chart from median_rent above, never combined with it.
+    # region_mode="fixed:australia" + scope="geo" (not "national"): this
+    # only ever carries `australia` rows, so it belongs in the Australia
+    # grid, hidden-and-footnoted under Melbourne/Regional/Victoria — exactly
+    # like the Victorian rent charts are hidden-and-footnoted under Australia.
+    _c("au_rent_index", "rents", "Rent price index — capital cities", "au_rents",
+       metrics=["rent_index"], region_mode="fixed:australia", scope="geo",
+       note="ABS CPI rents index for the weighted average of eight capital "
+            "cities — an index, not a bond-based median; not comparable "
+            "with the Victorian median rents above."),
     _c("affordable_share", "rents", "Affordable lettings share", "vic_rents",
        metrics=["affordable_share"], region_mode="geo", percent=True,
        noun="The affordable share of new lettings"),
@@ -473,7 +485,7 @@ METRIC_LABELS: dict[str, str] = {
     "rent_1br_flat": "1-bed flat", "rent_2br_flat": "2-bed flat",
     "rent_3br_flat": "3-bed flat", "rent_2br_house": "2-bed house",
     "rent_3br_house": "3-bed house", "rent_4br_house": "4-bed house",
-    "vacancy_rate": "Vacancy rate",
+    "vacancy_rate": "Vacancy rate", "rent_index": "Rent price index",
     # mortgage rates — new/outstanding x fixed/variable
     "mortgage_new": "New (average)", "mortgage_new_fixed": "New — fixed",
     "mortgage_new_variable": "New — variable",

@@ -339,6 +339,54 @@ def parse_population_gccsa(raw: str) -> pd.DataFrame:
     )
 
 
+# ---------------------------------------------------------------------------
+# au_rents — CPI Rents index, weighted average of eight capital cities (CPI).
+#
+# This is a PRICE INDEX, not a median in dollars — a fundamentally different
+# concept from the DFFH median_rent series used for Victoria (bond-lodgement
+# medians in $/week). CPI rents tracks the *rate of change* of rents paid,
+# base-period-referenced, with no dollar value of its own. It is emitted as
+# its own series/chart and must NEVER be merged with, added to, or plotted
+# against median_rent.
+#
+# key order: MEASURE.INDEX.TSEST.REGION.FREQ
+# GET .../CPI/1+3.115522+131186+20003.10.50+2.M
+#   MEASURE 1 Index numbers / 3 %-change-from-previous-year (fetched together
+#   for live verification; only MEASURE=1 "Index numbers" is kept) ·
+#   INDEX 115522 Rents / 131186 New dwelling purchase by owner-occupiers /
+#   20003 Housing (the parent group — fetched alongside for confirmation;
+#   only 115522 "Rents" is kept) · TSEST 10 Original ·
+#   REGION 50 weighted average of eight capital cities (ABS labels this code
+#   "Australia" — there is NO plain "AUS" code on this dataflow) / 2 Melbourne
+#   (fetched for live confirmation only, dropped — not relabelled) · Monthly.
+# ---------------------------------------------------------------------------
+_RENTS_KEY = "1+3.115522+131186+20003.10.50+2.M"
+
+
+def fetch_au_rents() -> str:
+    return abs_csv("CPI", _RENTS_KEY)
+
+
+def parse_au_rents(raw: str) -> pd.DataFrame:
+    df = pd.read_csv(io.StringIO(raw))
+    df = df[
+        (df["MEASURE"].astype(str) == "1")
+        & (df["INDEX"].astype(str) == "115522")
+        & (df["REGION"].astype(str) == "50")
+    ]
+    df = df[df["OBS_VALUE"].notna()]
+    out = pd.DataFrame(
+        {
+            "date": df["TIME_PERIOD"].map(common.period_end),
+            "region": "australia",
+            "metric": "rent_index",
+            "value": pd.to_numeric(df["OBS_VALUE"]),
+            "unit": "index",
+        }
+    )
+    return out.reset_index(drop=True)
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -403,5 +451,14 @@ SERIES = [
         frequency="annual",
         fetch=fetch_population_gccsa,
         parse=parse_population_gccsa,
+    ),
+    common.Series(
+        id="au_rents",
+        source_name="ABS Consumer Price Index — Rents, weighted average of "
+                     "eight capital cities (CPI)",
+        source_url=f"{ABS_BASE}/CPI/{_RENTS_KEY}",
+        frequency="monthly",
+        fetch=fetch_au_rents,
+        parse=parse_au_rents,
     ),
 ]
