@@ -4,9 +4,9 @@
   "source_url": "https://data.api.abs.gov.au/rest/data/LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT.DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q",
   "frequency": "quarterly",
   "status": "ok",
-  "last_fetched": "2026-07-24T00:53:21Z",
+  "last_fetched": "2026-07-24T01:10:52Z",
   "error": null,
   "last_data_date": "2026-03-31",
-  "last_changed": "2026-07-24T00:40:59Z",
+  "last_changed": "2026-07-24T01:10:52Z",
   "derived": "lending_total (region=vic) = lending_owner_occupier + lending_investor \u2014 additive $ commitments; verified vs published AUS total (OO+INV==TOT exactly on live 2026-Q1 data). Victoria never publishes HOUSING_PURPOSE=TOT (404 NoRecordsFound), only AUS does."
 }

@@ -187,7 +187,10 @@ def parse_construction_costs(raw: str) -> pd.DataFrame:
 #   OO / Investor / Total sit under LOAN_PURPOSE=TOTDWELL, First-home-buyer under
 #   TOTHOUS — each borrower type has a unique HOUSING_PURPOSE, so we map on that.
 #
-# DERIVED SERIES (the only one in this pipeline) — Victoria total lending.
+# DERIVED SERIES (the only derivation driven by the additive-dollars
+# guardrail in this module — population_growth_qtr further down this file
+# and au_accord in pipeline/sources/accord.py are also derived, by other
+# means) — Victoria total lending.
 # HOUSING_PURPOSE=TOT is published ONLY for REGION=AUS on this dataflow; a
 # direct request for REGION=2 (Victoria) TOT returns 404 NoRecordsFound
 # (live-confirmed against
@@ -232,7 +235,9 @@ def _derive_vic_lending_total(df: pd.DataFrame) -> pd.DataFrame:
     lending_total row per date, so the chart's total line (which only exists
     natively for region=australia) also exists for region=vic. Same-date,
     same-unit pairs only; a date missing either component is dropped (an
-    inner join), never partially summed."""
+    inner join), never partially summed. Rounded to 1dp to match the
+    source's own precision — an unrounded sum leaves float noise (e.g.
+    6063.700000000001) in the committed CSV."""
     vic = df[df["region"] == "vic"]
     oo = vic[vic["metric"] == "lending_owner_occupier"][["date", "unit", "value"]]
     inv = vic[vic["metric"] == "lending_investor"][["date", "unit", "value"]]
@@ -244,7 +249,7 @@ def _derive_vic_lending_total(df: pd.DataFrame) -> pd.DataFrame:
             "date": merged["date"],
             "region": "vic",
             "metric": "lending_total",
-            "value": merged["value_oo"] + merged["value_inv"],
+            "value": (merged["value_oo"] + merged["value_inv"]).round(1),
             "unit": merged["unit"],
         }
     )[common.TIDY_COLUMNS]

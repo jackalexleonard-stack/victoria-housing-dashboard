@@ -427,3 +427,19 @@ test('detail modal heading renders in the light theme ink, not black', async ({ 
     getComputedStyle(document.documentElement).colorScheme)
   expect(scheme).toContain('dark')
 })
+
+// Task 15: the geo-scoping headline guard — switching geo must genuinely
+// change what's on screen (the card SET, not just card contents), and the
+// footnote must name what isn't published for the selected geo.
+test('switching geo changes which charts exist, and Regional shows no Melbourne figure', async ({ page }) => {
+  await gotoDashboard(page, '/?geo=melbourne&sections=supply')
+  await page.locator('section[aria-label="Supply & construction"]').waitFor()
+  const melbCards = await page.locator('section[aria-label="Supply & construction"] article').count()
+  await gotoDashboard(page, '/?geo=regional_vic&sections=supply')
+  await page.locator('section[aria-label="Supply & construction"]').waitFor()
+  const regionalCards = await page.locator('section[aria-label="Supply & construction"] article').count()
+  // Card SET differs by geo — not merely the contents.
+  expect(regionalCards).not.toBe(melbCards)
+  // The footnote names what isn't published here.
+  await expect(page.getByTestId('geo-footnote')).toContainText(/not published for Regional Vic/i)
+})

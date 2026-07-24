@@ -100,12 +100,12 @@ def test_failed_series_produces_no_findings_entries_for_any_geo():
     assert out["auctions"] == {}
 
 
-def test_exactly_eight_charts_carry_a_note():
+def test_exactly_nine_charts_carry_a_note():
     noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
     assert set(noted) == {"hvi_melbourne", "hvi_australia",
                            "median_rent", "median_rent_by_type",
                            "population_gccsa", "au_rent_index", "output_costs",
-                           "social_housing_rogs"}
+                           "social_housing_rogs", "land"}
     assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
         "Daily index — the free Cotality feed covers a rolling year; "
         "history accumulates from Jul 2025.")
@@ -134,6 +134,13 @@ def test_exactly_eight_charts_carry_a_note():
         "Productivity Commission Report on Government Services (RoGS), "
         "annual — public housing only, not all social housing; a "
         "separate figure from the Victorian Housing Register above.")
+    # Task 15: land's region_mode flipped fixed:melbourne -> geo so
+    # regional_vic's Task 9 rows stop sitting dormant — the note discloses
+    # the two regions' different reporting cadences (not annualised away).
+    assert noted["land"] == (
+        "Melbourne and Regional Victoria publish on different cadences — "
+        "Melbourne a full year to Dec, Regional a half-year \"Titled H1\" "
+        "snapshot to Jun — not annualised to match.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
 

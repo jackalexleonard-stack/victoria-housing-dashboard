@@ -59,6 +59,14 @@ _MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
 _POP_GCCSA_NOTE = ("Annual ABS data (components of population change by "
                    "GCCSA) — a separate, less-frequent series from the "
                    "quarterly Victoria/Australia population figures above.")
+# Task 9/15: the two regions publish on different cadences — Melbourne a full
+# year to Dec, Regional Victoria a running half-year "Titled H1" snapshot to
+# Jun — disclosed here rather than annualised to match (that would fabricate
+# data the source never published; see pipeline/sources/udp.py's caveat).
+_LAND_NOTE = ("Melbourne and Regional Victoria publish on different "
+              "cadences — Melbourne a full year to Dec, Regional a "
+              "half-year \"Titled H1\" snapshot to Jun — not annualised "
+              "to match.")
 
 
 def _strip_cadence_code(label: str) -> str:
@@ -160,9 +168,13 @@ CHARTS: list[dict] = [
        metrics=["accord_cumulative_actual", "accord_cumulative_target"],
        region_mode="fixed:australia", scope="national",
        modal_metrics=["accord_quarterly_actual", "accord_quarterly_target"]),
+    # Task 9 landed regional_vic rows; Task 15 flips region_mode from
+    # "fixed:melbourne" to "geo" so chart_geos actually picks them up (they
+    # sat dormant under the fixed pin) — this is what turns the chart into a
+    # genuine metro-vs-regional pair. See _LAND_NOTE for the cadence caveat.
     _c("land", "supply", "Greenfield land supply", "vic_land",
-       region_mode="fixed:melbourne", noun="Greenfield years of supply",
-       primary="greenfield_years_of_supply"),
+       region_mode="geo", noun="Greenfield years of supply",
+       primary="greenfield_years_of_supply", note=_LAND_NOTE),
     _c("input_costs", "supply", "Construction input costs — Melbourne",
        "vic_input_costs", region_mode="fixed:melbourne",
        noun="Input costs", primary="input_all_groups"),
@@ -177,7 +189,7 @@ CHARTS: list[dict] = [
        "vic_construction_costs", region_mode="fixed:vic", scope="state",
        metrics=["output_house_construction", "output_building_construction",
                 "output_other_residential"],
-       noun="Builders' output prices", primary="output_house_construction",
+       noun="House construction output prices", primary="output_house_construction",
        note="ABS OUTPUT price index — what builders charge, not what they "
             "pay for materials (see input costs above); a different measure, "
             "never combined with it."),
@@ -191,7 +203,7 @@ CHARTS: list[dict] = [
     _c("lending", "money", "New housing loan commitments", "au_lending",
        region_mode="geo", annotate=True, noun="Owner-occupier lending",
        primary="lending_owner_occupier"),
-    _c("credit", "money", "Housing credit growth", "au_credit",
+    _c("credit", "money", "Housing credit growth (Australia)", "au_credit",
        metrics=["credit_housing_yoy", "credit_investor_yoy",
                 "credit_owner_occupier_yoy"],
        region_mode="fixed:australia", scope="national", percent=True,
