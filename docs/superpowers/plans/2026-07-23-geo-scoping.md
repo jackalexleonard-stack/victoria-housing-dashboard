@@ -1081,6 +1081,12 @@ the pipeline, pytest, commit.
 - `output_costs` (T12 review Minor): noun `"Builders' output prices"` → `"House construction output
   prices"` — the primary metric is the house-specific sub-index, and the codebase convention names
   the submetric in the noun when primary isn't the aggregate.
+- T13 review Minors, both in `pipeline/sources/abs.py`: (a) soften the "only derived series" comment
+  at the `_derive_vic_lending_total` block — `population_growth_qtr` and `au_accord` are also derived;
+  say "the only derivation driven by the additive-dollars guardrail in this module". (b) round the
+  derived sum to 1dp before emitting (`.round(1)`, matching source precision) — unrounded float noise
+  (e.g. 6063.700000000001) is currently written into the committed CSV. Re-run the pipeline after so
+  the committed au_lending.csv rows are clean.
 
 - [ ] **Step 15.2** Add the e2e guard — append to `web/e2e/smoke.spec.ts`:
 ```ts
