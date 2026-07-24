@@ -37,16 +37,22 @@ test('the lead card shows its compact value + delta under the sentence', () => {
 test('two secondary finding cards render the next hero picks, excluding the lead', async () => {
   const onOpen = vi.fn()
   render(<TodaySection site={site} news={news} now={NOW} onOpen={onOpen} />)
-  // Fixture hero order: cash_rate, melb_dwelling_values, melb_rent(lead),
-  // oo_lending, mortgage_new -> excluding the lead, the next two in order
-  // are cash_rate and melb_dwelling_values.
+  // headlinePool is now geo-aware (2026-07-24 banner batch): membership
+  // requires a finding keyed EXACTLY 'melbourne' (this shim call —
+  // TodaySection.tsx passes the literal 'melbourne' geo, Task 2 threads the
+  // real one). cash_rate and mortgage_new are national-scope charts whose
+  // one finding is keyed 'australia' (their own fixed geo — see
+  // conveyor.test.ts), so they no longer qualify here. Fixture hero order:
+  // cash_rate(excluded), melb_dwelling_values, melb_rent(lead), oo_lending,
+  // mortgage_new(excluded) -> excluding the lead, the next two are
+  // melb_dwelling_values and oo_lending.
   const secondaries = screen.getByTestId('secondary-findings')
   const headings = within(secondaries).getAllByRole('heading', { level: 3 })
   expect(headings).toHaveLength(2)
-  expect(headings[0]).toHaveTextContent('The cash rate has held at 3.85% since Jan 2026')
-  expect(headings[1]).toHaveTextContent(/Melb dwelling values rose 0.3%/)
+  expect(headings[0]).toHaveTextContent(/Melb dwelling values rose 0.3%/)
+  expect(headings[1]).toHaveTextContent('Owner-occupier lending rose 2.0% to $1,020m in Jun 2026')
   await userEvent.click(headings[0])
-  expect(onOpen).toHaveBeenCalledWith('cash_rate')
+  expect(onOpen).toHaveBeenCalledWith('hvi_melbourne')
 })
 
 test('filters active: no lead card, no secondary cards, just the compact strip', () => {
@@ -193,11 +199,14 @@ test('no hero_lead: the conveyor leads with the first hero pick, no crash', () =
   // 2.5: headlinePool degrades a missing/'empty' hero_lead to plain hero
   // order (same rule conveyor.test.ts asserts for the 'empty' sentinel) —
   // the conveyor rotates whenever findings exist, with or without an
-  // explicit hero_lead, so the lead card now renders (leading with the
-  // first hero pick, cash_rate) instead of being suppressed.
+  // explicit hero_lead, so the lead card now renders. Since the 2026-07-24
+  // banner batch, membership at this geo='melbourne' shim requires a finding
+  // keyed exactly 'melbourne' — cash_rate no longer qualifies (its finding
+  // is keyed 'australia'), so the first surviving hero pick is now
+  // melb_dwelling_values.
   const siteNoLead = { ...site, hero_lead: undefined }
   render(<TodaySection site={siteNoLead} news={news} now={NOW} onOpen={() => {}} />)
-  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   expect(screen.getByTestId('hero-strip')).toBeInTheDocument()
 })
 
@@ -215,12 +224,16 @@ describe('headline conveyor', () => {
   afterEach(() => { vi.useRealTimers(); stubMotion(true) })
 
   test('advances the lead finding after 5 s (conveyor: secondary-1 is promoted)', () => {
+    // Pool at geo='melbourne' is now ['melb_rent', 'melb_dwelling_values',
+    // 'oo_lending'] (cash_rate/mortgage_new dropped — see the 'two
+    // secondary finding cards' test above) — the tick after melb_rent
+    // promotes melb_dwelling_values, not cash_rate.
     render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
     expect(screen.getByTestId('lead-finding'))
       .toHaveTextContent('The median rent held at $580/wk in Mar qtr 2026')
     act(() => vi.advanceTimersByTime(5000))
     expect(screen.getByTestId('lead-finding'))
-      .toHaveTextContent('The cash rate has held at 3.85% since Jan 2026')
+      .toHaveTextContent('Melb dwelling values rose 0.3% in Jun 2026 (+2.1% over the year)')
   })
 
   test('the pause control stops auto-advance and flips to a resume control', () => {
@@ -241,12 +254,15 @@ describe('headline conveyor', () => {
     expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
     fireEvent.mouseLeave(screen.getByTestId('headline-conveyor'))
     act(() => vi.advanceTimersByTime(5000))
-    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   })
 
   test('a dot jumps straight to its finding', () => {
+    // Pool at geo='melbourne' is 3 items now (['melb_rent',
+    // 'melb_dwelling_values', 'oo_lending']), so dot 2 (not 3) lands on
+    // melb_dwelling_values.
     render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Show finding 3 of 5' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show finding 2 of 3' }))
     expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   })
 
@@ -257,28 +273,33 @@ describe('headline conveyor', () => {
   })
 
   test('reduced motion: no auto-advance, manual controls still work', () => {
+    // Pool at geo='melbourne' is 3 items now — dot 2 lands on
+    // melb_dwelling_values (see 'a dot jumps straight to its finding').
     stubMotion(true)
     render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} />)
     act(() => vi.advanceTimersByTime(15000))
     expect(screen.getByTestId('lead-finding')).toHaveTextContent(/median rent/)
-    fireEvent.click(screen.getByRole('button', { name: 'Show finding 2 of 5' }))
-    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+    fireEvent.click(screen.getByRole('button', { name: 'Show finding 2 of 3' }))
+    expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   })
 })
 
 test('fewer than 3 findings: static row, no conveyor controls', () => {
   // Keep hero at 5 (assertSiteData requires it) but strip findings down to
   // two hero-resolving charts, so headlinePool yields a pool of 2 (< MIN_ROTATE).
-  // hero keys -> chart: cash_rate->cash_rate, melb_dwelling_values->hvi_melbourne.
+  // hero keys -> chart: melb_dwelling_values->hvi_melbourne, melb_rent->median_rent.
+  // (Not cash_rate: since the 2026-07-24 banner batch, membership at this
+  // geo='melbourne' shim requires a finding keyed exactly 'melbourne', and
+  // cash_rate's one finding is keyed 'australia' — see conveyor.test.ts.)
   const small = assertSiteData({
     ...siteEdge,
     hero_lead: 'empty',
     findings: {
-      cash_rate: (siteEdge as { findings: Record<string, Record<string, string>> }).findings.cash_rate,
       hvi_melbourne: (siteEdge as { findings: Record<string, Record<string, string>> }).findings.hvi_melbourne,
+      median_rent: (siteEdge as { findings: Record<string, Record<string, string>> }).findings.median_rent,
     },
   })
   render(<TodaySection site={small} news={news} now={NOW} onOpen={() => {}} />)
-  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/cash rate/)
+  expect(screen.getByTestId('lead-finding')).toHaveTextContent(/Melb dwelling values rose 0.3%/)
   expect(screen.queryByTestId('conveyor-controls')).not.toBeInTheDocument()
 })

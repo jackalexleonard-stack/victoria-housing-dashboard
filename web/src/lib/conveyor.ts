@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TILE_CHART } from '../components/HeroTiles'
 import type { SiteData } from './types'
+import type { Geo } from './urlState'
 
 export const ROTATE_MS = 5000
 export const MIN_ROTATE = 3
@@ -12,12 +13,18 @@ export const prefersReducedMotion = () =>
   typeof matchMedia !== 'undefined' &&
   matchMedia('(prefers-reduced-motion: reduce)').matches
 
-// The rotating headline pool (spec §3): hero_lead first, then the
-// remaining hero picks in exported order, deduped — keeping exactly the
-// guards LeadCard/SecondaryCard applied statically (a key must resolve to
-// a hero tile, a TILE_CHART chart and a finding, and never the "empty"
-// sentinel), so a degraded export can only shrink the pool, not crash it.
-export function headlinePool(site: SiteData): string[] {
+// The rotating headline pool, per geography (2026-07-24 banner batch):
+// hero_lead first, then the remaining hero picks in exported order, deduped —
+// but only keys whose chart carries a finding for the SELECTED geo, so the
+// banner quotes that geography's own sentences and never another's. The
+// zero-geo `{}` guard the old any-geo check needed collapses into `?.[geo]`
+// naturally. Note: a national/state-scope chart's finding is keyed by ITS
+// OWN fixed geo (e.g. cash_rate -> 'australia' only — pipeline/findings.py's
+// build_findings iterates `chart_geos(chart)`, never replicating a finding
+// across every UI geo), so those charts now drop out of every pool except
+// 'australia' itself, including the melbourne default — see
+// conveyor.test.ts's per-geo describe block for the exact before/after.
+export function headlinePool(site: SiteData, geo: Geo): string[] {
   const lead = site.hero_lead && site.hero_lead !== 'empty' ? [site.hero_lead] : []
   const seen = new Set<string>()
   const pool: string[] = []
@@ -25,18 +32,56 @@ export function headlinePool(site: SiteData): string[] {
     if (k === 'empty' || seen.has(k)) continue
     seen.add(k)
     const chartId = TILE_CHART[k]
-    // findings is per-geo now ({chartId: {geo: sentence}}) — a chart with
-    // no geos at all still gets a `{}` entry (migration rule), which is
-    // truthy in JS. Checking key count, not just presence, so a zero-geo
-    // chart correctly shrinks the pool instead of promoting a tile whose
-    // finding can never actually resolve to a sentence.
-    if (!chartId || !site.findings[chartId] || Object.keys(site.findings[chartId]).length === 0) {
-      continue
-    }
+    if (!chartId || !site.findings[chartId]?.[geo]) continue
     if (!site.hero.some(t => t.key === k)) continue
     pool.push(k)
   }
   return pool
+}
+
+// The chart a tile key plots, and that chart's primary metric — the metric
+// the banner's value line describes.
+function primaryMetricOf(site: SiteData, tileKey: string):
+    { chart: SiteData['charts'][number]; metric: string } | null {
+  const chartId = TILE_CHART[tileKey]
+  const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
+  if (!chart) return null
+  const entry = site.series[chart.series_id]
+  const metric = chart.metrics?.[0] ?? (entry ? Object.keys(entry.units)[0] : undefined)
+  return metric ? { chart, metric } : null
+}
+
+// Does the EXPORT tile's value equal the chart's primary-metric level at the
+// default view? Some tiles pair a level chart with a rate value (the HVI MoM
+// tiles) — for those, formatting a per-geo primary-metric level with the
+// tile's formatter would misrepresent it, so the banner omits the line
+// instead (spec §1: when in doubt, OMIT). Data-driven — no hand-kept list.
+export function tileValueMatchesPrimary(site: SiteData, tileKey: string): boolean {
+  const tile = site.hero.find(t => t.key === tileKey)
+  const pm = primaryMetricOf(site, tileKey)
+  if (!tile || tile.value == null || !pm) return false
+  const geo0 = pm.chart.geos[0]
+  const latest = latestForGeo(site, tileKey, geo0 as Geo)
+  if (!latest) return false
+  return Math.abs(latest.value - tile.value) < 1e-6 * Math.max(1, Math.abs(tile.value))
+}
+
+// Latest value (and same-metric delta) of the tile's chart primary metric at
+// the requested geo. Null when the geo has no points; delta null when only
+// one point exists — never another geo's or another metric's number.
+export function latestForGeo(site: SiteData, tileKey: string, geo: Geo):
+    { value: number; delta: number | null } | null {
+  const pm = primaryMetricOf(site, tileKey)
+  if (!pm) return null
+  const entry = site.series[pm.chart.series_id]
+  if (!entry) return null
+  const pts = entry.points
+    .filter(p => p.region === geo && p.metric === pm.metric && p.value != null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  if (pts.length === 0) return null
+  const value = pts[pts.length - 1].value
+  const delta = pts.length >= 2 ? value - pts[pts.length - 2].value : null
+  return { value, delta }
 }
 
 // Timer-only hook: owns the offset and nothing else. `running` is the

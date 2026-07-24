@@ -16,7 +16,10 @@ export type Band = 'grid' | 'context' | 'hidden' | 'absent'
 // footnote-worthy gap) or "our fetcher is blocked right now" (an outage,
 // not a gap), and `geos` alone can't tell the two apart. The series'
 // live status can.
-function isBrokenSource(series: SeriesEntry | undefined): boolean {
+// Exported (2026-07-24 banner batch, Task 3): ChartCard's failed-source grid
+// sort and App's compact-outage-card placement now share this exact
+// predicate too, rather than keeping a second drifting copy.
+export function isBrokenSource(series: SeriesEntry | undefined): boolean {
   return !series || series.status === 'failed'
 }
 

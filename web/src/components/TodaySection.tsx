@@ -123,7 +123,8 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
 
   // Findings are computed for the exported default view only (unchanged
   // 2.4 rule) — filters-active zeroes the pool, which hides the whole row.
-  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site)),
+  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site, 'melbourne')),
+                       // Task 2 threads the real geo
                        [site, filtersActive])
   const rotating = pool.length >= MIN_ROTATE
   const [userPaused, setUserPaused] = useState(false)
