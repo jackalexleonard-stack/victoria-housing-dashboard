@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from pipeline import common
 from pipeline.sources import abs as absrc
 
@@ -103,6 +105,60 @@ def test_parse_lending_offline():
     assert (add.abs() < 1.0).all()
     fhb = au[["lending_first_home_buyer", "lending_owner_occupier"]].dropna()
     assert (fhb["lending_first_home_buyer"] <= fhb["lending_owner_occupier"]).all()
+
+
+def test_parse_lending_derives_vic_total_from_owner_occupier_plus_investor():
+    """Victoria (REGION=2) never publishes HOUSING_PURPOSE=TOT on LEND_HOUSING
+    (live-confirmed: 404 NoRecordsFound) — only AUS does. Guardrail check
+    (live, real AUS data, 2026-03-31): TOT=102959.2, OO=61421.6, INV=41537.6,
+    OO+INV=102959.2 exact match -> TOT is additive dollar commitments, so the
+    same derivation is valid for Victoria. Fixture mirrors live values exactly
+    (OO=16808.9, INV=8889.6 at 2026-Q1)."""
+    raw = (FIX / "abs_lending_housing.csv").read_text(encoding="utf-8")
+    df = absrc.parse_lending(raw)
+
+    vic = df[df.region == "vic"]
+    assert "lending_total" in set(vic.metric)
+
+    row = vic[(vic.date == "2026-03-31") & (vic.metric == "lending_total")]
+    assert len(row) == 1
+    assert row.iloc[0]["value"] == 16808.9 + 8889.6  # == 25698.5
+    assert row.iloc[0]["unit"] == "aud_million"
+
+    # No fabricated partial sums anywhere: every derived vic total date must
+    # have had both components present (checked against the joined pivot).
+    piv = vic.pivot_table(index="date", columns="metric", values="value")
+    have_both = piv[["lending_owner_occupier", "lending_investor"]].dropna()
+    assert set(piv["lending_total"].dropna().index) == set(have_both.index)
+
+
+def test_derive_vic_lending_total_emits_no_row_when_a_component_is_missing():
+    from pipeline.sources.abs import _derive_vic_lending_total
+
+    df = pd.DataFrame(
+        [
+            # 2026-03-31: both components present -> total derived.
+            ["2026-03-31", "vic", "lending_owner_occupier", 100.0, "aud_million"],
+            ["2026-03-31", "vic", "lending_investor", 50.0, "aud_million"],
+            # 2026-06-30: investor missing -> NO total row (no partial sum).
+            ["2026-06-30", "vic", "lending_owner_occupier", 200.0, "aud_million"],
+            # unrelated region/metric noise, must be ignored.
+            ["2026-03-31", "australia", "lending_owner_occupier", 999.0, "aud_million"],
+        ],
+        columns=common.TIDY_COLUMNS,
+    )
+
+    out = absrc._derive_vic_lending_total(df)
+
+    assert list(out.columns) == common.TIDY_COLUMNS
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["date"] == "2026-03-31"
+    assert row["region"] == "vic"
+    assert row["metric"] == "lending_total"
+    assert row["value"] == 150.0
+    assert row["unit"] == "aud_million"
+    assert "2026-06-30" not in set(out["date"])
 
 
 def test_parse_population_offline():

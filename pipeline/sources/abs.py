@@ -186,6 +186,24 @@ def parse_construction_costs(raw: str) -> pd.DataFrame:
 #   Seasonally Adjusted, Victoria + Australia.  Borrower split is HOUSING_PURPOSE:
 #   OO / Investor / Total sit under LOAN_PURPOSE=TOTDWELL, First-home-buyer under
 #   TOTHOUS — each borrower type has a unique HOUSING_PURPOSE, so we map on that.
+#
+# DERIVED SERIES (the only one in this pipeline) — Victoria total lending.
+# HOUSING_PURPOSE=TOT is published ONLY for REGION=AUS on this dataflow; a
+# direct request for REGION=2 (Victoria) TOT returns 404 NoRecordsFound
+# (live-confirmed against
+#   .../LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL.TOT.TOT.20.2.Q).
+# Guardrail check before deriving anything: these are ADDITIVE dollar
+# commitments (sum of dollars is dollars — never do this for medians/rates/
+# indexes). Verified against LIVE real AUS data (2026-Q1): OO=61421.6m +
+# INV=41537.6m = 102959.2m == published TOT=102959.2m exactly (max abs
+# discrepancy across the whole AUS history is 0.1, i.e. rounding noise) — so
+# the published national total is genuinely OO+INV, not OO+INV+FHB (FHB is a
+# subset of OO, not a separate additive component: FHB=17913.9 <= OO at every
+# date). The same formula is therefore valid for Victoria:
+#   lending_total(vic) = lending_owner_occupier(vic) + lending_investor(vic)
+# Only same-date, same-unit pairs are summed; a date with either component
+# missing emits NO total row (no partial sums) — see
+# ``_derive_vic_lending_total``.
 # ---------------------------------------------------------------------------
 _LENDING_KEY = (
     "FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT."
@@ -197,19 +215,50 @@ _LENDING_METRIC = {
     "DV5167_FHB": "lending_first_home_buyer",
     "TOT": "lending_total",
 }
+_LENDING_DERIVED_NOTE = (
+    "lending_total (region=vic) = lending_owner_occupier + lending_investor "
+    "— additive $ commitments; verified vs published AUS total (OO+INV==TOT "
+    "exactly on live 2026-Q1 data). Victoria never publishes HOUSING_PURPOSE="
+    "TOT (404 NoRecordsFound), only AUS does."
+)
 
 
 def fetch_lending() -> str:
     return abs_csv("LEND_HOUSING", _LENDING_KEY)
 
 
+def _derive_vic_lending_total(df: pd.DataFrame) -> pd.DataFrame:
+    """Sum Victoria's owner-occupier + investor $ commitments into a
+    lending_total row per date, so the chart's total line (which only exists
+    natively for region=australia) also exists for region=vic. Same-date,
+    same-unit pairs only; a date missing either component is dropped (an
+    inner join), never partially summed."""
+    vic = df[df["region"] == "vic"]
+    oo = vic[vic["metric"] == "lending_owner_occupier"][["date", "unit", "value"]]
+    inv = vic[vic["metric"] == "lending_investor"][["date", "unit", "value"]]
+    merged = oo.merge(inv, on=["date", "unit"], suffixes=("_oo", "_inv"), how="inner")
+    if merged.empty:
+        return pd.DataFrame(columns=common.TIDY_COLUMNS)
+    return pd.DataFrame(
+        {
+            "date": merged["date"],
+            "region": "vic",
+            "metric": "lending_total",
+            "value": merged["value_oo"] + merged["value_inv"],
+            "unit": merged["unit"],
+        }
+    )[common.TIDY_COLUMNS]
+
+
 def parse_lending(raw: str) -> pd.DataFrame:
-    return _tidy(
+    df = _tidy(
         pd.read_csv(io.StringIO(raw)),
         region_col="REGION", region_map=_REGION_STATE,
         metric_col="HOUSING_PURPOSE", metric_map=_LENDING_METRIC,
         unit="aud_million",
     )
+    derived = _derive_vic_lending_total(df)
+    return pd.concat([df, derived], ignore_index=True)[common.TIDY_COLUMNS]
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +513,7 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_lending,
         parse=parse_lending,
+        derived=_LENDING_DERIVED_NOTE,
     ),
     common.Series(
         id="au_population",
