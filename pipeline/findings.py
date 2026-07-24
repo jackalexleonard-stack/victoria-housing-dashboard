@@ -56,6 +56,9 @@ _HVI_NOTE = ("Daily index — the free Cotality feed covers a rolling year; "
              "history accumulates from Jul 2025.")
 _MEDIAN_RENT_NOTE = ("Metro/Non-Metro medians from DFFH's LGA tables; "
                      "grouping differs slightly from pre-2026 snapshot figures.")
+_POP_GCCSA_NOTE = ("Annual ABS data (components of population change by "
+                   "GCCSA) — a separate, less-frequent series from the "
+                   "quarterly Victoria/Australia population figures above.")
 
 
 def _strip_cadence_code(label: str) -> str:
@@ -177,6 +180,17 @@ CHARTS: list[dict] = [
        metrics=["net_overseas_migration", "natural_increase"],
        region_mode="geo", noun="Net overseas migration",
        primary="net_overseas_migration"),
+    # Melbourne/Regional Vic components of population change (ABS GCCSA,
+    # ANNUAL) — a separate series/chart from "population" above (which is
+    # quarterly, vic/australia only). ERP is excluded from metrics for the
+    # same reason as "population" above: it is millions vs the other
+    # components' tens of thousands, so plotting it alongside them would
+    # flatten the chart and the finding sentence (design review P0-5).
+    _c("population_gccsa", "people", "Population & migration — Melbourne/Regional Vic",
+       "vic_population_gccsa",
+       metrics=["net_overseas_migration", "net_internal_migration", "natural_increase"],
+       region_mode="geo", noun="Net overseas migration",
+       primary="net_overseas_migration", note=_POP_GCCSA_NOTE),
     # --- social ---
     _c("waitlist", "social", "Victorian Housing Register", "vic_social_waitlist",
        region_mode="fixed:vic", scope="state",
@@ -473,6 +487,7 @@ METRIC_LABELS: dict[str, str] = {
     "accord_quarterly_target": "Target (quarterly)",
     # population & migration
     "net_overseas_migration": "Net overseas migration",
+    "net_internal_migration": "Net internal migration",
     "natural_increase": "Natural increase",
     "population_erp": "Resident population",
     "population_growth_qtr": "Quarterly growth",

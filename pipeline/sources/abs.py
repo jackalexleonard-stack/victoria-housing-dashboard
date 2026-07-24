@@ -299,6 +299,46 @@ def parse_res_dwell(raw: str) -> pd.DataFrame:
     return out.dropna(subset=["region", "metric"]).reset_index(drop=True)
 
 
+# ---------------------------------------------------------------------------
+# vic_population_gccsa — Population components by GCCSA
+# (ERP_COMP_SA_ASGS2021), ANNUAL — Greater Melbourne / Rest of Vic.
+#
+# This is a SEPARATE cadence from au_population above (ERP_COMP_Q, quarterly,
+# vic/australia only) — that dataflow does not publish a metro/regional
+# split, and this one does not publish a vic/australia aggregate. The two are
+# never merged into one series or chart: an annual print plotted next to
+# quarterly prints on the same line would misread as one consistent series.
+#
+# key order: POP_COMP.ASGS_2021(region type).REGION.FREQ
+# GET .../ERP_COMP_SA_ASGS2021/10+9+6+3.GCCSA.2GMEL+2RVIC.A
+#   POP_COMP 10 Estimated Resident Population / 9 Net Overseas Migration /
+#   6 Net Internal Migration / 3 Natural Increase · region type GCCSA ·
+#   REGION Greater Melbourne / Rest of Vic · Annual. OBS_VALUE is already
+#   whole persons on this dataflow (no UNIT_MULT column, unlike ERP_COMP_Q)
+#   — no scaling needed.
+# ---------------------------------------------------------------------------
+_POP_GCCSA_KEY = "10+9+6+3.GCCSA.2GMEL+2RVIC.A"
+_POP_GCCSA_METRIC = {
+    "10": "population_erp",
+    "9": "net_overseas_migration",
+    "6": "net_internal_migration",
+    "3": "natural_increase",
+}
+
+
+def fetch_population_gccsa() -> str:
+    return abs_csv("ERP_COMP_SA_ASGS2021", _POP_GCCSA_KEY)
+
+
+def parse_population_gccsa(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_col="REGION", region_map=_REGION_GCCSA_VIC,
+        metric_col="POP_COMP", metric_map=_POP_GCCSA_METRIC,
+        unit="persons",
+    )
+
+
 SERIES = [
     common.Series(
         id="vic_approvals",
@@ -355,5 +395,13 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_res_dwell,
         parse=parse_res_dwell,
+    ),
+    common.Series(
+        id="vic_population_gccsa",
+        source_name="ABS Population components by GCCSA (ERP_COMP_SA_ASGS2021)",
+        source_url=f"{ABS_BASE}/ERP_COMP_SA_ASGS2021/{_POP_GCCSA_KEY}",
+        frequency="annual",
+        fetch=fetch_population_gccsa,
+        parse=parse_population_gccsa,
     ),
 ]

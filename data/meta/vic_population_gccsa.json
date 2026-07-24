@@ -1,0 +1,11 @@
+{
+  "series_id": "vic_population_gccsa",
+  "source_name": "ABS Population components by GCCSA (ERP_COMP_SA_ASGS2021)",
+  "source_url": "https://data.api.abs.gov.au/rest/data/ERP_COMP_SA_ASGS2021/10+9+6+3.GCCSA.2GMEL+2RVIC.A",
+  "frequency": "annual",
+  "status": "ok",
+  "last_fetched": "2026-07-24T00:05:58Z",
+  "error": null,
+  "last_data_date": "2025-12-31",
+  "last_changed": "2026-07-24T00:05:58Z"
+}

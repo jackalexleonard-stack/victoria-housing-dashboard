@@ -159,6 +159,39 @@ def test_res_dwell_parses_the_fixture_into_tidy_rows_with_the_expected_regions()
     assert not df.duplicated(["date", "region", "metric"]).any()
 
 
+def test_population_gccsa_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_population_gccsa
+
+    raw = (FIX / "abs_erp_gccsa.csv").read_text(encoding="utf-8")
+    df = parse_population_gccsa(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the task.
+    assert set(df["region"]) == {"melbourne", "regional_vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray.
+    assert set(df["metric"]) == {
+        "population_erp",
+        "net_overseas_migration",
+        "net_internal_migration",
+        "natural_increase",
+    }
+    assert (df.unit == "persons").all()
+
+    # (3) A spot value hand-verified against the fixture (POP_COMP=10 "ERP",
+    # REGION=2GMEL, TIME_PERIOD=2025, OBS_VALUE=5435590 — this dataflow has no
+    # UNIT_MULT column, so OBS_VALUE is already whole persons, no scaling).
+    row = df[(df.region == "melbourne") & (df.date == "2025-12-31")
+             & (df.metric == "population_erp")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 5435590
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()
+
+    # This dataflow is ANNUAL — period-end dates must land on 31 Dec only.
+    assert df.date.str.endswith("-12-31").all()
+
+
 def test_parse_dwelling_stock_offline():
     raw = (FIX / "abs_res_dwell_st.csv").read_text(encoding="utf-8")
     df = absrc.parse_dwelling_stock(raw)

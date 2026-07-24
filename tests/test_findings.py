@@ -100,18 +100,52 @@ def test_failed_series_produces_no_findings_entries_for_any_geo():
     assert out["auctions"] == {}
 
 
-def test_exactly_four_charts_carry_a_note():
+def test_exactly_five_charts_carry_a_note():
     noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
     assert set(noted) == {"hvi_melbourne", "hvi_australia",
-                           "median_rent", "median_rent_by_type"}
+                           "median_rent", "median_rent_by_type",
+                           "population_gccsa"}
     assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
         "Daily index — the free Cotality feed covers a rolling year; "
         "history accumulates from Jul 2025.")
     assert noted["median_rent"] == noted["median_rent_by_type"] == (
         "Metro/Non-Metro medians from DFFH's LGA tables; grouping differs "
         "slightly from pre-2026 snapshot figures.")
+    assert noted["population_gccsa"] == (
+        "Annual ABS data (components of population change by GCCSA) — a "
+        "separate, less-frequent series from the quarterly Victoria/"
+        "Australia population figures above.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
+
+
+def test_population_gccsa_is_annual_and_separate_from_the_quarterly_population_chart():
+    """Task 10: vic_population_gccsa (Melbourne/Regional Vic components of
+    change) must be a wholly separate series/chart from au_population
+    (Victoria/Australia, quarterly) — never merged into one series, and its
+    finding must read the year only (annual), not a quarter label."""
+    pop = next(c for c in findings.CHARTS if c["id"] == "population")
+    pop_gccsa = next(c for c in findings.CHARTS if c["id"] == "population_gccsa")
+    assert pop["series_id"] == "au_population"
+    assert pop_gccsa["series_id"] == "vic_population_gccsa"
+    assert pop["series_id"] != pop_gccsa["series_id"]
+
+    ls, lm = _loaders(
+        {"vic_population_gccsa": _df([
+            ("2024-12-31", "melbourne", "net_overseas_migration", 119037, "persons"),
+            ("2025-12-31", "melbourne", "net_overseas_migration", 81168, "persons"),
+            ("2024-12-31", "regional_vic", "net_overseas_migration", 8844, "persons"),
+            ("2025-12-31", "regional_vic", "net_overseas_migration", 5991, "persons"),
+        ])},
+        {"vic_population_gccsa": {"frequency": "annual"}},
+    )
+    out = findings.build_findings(ls, lm)
+    # Only the two geos this source genuinely publishes — never vic/australia.
+    assert set(out["population_gccsa"]) == {"melbourne", "regional_vic"}
+    # Annual period formatting (fmt_period) — a bare year, no quarter/month.
+    assert out["population_gccsa"]["melbourne"] == (
+        "Net overseas migration fell 31.8% to 81,168 in 2025"
+    )
 
 
 def test_hvi_charts_use_the_canonical_short_name_everywhere():
