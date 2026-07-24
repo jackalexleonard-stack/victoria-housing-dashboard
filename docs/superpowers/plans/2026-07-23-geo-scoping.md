@@ -1078,6 +1078,9 @@ the pipeline, pytest, commit.
   "Titled H1" snapshot to Jun) — Task 9 flagged this and it must be disclosed, not annualised away.
   Verify the export afterwards: `land` geos must become `['melbourne','regional_vic']`.
 - `credit`: `"Housing credit growth"` → `"Housing credit growth (Australia)"`.
+- `output_costs` (T12 review Minor): noun `"Builders' output prices"` → `"House construction output
+  prices"` — the primary metric is the house-specific sub-index, and the codebase convention names
+  the submetric in the noun when primary isn't the aggregate.
 
 - [ ] **Step 15.2** Add the e2e guard — append to `web/e2e/smoke.spec.ts`:
 ```ts
