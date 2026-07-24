@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-24-banner-and-outage-cards-design.md` (approved 2026-07-24).
 
+> **AMENDMENT (2026-07-24, user decision during Task 1):** the pool is **band-aligned**, not
+> strict-geo. `headlinePool(site, geo)` returns `PoolEntry[]` (`{ key: string; geo: Geo; badge?:
+> string }`): selected-geo findings first-class; charts with broader `scope` (state/national/global)
+> that lack the selected geo enter at their OWN geo (`chart.geos[0]`) carrying
+> `SCOPE_BADGE[chart.scope]`; `geo`-scope charts without the selected geo and broken sources are
+> excluded. Tasks 1-2's earlier strict-geo test/code text is superseded accordingly; the melbourne
+> pool keeps cash_rate/mortgage_new (badged 'Australia') and rotation. Task 2 renders each card at
+> `entry.geo` (finding, value via `latestForGeo(site, key, entry.geo)`, badge when present).
+
 ## Global Constraints
 
 - Repo `C:\Users\OEM\Schemes\housing dashboard` (space in path — quote). Branch `feature/banner-and-outage-cards` exists with the spec committed — do NOT create/switch branches.

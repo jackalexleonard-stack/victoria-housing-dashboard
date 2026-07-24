@@ -13,10 +13,19 @@ findings per-geo (`site.findings[chartId][geo]`), so the guard is obsolete. User
 **all geos AND all ranges** (headline sentences quote latest values, which are range-independent);
 the value line under each headline is **computed per-geo client-side**.
 
-- `headlinePool(site, geo)` (`web/src/lib/conveyor.ts`): hero-ordered chart keys whose chart has a
-  finding for the selected geo — `site.findings[TILE_CHART[key]]?.[geo]` non-empty. `hero_lead`
-  stays first when it qualifies. The `filtersActive ? [] : …` guard is deleted; `TodaySection`
-  receives `geo` (and drops `filtersActive`).
+- `headlinePool(site, geo)` (`web/src/lib/conveyor.ts`) — **band-aligned pool (user decision
+  2026-07-24, replacing the earlier strict-geo rule which would have collapsed Melbourne's banner
+  to 2 static cards):** returns `PoolEntry[]` where `PoolEntry = { key, geo, badge? }`, hero order,
+  `hero_lead` first when it qualifies, deduped:
+  - chart has a finding for the SELECTED geo → `{ key, geo }` (rendered at the selected geo);
+  - else chart's `scope` is broader than local (`state`/`national`/`global`) AND it has any finding →
+    `{ key, geo: chart.geos[0], badge: SCOPE_BADGE[chart.scope] }` (rendered at its OWN geo, badge
+    carried on the card — mirroring the page's "Wider context" band exactly);
+  - else (a `geo`-scope chart without this geo, or a broken source with `findings: {}`) → excluded,
+    matching the grid's hidden/absent treatment.
+  The `filtersActive ? [] : …` guard is deleted; `TodaySection` receives `geo` (drops
+  `filtersActive`). Banner cards render finding + value at `entry.geo`; context entries show the
+  same small neutral badge the context band uses.
 - Lead/secondary cards resolve their finding at the selected geo. The value/delta line is derived
   client-side from the chart's own series at that geo: latest point (and previous, for the delta) of
   the chart's primary metric, filtered `p.region === geo` — a new pure helper
