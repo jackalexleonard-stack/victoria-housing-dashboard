@@ -609,6 +609,34 @@ describe('geo banding', () => {
     expect(within(band).getAllByText('Australia').length).toBeGreaterThan(0)
   })
 
+  // 2026-07-24 banner batch (Task 3): a dead chart (isDeadChart — a broken
+  // source with no historical geo coverage) must sort to the END of its
+  // section's grid, as a compact outage row, never as the section's
+  // spanning lead card. Deliberately targets Prices: the fixture's REGISTRY
+  // order there is [auctions (dead), hvi_melbourne (healthy)] — the
+  // OPPOSITE of the required render order — so this genuinely exercises the
+  // sort rather than passing by registry-order coincidence (a sort that
+  // silently no-ops, or that even reverses correctly by accident on some
+  // OTHER section, would still fail here).
+  test('a dead chart (auctions) sorts to the end of Prices, after the healthy chart that leads it in registry order', async () => {
+    history.replaceState(null, '', '/?geo=melbourne&sections=prices')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const prices = screen.getByRole('region', { name: 'Prices' })
+    const outageRow = within(prices).getByTestId('outage-row')
+    const healthyCard = within(prices).getByText('Cotality HVI — Melbourne').closest('article')
+    expect(healthyCard).not.toBeNull()
+    // DOCUMENT_POSITION_FOLLOWING (4): healthyCard must precede outageRow in
+    // the DOM — i.e. the healthy card renders BEFORE the dead one, reversed
+    // from their [auctions, hvi_melbourne] registry order.
+    expect(healthyCard!.compareDocumentPosition(outageRow) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+    // The dead chart never becomes the spanning lead card either.
+    expect(outageRow.closest('.sm\\:col-span-2')).not.toBeNull()
+    expect(healthyCard!.parentElement).toHaveClass('sm:col-span-2')
+  })
+
   // 2026-07-24 banner batch: the headline banner used to hide whenever
   // filters were active (range and/or geo off default) — it's now always
   // on, quoting whatever geography is selected. App no longer computes

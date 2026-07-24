@@ -23,6 +23,23 @@ export function isBrokenSource(series: SeriesEntry | undefined): boolean {
   return !series || series.status === 'failed'
 }
 
+// 2026-07-24 banner batch (Task 3): the "dead chart" that ChartCard collapses
+// to a compact outage row and App sorts to the end of its section — a
+// NARROWER case than bare isBrokenSource. A series whose fetch merely failed
+// TODAY but that still carries real, displayable historical data for a geo
+// it's known to cover (chart.geos non-empty — e.g. a source down for one run
+// while last quarter's rents are still perfectly good to show) must keep its
+// full chart: collapsing it to a slim "source unavailable" row would itself
+// misstate an available source as dead, the exact false claim `quietOutage`
+// exists to avoid repeating loudly. Reuses bandFor's own
+// geos.length===0-plus-isBrokenSource condition (below) rather than
+// re-deriving a second copy — a chart only ever lands in this narrower
+// bucket when it has NO historical geo coverage at all, the same signal
+// bandFor's absent-band override already keys off.
+export function isDeadChart(chart: ChartSpec, series: SeriesEntry | undefined): boolean {
+  return chart.geos.length === 0 && isBrokenSource(series)
+}
+
 export function bandFor(chart: ChartSpec, geo: Geo, series: SeriesEntry | undefined): Band {
   // Only overridden when we have NO historical geo signal at all
   // (geos: []) — a chart that DOES have data for some geo(s) already
@@ -30,7 +47,7 @@ export function bandFor(chart: ChartSpec, geo: Geo, series: SeriesEntry | undefi
   // today's live fetch status; suppressing ITS footnote at a geo it
   // genuinely never covered would itself be a false claim (implying that
   // geo might just be "currently down" rather than genuinely uncovered).
-  if (chart.geos.length === 0 && isBrokenSource(series)) {
+  if (isDeadChart(chart, series)) {
     // Render the honest outage card (ChartCard's existing dead-card
     // copy) in the grid, at the geo(s) implied by the chart's own
     // region_mode — never claim non-publication for a broken source.

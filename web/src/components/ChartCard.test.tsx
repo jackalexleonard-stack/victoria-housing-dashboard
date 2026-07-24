@@ -25,24 +25,43 @@ test('leads with the finding and opens on click', async () => {
   expect(onOpen).toHaveBeenCalledWith('cash_rate')
 })
 
-// --- P1-outage: dead-card compact stubs (no triple-repeated placeholder) ---
+// --- P1-outage / 2026-07-24 banner batch: dead charts compact to a single
+// full-width outage row (no triple-repeated placeholder, no wasted card) ---
 
-test('a dead card (failed, zero points) headlines the series name, not the generic finding sentence', () => {
-  render(<ChartCard site={site} chart={chart('auctions')}
+test('a dead chart (failed, no historical geo coverage) renders as a compact outage row — no chart area', () => {
+  const auctionsChart = chart('auctions')
+  render(<ChartCard site={site} chart={auctionsChart}
                     finding="No recent data — source currently unavailable"
-                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Auction clearance — Melbourne')
-  expect(screen.queryByText('No recent data — source currently unavailable')).not.toBeInTheDocument()
-  expect(screen.queryByRole('img')).not.toBeInTheDocument()
+                    range="5y" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const row = screen.getByTestId('outage-row')
+  expect(within(row).queryByRole('img')).not.toBeInTheDocument()      // no chart svg
+  expect(within(row).getByText(/Auction clearance/)).toBeInTheDocument()
+  // Headlines the series name — the generic finding sentence never renders
+  // (P1-outage: no triple-repeated "source unavailable" placeholder).
+  expect(within(row).queryByText('No recent data — source currently unavailable'))
+    .not.toBeInTheDocument()
+  expect(within(row).getByText(/source unavailable/i)).toBeInTheDocument()
 })
 
-test('a dead card shows one honest, source-specific body line — not the generic sentence repeated', () => {
+test('the compact outage row still opens the detail modal, keyboard-reachable like every other card', async () => {
+  const onOpen = vi.fn()
+  const auctionsChart = chart('auctions')
+  render(<ChartCard site={site} chart={auctionsChart} finding="" range="5y"
+                    geo="melbourne" now={NOW} onOpen={onOpen} />)
+  const row = screen.getByTestId('outage-row')
+  expect(row.tagName).toBe('BUTTON')   // the same clickable-surface idiom as every other card
+  await userEvent.click(row)
+  expect(onOpen).toHaveBeenCalledWith(auctionsChart.id)
+})
+
+test('a dead chart shows one honest, source-specific body line — not the generic sentence repeated', () => {
   render(<ChartCard site={site} chart={chart('auctions')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getByText(/auction results aren.t reachable/i, { selector: 'p' })).toBeInTheDocument()
+  expect(within(screen.getByTestId('outage-row'))
+    .getByText(/auction results aren.t reachable/i, { selector: 'span' })).toBeInTheDocument()
 })
 
-test('a dead card still surfaces a failure chip and its short source token, but no table toggle', () => {
+test('the outage row still surfaces a failure chip, but no table toggle (no data to tabulate)', () => {
   render(<ChartCard site={site} chart={chart('auctions')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
   expect(screen.getByText(/source unavailable/i, { selector: 'span' })).toBeInTheDocument()
@@ -93,6 +112,7 @@ test('a chart-level source_name override wins over the series’ shared meta.sou
   mutated.charts.push({
     id: 'brent_test', section: 'world', title: 'Brent crude',
     series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+    scope: 'national', geos: ['australia'],
     percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     source_name: 'FRED — Brent crude (DCOILBRENTEU)',
   })
@@ -241,6 +261,7 @@ function siteWithLandChart(pointsPerMetric: 1 | 2) {
   mutated.charts.push({
     id: 'land', section: 'supply', title: 'Greenfield land supply',
     series_id: 'vic_land', metrics: null, region_mode: 'fixed:melbourne',
+    scope: 'geo', geos: ['melbourne'],
     percent: false, markers: false, annotate: false, note: null, modal_metrics: null,
   })
   // Slice from the END: a 1-point fixture should carry the LATEST value
@@ -291,6 +312,7 @@ test('a MIXED chart (one line short, others long) still renders the chart, not a
   mutated.charts.push({
     id: 'land', section: 'supply', title: 'Greenfield land supply',
     series_id: 'vic_land', metrics: null, region_mode: 'fixed:melbourne',
+    scope: 'geo', geos: ['melbourne'],
     percent: false, markers: false, annotate: false, note: null, modal_metrics: null,
   })
   mutated.series.vic_land = {
