@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { deltaColor, HeroTiles, splitCadenceCode, TILE_CHART } from './HeroTiles'
+import { Chip } from './Chip'
 import { TILE_FMT, fmtPeriod, newsByline } from '../lib/format'
 import { staleness } from '../lib/staleness'
-import { headlinePool, MIN_ROTATE, prefersReducedMotion, useConveyor } from '../lib/conveyor'
+import { headlinePool, latestForGeo, MIN_ROTATE, prefersReducedMotion,
+         tileValueMatchesPrimary, useConveyor, type PoolEntry } from '../lib/conveyor'
 import { PALETTE } from '../theme/tokens'
+import { DEFAULT_GEO, type Geo } from '../lib/urlState'
 import type { HeroTile, NewsData, SiteData } from '../lib/types'
 
 const WHATS_NEW_CAP = 6
@@ -24,41 +27,61 @@ function whatsNewVintage(t: HeroTile, site: SiteData, now: Date):
   return { text: fmtPeriod(t.last_date, entry.meta.frequency), kind: st.kind }
 }
 
-// The lead-finding card [P0-1]: site.hero_lead names a hero registry key —
-// look up its chart via the existing TILE_CHART map and its sentence via
-// site.findings, exactly the contract T1 exported this field for. Renders
+// The lead-finding card [P0-1]: a pool entry names a hero registry key, the
+// geo its finding/value should render at, and (band entries only) a scope
+// badge — look up the chart via TILE_CHART and the sentence via
+// site.findings, exactly the contract T1 exported headlinePool for. Renders
 // nothing (not a broken card) when any link in that chain is missing, e.g.
 // hero_lead is absent (older export) or resolves to the "empty" sentinel.
-function LeadCard({ site, leadKey, onOpen }: {
-  site: SiteData; leadKey: string; onOpen: (id: string) => void }) {
+//
+// Value line (2026-07-24 banner batch, Task 2): the default (melbourne)
+// view keeps the export tiles verbatim — byte-identical to the pre-geo
+// banner. Off-default, or for a band entry rendered away from the default
+// geo, the line is instead computed client-side from the chart's own
+// series at entry.geo, gated by tileValueMatchesPrimary so a tile whose
+// export value isn't the chart's primary-metric level (e.g. the HVI MoM
+// tiles) never mis-formats a level as a rate — it just omits the line
+// (spec §1: when in doubt, omit).
+function LeadCard({ site, entry, onOpen }: {
+  site: SiteData; entry: PoolEntry; onOpen: (id: string) => void }) {
+  const { key: leadKey, geo, badge } = entry
   const tile = site.hero.find(t => t.key === leadKey)
   const chartId = TILE_CHART[leadKey]
-  // T4: findings is now per-geo ({chartId: {geo: sentence}}) — Today is
-  // default-view-only (2.4), so resolve at the chart's own first geo rather
-  // than the (nonexistent, here) selected geo.
-  const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
-  const finding = chart ? site.findings[chartId]?.[chart.geos[0]] ?? '' : undefined
+  const finding = chartId ? site.findings[chartId]?.[geo] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
   const fmt = TILE_FMT[leadKey]
-  const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
-  const deltaText = tile.delta != null && fmt ? fmt.delta(tile.delta) : null
+  let valueText: string | null = null
+  let deltaText: string | null = null
+  let deltaSrc: { delta: number | null; delta_color: HeroTile['delta_color'] } = tile
+  if (geo === DEFAULT_GEO) {
+    valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
+    deltaText = tile.delta != null && fmt ? fmt.delta(tile.delta) : null
+  } else if (fmt && tileValueMatchesPrimary(site, leadKey)) {
+    const latest = latestForGeo(site, leadKey, geo)
+    if (latest) {
+      valueText = fmt.value(latest.value)
+      deltaText = latest.delta != null ? fmt.delta(latest.delta) : null
+      deltaSrc = { delta: latest.delta, delta_color: tile.delta_color }
+    }
+  }
   return (
     <article data-testid="lead-finding-card"
               className="sm:col-span-2 bg-card border border-line rounded-lg p-5">
       <button type="button" onClick={() => onOpen(chartId)}
               className="block w-full text-left group">
-        <motion.div key={chartId} initial={{ opacity: 0, x: 16 }}
+        <motion.div key={`${chartId}-${geo}`} initial={{ opacity: 0, x: 16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}>
           <h2 data-testid="lead-finding"
               className="font-display text-2xl sm:text-3xl leading-snug group-hover:text-blue">
             {finding}
           </h2>
+          {badge && <p className="mt-1"><Chip kind="neutral">{badge}</Chip></p>}
           {(valueText || deltaText) && (
             <p className="num text-sm text-muted mt-2">
               {valueText}
               {deltaText && (
-                <span className="ml-1.5 font-medium" style={{ color: deltaColor(tile) }}>
+                <span className="ml-1.5 font-medium" style={{ color: deltaColor(deltaSrc) }}>
                   {deltaText}</span>
               )}
             </p>
@@ -69,28 +92,35 @@ function LeadCard({ site, leadKey, onOpen }: {
   )
 }
 
-// Secondary finding cards [P0-1]: the next two hero picks (by the exported
-// tile order — no client-side re-scoring), excluding whichever key is
-// leading. In production those two are almost always the cash-rate/Melb-
-// values pins (they sit earliest in `hero`), which also satisfies "keep the
-// pins visually first".
-function SecondaryCard({ site, tileKey, onOpen }: {
-  site: SiteData; tileKey: string; onOpen: (id: string) => void }) {
+// Secondary finding cards [P0-1]: the next two pool entries (by the
+// exported tile order — no client-side re-scoring), excluding whichever
+// entry is leading. In production those two are almost always the cash-
+// rate/Melb-values pins (they sit earliest in `hero`), which also satisfies
+// "keep the pins visually first". Same per-geo/mis-format-guard value-line
+// rule as LeadCard, above, minus the delta (it never showed one).
+function SecondaryCard({ site, entry, onOpen }: {
+  site: SiteData; entry: PoolEntry; onOpen: (id: string) => void }) {
+  const { key: tileKey, geo, badge } = entry
   const tile = site.hero.find(t => t.key === tileKey)
   const chartId = TILE_CHART[tileKey]
-  // T4: same per-geo resolution as LeadCard, above.
-  const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
-  const finding = chart ? site.findings[chartId]?.[chart.geos[0]] ?? '' : undefined
+  const finding = chartId ? site.findings[chartId]?.[geo] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
   const fmt = TILE_FMT[tileKey]
-  const valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
+  let valueText: string | null = null
+  if (geo === DEFAULT_GEO) {
+    valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
+  } else if (fmt && tileValueMatchesPrimary(site, tileKey)) {
+    const latest = latestForGeo(site, tileKey, geo)
+    if (latest) valueText = fmt.value(latest.value)
+  }
   return (
     <article className="bg-card border border-line rounded-lg p-3">
       <button type="button" onClick={() => onOpen(chartId)} className="block w-full text-left group">
-        <motion.div key={chartId} initial={{ opacity: 0, x: 16 }}
+        <motion.div key={`${chartId}-${geo}`} initial={{ opacity: 0, x: 16 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}>
           <h3 className="font-display text-base leading-snug group-hover:text-blue">{finding}</h3>
+          {badge && <p className="mt-0.5"><Chip kind="neutral">{badge}</Chip></p>}
           {valueText && <p className="num text-xs text-muted mt-1.5">{valueText}</p>}
         </motion.div>
       </button>
@@ -113,22 +143,20 @@ function sortWhatsNew(tiles: HeroTile[]): HeroTile[] {
   })
 }
 
-export function TodaySection({ site, news, onOpen, now, filtersActive = false,
+export function TodaySection({ site, news, onOpen, now, geo,
                                detailOpen = false }: {
   site: SiteData; news: NewsData; onOpen: (chartId: string) => void
-  now: Date; filtersActive?: boolean; detailOpen?: boolean }) {
+  now: Date; geo: Geo; detailOpen?: boolean }) {
   const top = news.top_story_urls
     .map(u => news.items.find(i => i.url === u))
     .filter(i => i != null)
 
-  // Findings are computed for the exported default view only (unchanged
-  // 2.4 rule) — filters-active zeroes the pool, which hides the whole row.
-  // headlinePool now returns PoolEntry[] (band-aligned, 2026-07-24
-  // amendment) — this component still only consumes the string keys until
-  // Task 2 renders each card at entry.geo/badge.
-  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site, 'melbourne').map(e => e.key)),
-                       // Task 2 threads the real geo
-                       [site, filtersActive])
+  // Band-aligned per-geo pool (2026-07-24 banner batch): the banner is
+  // always on — no more filters-active gate that zeroed it — and every
+  // entry renders at ITS OWN geo (selected-geo first-class, or a band
+  // entry's own broader-scope geo, badged), mirroring the page's own grid
+  // bands (see headlinePool's doc comment).
+  const pool = useMemo(() => headlinePool(site, geo), [site, geo])
   const rotating = pool.length >= MIN_ROTATE
   const [userPaused, setUserPaused] = useState(false)
   const [hovered, setHovered] = useState(false)
@@ -144,11 +172,11 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
     !detailOpen && !prefersReducedMotion()
   const { offset, jump } = useConveyor(pool.length, running)
   const pos = pool.length > 0 ? offset % pool.length : 0
-  const leadKey = pool.length > 0 ? pool[pos] : null
-  const secondaryKeys = pool.length > 1
+  const leadEntry = pool.length > 0 ? pool[pos] : null
+  const secondaryEntries = pool.length > 1
     ? [pool[(pos + 1) % pool.length],
        pool.length > 2 ? pool[(pos + 2) % pool.length] : null]
-        .filter((k): k is string => k != null)
+        .filter((e): e is PoolEntry => e != null)
     : []
 
   const [expanded, setExpanded] = useState(false)
@@ -158,7 +186,7 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
 
   return (
     <section aria-label="Today">
-      {leadKey && (
+      {leadEntry && (
         <div>
           {/* final-review Fix 1: the pause handlers + headline-conveyor
               testid wrap ONLY the cards, not the controls below. When the
@@ -171,12 +199,12 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
                onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
                onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
             <div className="grid gap-3 sm:grid-cols-3">
-              <LeadCard site={site} leadKey={leadKey} onOpen={onOpen} />
-              {secondaryKeys.length > 0 && (
+              <LeadCard site={site} entry={leadEntry} onOpen={onOpen} />
+              {secondaryEntries.length > 0 && (
                 <div data-testid="secondary-findings"
                      className="grid grid-cols-2 gap-3 sm:grid-cols-1">
-                  {secondaryKeys.map(k =>
-                    <SecondaryCard key={k} site={site} tileKey={k} onOpen={onOpen} />)}
+                  {secondaryEntries.map(e =>
+                    <SecondaryCard key={e.key} site={site} entry={e} onOpen={onOpen} />)}
                 </div>
               )}
             </div>
@@ -190,8 +218,8 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
                 <span aria-hidden="true" className="material-symbols-rounded text-lg block">
                   {userPaused ? 'play_arrow' : 'pause'}</span>
               </button>
-              {pool.map((k, i) => (
-                <button key={k} type="button" onClick={() => jump(i)}
+              {pool.map((entry, i) => (
+                <button key={entry.key} type="button" onClick={() => jump(i)}
                         aria-label={`Show finding ${i + 1} of ${pool.length}`}
                         aria-current={i === pos ? 'true' : undefined}
                         className="p-1.5 pointer-coarse:p-2.5 group">
@@ -208,7 +236,7 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
           unreachable by touch or keyboard. A visible caption line matches
           the product's own honest-caption idiom (e.g. ChartCard's band
           caption) rather than an aria-describedby'd sr-only alternative. */}
-      <div className={leadKey ? 'mt-4' : ''} data-testid="hero-strip">
+      <div className={leadEntry ? 'mt-4' : ''} data-testid="hero-strip">
         <p className="text-xs text-faint mb-2">Today's most notable movements</p>
         <HeroTiles tiles={site.hero} extraTiles={site.extra_tiles} onOpen={onOpen} />
       </div>

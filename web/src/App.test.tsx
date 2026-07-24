@@ -609,6 +609,19 @@ describe('geo banding', () => {
     expect(within(band).getAllByText('Australia').length).toBeGreaterThan(0)
   })
 
+  // 2026-07-24 banner batch: the headline banner used to hide whenever
+  // filters were active (range and/or geo off default) — it's now always
+  // on, quoting whatever geography is selected. App no longer computes
+  // filtersActive at all, so this just proves the banner survives a
+  // non-default range untouched.
+  test('the headline banner still shows under a non-default range', async () => {
+    history.replaceState(null, '', '/?range=1y')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    expect(screen.getByTestId('lead-finding-card')).toBeInTheDocument()
+  })
+
   // Review fix: a failed/missing source (vic_auctions: status 'failed', zero
   // points, no historical geo signal at all) must never be reported as a
   // geography gap — that would itself be the false claim this project

@@ -6,7 +6,7 @@ import { fmtDate, fmtPeriod } from './lib/format'
 import { sectionOutageNotice, type SectionState } from './lib/sections'
 import { bandFor, hiddenTitles, SCOPE_BADGE } from './lib/geoBands'
 import { GEO_LABEL } from './lib/selectors'
-import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
+import { useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead, type FailedSource } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
@@ -210,7 +210,6 @@ export default function App({ now = new Date() }: { now?: Date }) {
     try { localStorage.setItem(WELCOME_KEY, '1') } catch { /* ignore */ }
     setShowWelcome(false)
   }
-  const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
   const failedSources: FailedSource[] = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed')
     .map(s => ({
@@ -252,7 +251,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       <div ref={el => { sectionsRef.current.today = el }} id="today"
            className="pt-6 scroll-mt-28">
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}
-                      filtersActive={filtersActive} detailOpen={!!detailChart} />
+                      geo={state.geo} detailOpen={!!detailChart} />
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
