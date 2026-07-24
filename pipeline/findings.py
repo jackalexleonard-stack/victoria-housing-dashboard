@@ -324,7 +324,7 @@ def fmt_value(v: float, unit: str) -> str:
         return f"{v:,.2f}"
     if u.startswith("usd"):  # any USD-per-commodity money unit
         return f"US${v:,.2f}" if abs(v) < 10 else f"US${v:,.0f}"
-    if u in ("dwellings", "applications", "number", "persons", "lots"):
+    if u in ("dwellings", "applications", "number", "persons", "lots", "applicants"):
         return f"{v:,.0f}"
     return f"{v:,.2f}"
 

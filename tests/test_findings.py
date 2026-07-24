@@ -711,11 +711,14 @@ def test_fmt_value_full_unit_vocabulary():
     assert findings.fmt_value(4.35, "percent") == "4.35%"
     assert findings.fmt_value(9.70, "percent") == "9.7%"
     assert findings.fmt_value(3.0, "percent") == "3%"
-    # dwellings / applications / persons / lots / number: thousands, 0dp.
+    # dwellings / applications / persons / lots / number / applicants: thousands, 0dp.
     assert findings.fmt_value(4400, "applications") == "4,400"
     assert findings.fmt_value(4400, "persons") == "4,400"
     assert findings.fmt_value(4400, "lots") == "4,400"
     assert findings.fmt_value(4400, "number") == "4,400"
+    # RoGS public-housing waitlist counts (rogs.py) — regression: this unit
+    # was missing from the integer list, so counts rendered "56,230.00".
+    assert findings.fmt_value(56230, "applicants") == "56,230"
     # index: 1dp, unchanged.
     assert findings.fmt_value(183.4, "index") == "183.4"
     # aud: unchanged.

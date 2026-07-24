@@ -642,4 +642,55 @@ describe('geo banding', () => {
       expect(note).not.toHaveTextContent(/auction/i)
     }
   })
+
+  // CRITICAL whole-branch review fix: a scope="state", region_mode="geo"
+  // context chart (mirrors the real 'activity'/'social_housing_rogs'
+  // charts, both geos:['vic','australia']) renders in the "Wider context"
+  // band at ITS OWN geo ('vic') — the card above already shows the correct
+  // Victorian finding. Before this fix, clicking the card opened the detail
+  // modal at state.geo ('melbourne') regardless: the h2 finding still fell
+  // back to the Victorian sentence (via `?? geos[0]`), but the chart body
+  // filtered strictly on 'melbourne' -> zero rows -> the "No recent data —
+  // source currently unavailable" empty state. A genuine geography gap was
+  // misreported as a source outage, directly contradicting its own headline.
+  test('opening a context chart\'s detail modal renders the chart at its own geo, agreeing with the headline (not the melbourne fallback)', async () => {
+    history.replaceState(null, '', '/?geo=melbourne&sections=supply')
+    const mutated = JSON.parse(JSON.stringify(siteEdge))
+    mutated.series.vic_activity_test = {
+      status: 'ok',
+      meta: { source_name: 'ABS', source_url: 'https://abs.gov.au', frequency: 'quarterly',
+              last_fetched: '2026-07-17T06:00:00Z', last_changed: '2026-07-15T00:00:00Z',
+              last_data_date: '2026-03-31', error: null, cadence_days: 92 },
+      units: { dwellings_commenced: 'dwellings' },
+      points: [
+        { date: '2025-12-31', region: 'vic', metric: 'dwellings_commenced', value: 13600 },
+        { date: '2026-03-31', region: 'vic', metric: 'dwellings_commenced', value: 13429 },
+        { date: '2025-12-31', region: 'australia', metric: 'dwellings_commenced', value: 54000 },
+        { date: '2026-03-31', region: 'australia', metric: 'dwellings_commenced', value: 45154 },
+      ],
+    }
+    mutated.charts.push({
+      id: 'activity_test', section: 'supply', title: 'Commencements, completions, pipeline',
+      series_id: 'vic_activity_test', metrics: null, region_mode: 'geo',
+      scope: 'state', geos: ['vic', 'australia'],
+      percent: false, markers: false, annotate: false, note: null, modal_metrics: null,
+    })
+    mutated.findings.activity_test = {
+      vic: 'Dwellings commenced fell 1.2% to 13,429 in Mar qtr 2026',
+      australia: 'Dwellings commenced fell 16.7% to 45,154 in Mar qtr 2026',
+    }
+    mockFetch(mutated)
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    await openAll()
+    const card = screen.getByRole('button',
+      { name: /Commencements, completions, pipeline — open details/i })
+    await userEvent.click(card)
+    const dialog = await screen.findByRole('dialog', { name: 'Commencements, completions, pipeline' })
+    // (a) the modal chart is NOT the "No recent data" empty state.
+    expect(within(dialog).queryByText(/No recent data/i)).not.toBeInTheDocument()
+    // (b) the modal's h2 finding matches the same Victorian finding the card showed.
+    expect(within(dialog).getByRole('heading', { level: 2 }))
+      .toHaveTextContent('Dwellings commenced fell 1.2% to 13,429 in Mar qtr 2026')
+  })
 })

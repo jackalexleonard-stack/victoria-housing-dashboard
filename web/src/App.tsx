@@ -158,6 +158,23 @@ export default function App({ now = new Date() }: { now?: Date }) {
   const detailChart = useMemo(() =>
     data?.site.charts.find(c => c.id === state.detail) ?? null, [data, state.detail])
 
+  // Mirrors the "Wider context" band's own-geo rule (see the `own` comment
+  // below): a context-band chart (e.g. a scope="state", region_mode="geo"
+  // chart like `activity`, geos:['vic','australia']) has no rows for
+  // state.geo at all — passing state.geo straight into DetailView would
+  // filter chartPoints down to zero and render the honest-outage empty
+  // state under a headline that already quotes the chart's OWN geo (the
+  // `finding` lookup below already falls back to geos[0]), a
+  // headline/chart contradiction plus a geography gap misreported as an
+  // outage. Resolve the modal's geo the same way: only fall back to the
+  // chart's own primary geo when it genuinely doesn't cover state.geo.
+  // A FAILED source (`geos: []`) must keep state.geo and continue to show
+  // the honest outage card — `geos.length > 0` guards that case.
+  const detailGeo = detailChart && detailChart.geos.length > 0 &&
+      !detailChart.geos.includes(state.geo)
+    ? (detailChart.geos[0] as typeof state.geo)
+    : state.geo
+
   if (error) return (
     <main className="max-w-3xl mx-auto px-4 py-16 text-center">
       <h1 className="font-display text-2xl mb-2">The briefing didn't load</h1>
@@ -347,7 +364,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
         <DetailView site={site} chart={detailChart}
                     finding={site.findings[detailChart.id]?.[state.geo] ??
                              site.findings[detailChart.id]?.[detailChart.geos[0]] ?? ''}
-                    range={state.range} geo={state.geo} compare={state.compare}
+                    range={state.range} geo={detailGeo} compare={state.compare}
                     now={now} onClose={closeDetail} onCompare={setCompare} />
       )}
     </main>
