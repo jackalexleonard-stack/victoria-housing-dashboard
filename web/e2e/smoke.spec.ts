@@ -430,16 +430,36 @@ test('detail modal heading renders in the light theme ink, not black', async ({ 
 
 // Task 15: the geo-scoping headline guard — switching geo must genuinely
 // change what's on screen (the card SET, not just card contents), and the
-// footnote must name what isn't published for the selected geo.
-test('switching geo changes which charts exist, and Regional shows no Melbourne figure', async ({ page }) => {
+// footnote must name what isn't published for the selected geo. Re-targeted
+// (post-review) at `land` specifically: a bare card-count inequality is
+// satisfied by `input_costs` alone (an untouched, permanently
+// melbourne-only chart) and stays green whether land's region_mode flip is
+// present, absent, or reverted — it doesn't prove the one behaviour this
+// task delivered. The assertions below do: land (region_mode="geo", real
+// regional_vic data landed in Task 9) must appear in the Regional grid too,
+// and the footnote must name input_costs (the genuinely melbourne-only
+// chart), never land.
+test('switching geo changes which charts exist, and the land chart genuinely tracks the flip', async ({ page }) => {
+  const supply = () => page.locator('section[aria-label="Supply & construction"]')
+
   await gotoDashboard(page, '/?geo=melbourne&sections=supply')
-  await page.locator('section[aria-label="Supply & construction"]').waitFor()
-  const melbCards = await page.locator('section[aria-label="Supply & construction"] article').count()
+  await supply().waitFor()
+  const melbCards = await supply().locator('article').count()
+  await expect(supply().getByText('Greenfield land supply', { exact: true })).toBeVisible()
+
   await gotoDashboard(page, '/?geo=regional_vic&sections=supply')
-  await page.locator('section[aria-label="Supply & construction"]').waitFor()
-  const regionalCards = await page.locator('section[aria-label="Supply & construction"] article').count()
-  // Card SET differs by geo — not merely the contents.
+  await supply().waitFor()
+  const regionalCards = await supply().locator('article').count()
+  // Supplementary check: the card SET differs by geo — not merely the
+  // contents. Kept, but not the guard (see comment above).
   expect(regionalCards).not.toBe(melbCards)
-  // The footnote names what isn't published here.
-  await expect(page.getByTestId('geo-footnote')).toContainText(/not published for Regional Vic/i)
+  // THE guard: land is published for Regional Vic too (Task 9 + the
+  // region_mode flip) — this fails if the flip is reverted.
+  await expect(supply().getByText('Greenfield land supply', { exact: true })).toBeVisible()
+  // The footnote names what isn't published here — input_costs (genuinely
+  // melbourne-only), never land (which now legitimately covers both regions).
+  const footnote = page.getByTestId('geo-footnote')
+  await expect(footnote).toContainText(/not published for Regional Vic/i)
+  await expect(footnote).toContainText(/Construction input costs/i)
+  await expect(footnote).not.toContainText(/Greenfield land supply/i)
 })
