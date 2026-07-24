@@ -222,6 +222,22 @@ CHARTS: list[dict] = [
     _c("waitlist", "social", "Victorian Housing Register", "vic_social_waitlist",
        region_mode="fixed:vic", scope="state",
        noun="Housing Register applications", primary="vhr_total"),
+    # Productivity Commission RoGS Part G §18 — public-housing dwelling stock
+    # and waitlist, Victoria + Australia. region_mode="geo" (not "fixed:vic"):
+    # the series carries both `vic` and `australia` rows, same reasoning as
+    # "activity" above — pinning it would hide the national figure from
+    # chart_geos entirely. scope="state": RoGS publishes no metro/regional
+    # split, only per-jurisdiction. A DIFFERENT figure from the VHR waitlist
+    # above — RoGS' own cross-jurisdiction public-housing count, not Homes
+    # Victoria's VHR count — never combined with it.
+    _c("social_housing_rogs", "social", "Public housing — dwellings & waitlist",
+       "au_social_housing",
+       metrics=["social_dwellings_public", "social_waitlist_public"],
+       region_mode="geo", scope="state",
+       noun="The public housing waitlist", primary="social_waitlist_public",
+       note="Productivity Commission Report on Government Services (RoGS), "
+            "annual — public housing only, not all social housing; a "
+            "separate figure from the Victorian Housing Register above."),
     # --- world ---
     # source_name: intl_fred's one shared meta.source_name ("FRED — Brent
     # crude, US 10yr Treasury, AUD/USD") reads fine on the card caption
@@ -521,6 +537,9 @@ METRIC_LABELS: dict[str, str] = {
     # social housing register
     "vhr_total": "Total applications", "vhr_priority": "Priority applications",
     "vhr_register_of_interest": "Register of interest",
+    # RoGS public housing (dwellings & waitlist)
+    "social_dwellings_public": "Public housing dwellings",
+    "social_waitlist_public": "Public housing waitlist",
     # greenfield land supply
     "greenfield_lot_supply": "Lot supply", "greenfield_lots_titled": "Lots titled",
     "greenfield_years_of_supply": "Years of supply",

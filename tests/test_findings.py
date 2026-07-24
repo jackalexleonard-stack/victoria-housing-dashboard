@@ -100,11 +100,12 @@ def test_failed_series_produces_no_findings_entries_for_any_geo():
     assert out["auctions"] == {}
 
 
-def test_exactly_seven_charts_carry_a_note():
+def test_exactly_eight_charts_carry_a_note():
     noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
     assert set(noted) == {"hvi_melbourne", "hvi_australia",
                            "median_rent", "median_rent_by_type",
-                           "population_gccsa", "au_rent_index", "output_costs"}
+                           "population_gccsa", "au_rent_index", "output_costs",
+                           "social_housing_rogs"}
     assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
         "Daily index — the free Cotality feed covers a rolling year; "
         "history accumulates from Jul 2025.")
@@ -126,6 +127,13 @@ def test_exactly_seven_charts_carry_a_note():
         "ABS OUTPUT price index — what builders charge, not what they "
         "pay for materials (see input costs above); a different measure, "
         "never combined with it.")
+    # Task 14: RoGS' cross-jurisdiction public-housing count is a different
+    # figure from the VHR waitlist above (Homes Victoria's own count) — the
+    # note keeps them from being mistaken for one another.
+    assert noted["social_housing_rogs"] == (
+        "Productivity Commission Report on Government Services (RoGS), "
+        "annual — public housing only, not all social housing; a "
+        "separate figure from the Victorian Housing Register above.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
 

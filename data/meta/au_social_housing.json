@@ -1,0 +1,11 @@
+{
+  "series_id": "au_social_housing",
+  "source_name": "Productivity Commission \u2014 Report on Government Services, Part G, Section 18 (Housing)",
+  "source_url": "https://assets.pc.gov.au/2026-06/rogs-202606-partg-section18-housing-dataset_0.csv",
+  "frequency": "annual",
+  "status": "ok",
+  "last_fetched": "2026-07-24T00:53:33Z",
+  "error": null,
+  "last_data_date": "2025-06-30",
+  "last_changed": "2026-07-24T00:53:33Z"
+}
