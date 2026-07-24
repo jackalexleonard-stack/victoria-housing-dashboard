@@ -143,6 +143,42 @@ def parse_input_costs(raw: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# vic_construction_costs — Producer Price Indexes (PPI), OUTPUT prices for
+# Victorian building construction (what builders CHARGE, vs vic_input_costs
+# above which is what Melbourne builders PAY for materials — a different
+# concept; kept as its own series/chart, never blended with the input index).
+# key order: MEASURE.INDEX.TYPE.FREQ
+# GET .../PPI/1.1450001+1451374+1451550.OUTPUT.Q
+#   MEASURE 1 Index Number · INDEX (Victoria state-level series):
+#   1450001 "3011 House construction Victoria" / 1451374 "3019 Other
+#   residential building construction Victoria" / 1451550 "30 Building
+#   construction Victoria" (the parent group, covers all building types, not
+#   just residential) · TYPE OUTPUT · Quarterly. Region is state-level `vic`
+#   (this dataflow does not publish a Melbourne/regional split for OUTPUT,
+#   unlike the Melbourne-only INPUT index above) — no derivation/combination.
+# ---------------------------------------------------------------------------
+_OUTPUT_KEY = "1.1450001+1451374+1451550.OUTPUT.Q"
+_OUTPUT_METRIC = {
+    "1450001": "output_house_construction",
+    "1451374": "output_other_residential",
+    "1451550": "output_building_construction",
+}
+
+
+def fetch_construction_costs() -> str:
+    return abs_csv("PPI", _OUTPUT_KEY)
+
+
+def parse_construction_costs(raw: str) -> pd.DataFrame:
+    return _tidy(
+        pd.read_csv(io.StringIO(raw)),
+        region_const="vic",
+        metric_col="INDEX", metric_map=_OUTPUT_METRIC,
+        unit="index",
+    )
+
+
+# ---------------------------------------------------------------------------
 # au_lending — Lending Indicators, Housing Finance (LEND_HOUSING), quarterly
 # key: MEASURE.DATA_ITEM.LOAN_TYPE.LOAN_PURPOSE.LENDER_TYPE.HOUSING_PURPOSE.TSEST.REGION.FREQ
 # GET .../LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT.DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q
@@ -411,6 +447,15 @@ SERIES = [
         frequency="quarterly",
         fetch=fetch_input_costs,
         parse=parse_input_costs,
+    ),
+    common.Series(
+        id="vic_construction_costs",
+        source_name="ABS Producer Price Indexes — Victoria building construction "
+                     "outputs (PPI)",
+        source_url=f"{ABS_BASE}/PPI/{_OUTPUT_KEY}",
+        frequency="quarterly",
+        fetch=fetch_construction_costs,
+        parse=parse_construction_costs,
     ),
     common.Series(
         id="au_lending",

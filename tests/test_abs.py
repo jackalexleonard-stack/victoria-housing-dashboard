@@ -242,3 +242,33 @@ def test_au_rents_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
 
     assert df["value"].notna().all()
     assert not df.duplicated(["date", "region", "metric"]).any()
+
+
+def test_construction_output_parses_the_fixture_into_tidy_rows_with_the_expected_regions():
+    from pipeline.sources.abs import parse_construction_costs
+
+    raw = (FIX / "abs_ppi_output_vic.csv").read_text(encoding="utf-8")
+    df = parse_construction_costs(raw)
+
+    # Schema is fixed law for every series in this repo.
+    assert list(df.columns) == ["date", "region", "metric", "value", "unit"]
+    # (1) The regions this source is being added FOR — the whole point of the
+    # task. This is a state-level PPI OUTPUT index (what builders charge),
+    # not a GCCSA split — every row is region "vic".
+    assert set(df["region"]) == {"vic"}
+    # (2) Metrics are the ones the chart will plot, nothing stray.
+    assert set(df["metric"]) == {
+        "output_house_construction",
+        "output_other_residential",
+        "output_building_construction",
+    }
+    assert (df["unit"] == "index").all()
+    # (3) A spot value hand-verified against the fixture (INDEX=1450001 "3011
+    # House construction Victoria", TYPE=OUTPUT, TIME_PERIOD=2026-Q1,
+    # OBS_VALUE=163.5).
+    row = df[(df.region == "vic") & (df.date == "2026-03-31")
+             & (df.metric == "output_house_construction")]
+    assert len(row) == 1 and row.iloc[0]["value"] == 163.5
+
+    assert df["value"].notna().all()
+    assert not df.duplicated(["date", "region", "metric"]).any()

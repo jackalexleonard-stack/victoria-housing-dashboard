@@ -100,11 +100,11 @@ def test_failed_series_produces_no_findings_entries_for_any_geo():
     assert out["auctions"] == {}
 
 
-def test_exactly_six_charts_carry_a_note():
+def test_exactly_seven_charts_carry_a_note():
     noted = {c["id"]: c["note"] for c in findings.CHARTS if c.get("note")}
     assert set(noted) == {"hvi_melbourne", "hvi_australia",
                            "median_rent", "median_rent_by_type",
-                           "population_gccsa", "au_rent_index"}
+                           "population_gccsa", "au_rent_index", "output_costs"}
     assert noted["hvi_melbourne"] == noted["hvi_australia"] == (
         "Daily index — the free Cotality feed covers a rolling year; "
         "history accumulates from Jul 2025.")
@@ -119,6 +119,13 @@ def test_exactly_six_charts_carry_a_note():
         "ABS CPI rents index for the weighted average of eight capital "
         "cities — an index, not a bond-based median; not comparable "
         "with the Victorian median rents above.")
+    # Task 12: OUTPUT price index (what builders charge) is a different
+    # concept from input_costs (what builders pay) — the note keeps them
+    # from being mistaken for one another.
+    assert noted["output_costs"] == (
+        "ABS OUTPUT price index — what builders charge, not what they "
+        "pay for materials (see input costs above); a different measure, "
+        "never combined with it.")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
 

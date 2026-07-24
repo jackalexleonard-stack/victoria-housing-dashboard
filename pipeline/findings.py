@@ -166,6 +166,21 @@ CHARTS: list[dict] = [
     _c("input_costs", "supply", "Construction input costs — Melbourne",
        "vic_input_costs", region_mode="fixed:melbourne",
        noun="Input costs", primary="input_all_groups"),
+    # ABS PPI OUTPUT index — what builders CHARGE for building construction,
+    # a different concept from input_costs above (what Melbourne builders PAY
+    # for materials). Separate series (vic_construction_costs), separate
+    # chart card, state-level `vic` region (this dataflow publishes no
+    # Melbourne/regional split for OUTPUT) — title, note, and metric labels
+    # all say "output" explicitly so the two charts are never mistaken for
+    # one another, sitting directly below input_costs for easy comparison.
+    _c("output_costs", "supply", "Construction output costs — Victoria",
+       "vic_construction_costs", region_mode="fixed:vic", scope="state",
+       metrics=["output_house_construction", "output_building_construction",
+                "output_other_residential"],
+       noun="Builders' output prices", primary="output_house_construction",
+       note="ABS OUTPUT price index — what builders charge, not what they "
+            "pay for materials (see input costs above); a different measure, "
+            "never combined with it."),
     # --- money ---
     _c("cash_rate", "money", "RBA cash rate target", "au_cash_rate",
        metrics=["cash_rate"], region_mode="fixed:australia", scope="national",
@@ -512,6 +527,10 @@ METRIC_LABELS: dict[str, str] = {
     # construction input costs
     "input_all_groups": "All groups", "input_cement": "Cement",
     "input_steel": "Steel", "input_timber": "Timber",
+    # construction output costs (what builders charge, vs input above)
+    "output_house_construction": "House construction (output)",
+    "output_other_residential": "Other residential (output)",
+    "output_building_construction": "All building construction (output)",
     # dwelling activity
     "dwellings_commenced": "Commenced", "dwellings_completed": "Completed",
     "dwellings_under_construction": "Under construction",
