@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from './types'
 import { TILE_CHART } from '../components/HeroTiles'
+import { SCOPE_BADGE } from './geoBands'
 import { headlinePool, latestForGeo, tileValueMatchesPrimary,
          prefersReducedMotion, useConveyor, MIN_ROTATE, ROTATE_MS } from './conveyor'
 
@@ -35,38 +36,52 @@ describe('prefersReducedMotion', () => {
   })
 })
 
-describe('headlinePool', () => {
-  test('hero_lead first, then hero tile order, deduped, geo-filtered', () => {
-    // Fixture: hero_lead=melb_rent; hero order cash_rate,
-    // melb_dwelling_values, melb_rent, oo_lending, mortgage_new. Since the
-    // 2026-07-24 banner batch, membership requires a finding keyed EXACTLY
-    // to the passed geo (site.findings[chartId]?.[geo]) — cash_rate and
-    // mortgage_new are national-scope charts whose one finding is keyed
-    // 'australia' (their own fixed geo; pipeline/findings.py's
-    // build_findings never replicates a finding across every UI geo), so
-    // they no longer qualify for the melbourne pool either. Only
-    // melb_rent (median_rent.melbourne), melb_dwelling_values
-    // (hvi_melbourne.melbourne) and oo_lending (lending.melbourne) do.
-    expect(headlinePool(site, 'melbourne')).toEqual(
-      ['melb_rent', 'melb_dwelling_values', 'oo_lending'])
+describe('headlinePool (band-aligned, spec §1 amendment 2026-07-24 — supersedes strict-geo)', () => {
+  test('hero_lead first, then hero tile order, deduped; band entries badged at their own geo', () => {
+    // Fixture: hero_lead=melb_rent; hero order cash_rate, melb_dwelling_values,
+    // melb_rent, oo_lending, mortgage_new. cash_rate/mortgage_new are
+    // national-scope charts whose one finding is keyed 'australia' (their own
+    // fixed geo — pipeline/findings.py's build_findings never replicates a
+    // finding across every UI geo): they don't qualify at geo='melbourne'
+    // via rule 1, but DO qualify via rule 2 (broader scope + some finding),
+    // entering badged at their own 'australia'. melb_rent/melb_dwelling_values/
+    // oo_lending each carry a real 'melbourne' finding (verified:
+    // findings.median_rent.melbourne, findings.hvi_melbourne.melbourne,
+    // findings.lending.melbourne all exist) -> first-class, no badge.
+    expect(headlinePool(site, 'melbourne')).toEqual([
+      { key: 'melb_rent', geo: 'melbourne' },
+      { key: 'cash_rate', geo: 'australia', badge: 'Australia' },
+      { key: 'melb_dwelling_values', geo: 'melbourne' },
+      { key: 'oo_lending', geo: 'melbourne' },
+      { key: 'mortgage_new', geo: 'australia', badge: 'Australia' },
+    ])
   })
 
-  test('keys whose chart has no finding are dropped', () => {
+  test('byte-identical to the pre-migration default-view pool once badges are stripped', () => {
+    // The plan's Global Constraints: "The default (melbourne, 5y) view's
+    // banner must be byte-identical to today." Band alignment restores
+    // exactly that — this is the direct proof, independent of the full
+    // PoolEntry shape asserted above.
+    expect(headlinePool(site, 'melbourne').map(e => e.key)).toEqual(
+      ['melb_rent', 'cash_rate', 'melb_dwelling_values', 'oo_lending', 'mortgage_new'])
+  })
+
+  test('keys whose chart has no finding at all (any geo) are dropped', () => {
     const s = { ...site, findings: { median_rent: site.findings.median_rent } }
-    expect(headlinePool(s, 'melbourne')).toEqual(['melb_rent'])
+    expect(headlinePool(s, 'melbourne')).toEqual([{ key: 'melb_rent', geo: 'melbourne' }])
   })
 
   test('the "empty" hero_lead sentinel degrades to plain hero order', () => {
-    // geo='australia' here (not 'melbourne'): cash_rate's finding is keyed
-    // 'australia' (see the test above), so this is the geo where it's
-    // actually first in hero order.
+    // cash_rate is first in hero order and now qualifies at geo='melbourne'
+    // itself via the band rule (badged 'Australia'), so no need to pick a
+    // different geo to see it lead.
     const s = { ...site, hero_lead: 'empty' }
-    expect(headlinePool(s, 'australia')[0]).toBe('cash_rate')
+    expect(headlinePool(s, 'melbourne')[0]).toEqual({ key: 'cash_rate', geo: 'australia', badge: 'Australia' })
   })
 
   test('a hero_lead that is not among the hero tiles is skipped (LeadCard guard preserved)', () => {
     const s = { ...site, hero_lead: 'vic_approvals' }
-    expect(headlinePool(s, 'melbourne')).not.toContain('vic_approvals')
+    expect(headlinePool(s, 'melbourne').map(e => e.key)).not.toContain('vic_approvals')
   })
 
   test('MIN_ROTATE is 3 and ROTATE_MS is 5000 (spec §3)', () => {
@@ -75,43 +90,54 @@ describe('headlinePool', () => {
   })
 })
 
-describe('headlinePool per geo (2026-07-24 banner batch)', () => {
+describe('headlinePool: band-aligned per-geo behaviour (2026-07-24 banner batch)', () => {
   // site.edge.json carries no regional_vic finding anywhere (verified:
   // Object.entries(site.findings).filter(([,f]) => 'regional_vic' in f)
   // === [] — every finding in this fixture is keyed 'melbourne' or
   // 'australia' only). Per the brief's adapt-when-the-fixture-lacks-the-
   // shape rule, add ONE synthetic regional_vic finding for median_rent
   // (mirroring the melbourne sentence's style) so the regional-pool tests
-  // below exercise real per-geo membership instead of passing vacuously
-  // against an always-empty pool.
+  // below exercise real first-class-at-geo membership instead of passing
+  // vacuously against an always-empty pool.
   const siteRegional: typeof site = { ...site, findings: { ...site.findings,
     median_rent: { ...site.findings.median_rent,
       regional_vic: 'The median rent held at $410/wk in Mar qtr 2026' } } }
 
-  test('melbourne pool is exactly the charts whose finding is keyed "melbourne"', () => {
-    // Regression check (adapted to the real fixture — see the plain
-    // 'headlinePool' describe block above for why cash_rate/mortgage_new
-    // are absent): the default view's pool under the new two-arg API.
-    expect(headlinePool(site, 'melbourne')).toEqual(
-      ['melb_rent', 'melb_dwelling_values', 'oo_lending'])
-  })
-
-  test('a geo pool contains only charts with a finding for THAT geo', () => {
-    for (const key of headlinePool(siteRegional, 'regional_vic')) {
-      const chartId = TILE_CHART[key]
-      expect(siteRegional.findings[chartId]?.regional_vic, `${key} lacks a regional finding`).toBeTruthy()
+  test('every entry is honest: first-class at the requested geo, or badged at the chart\'s own broader-scope geo', () => {
+    const pool = headlinePool(siteRegional, 'regional_vic')
+    expect(pool.length).toBeGreaterThan(0)   // a vacuous loop below would prove nothing
+    for (const entry of pool) {
+      const chartId = TILE_CHART[entry.key]
+      const chart = siteRegional.charts.find(c => c.id === chartId)!
+      if (entry.geo === 'regional_vic') {
+        expect(siteRegional.findings[chartId]?.regional_vic,
+               `${entry.key} claims regional_vic without a finding`).toBeTruthy()
+        expect(entry.badge).toBeUndefined()
+      } else {
+        expect(['state', 'national', 'global']).toContain(chart.scope)
+        expect(entry.badge).toBe(SCOPE_BADGE[chart.scope])
+        expect(entry.geo).toBe(chart.geos[0])
+      }
     }
   })
 
-  test('a chart without a finding for the geo is excluded', () => {
-    // cash_rate's chart has no regional_vic finding in the fixture.
-    expect(headlinePool(siteRegional, 'regional_vic')).not.toContain('cash_rate')
+  test('a geo-scope chart lacking the selected geo is excluded, even when its own geo has a real finding', () => {
+    // oo_lending's chart ('lending') is scope 'geo', geos: ['melbourne']
+    // only — no regional_vic finding, and 'geo' scope doesn't qualify for
+    // the band carve-out (rule 2 requires state/national/global), so it's
+    // excluded at regional_vic. Real fixture, no synthetic data needed.
+    expect(headlinePool(site, 'regional_vic').map(e => e.key)).not.toContain('oo_lending')
   })
 
-  test('hero_lead leads only when it qualifies for the geo', () => {
+  test('a national-scope chart is badged at its own geo under a non-default selected geo too', () => {
+    const entry = headlinePool(site, 'regional_vic').find(e => e.key === 'cash_rate')
+    expect(entry).toEqual({ key: 'cash_rate', geo: 'australia', badge: 'Australia' })
+  })
+
+  test('hero_lead leads first-class (no badge) when it has a real finding for the selected geo', () => {
     // Fixture hero_lead = melb_rent -> median_rent, which (via the inline
     // regional_vic finding above) HAS regional data:
-    expect(headlinePool(siteRegional, 'regional_vic')[0]).toBe('melb_rent')
+    expect(headlinePool(siteRegional, 'regional_vic')[0]).toEqual({ key: 'melb_rent', geo: 'regional_vic' })
   })
 })
 

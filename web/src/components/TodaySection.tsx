@@ -123,7 +123,10 @@ export function TodaySection({ site, news, onOpen, now, filtersActive = false,
 
   // Findings are computed for the exported default view only (unchanged
   // 2.4 rule) — filters-active zeroes the pool, which hides the whole row.
-  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site, 'melbourne')),
+  // headlinePool now returns PoolEntry[] (band-aligned, 2026-07-24
+  // amendment) — this component still only consumes the string keys until
+  // Task 2 renders each card at entry.geo/badge.
+  const pool = useMemo(() => (filtersActive ? [] : headlinePool(site, 'melbourne').map(e => e.key)),
                        // Task 2 threads the real geo
                        [site, filtersActive])
   const rotating = pool.length >= MIN_ROTATE

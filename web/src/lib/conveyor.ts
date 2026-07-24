@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { TILE_CHART } from '../components/HeroTiles'
 import type { SiteData } from './types'
 import type { Geo } from './urlState'
+import { SCOPE_BADGE } from './geoBands'
 
 export const ROTATE_MS = 5000
 export const MIN_ROTATE = 3
@@ -13,28 +14,51 @@ export const prefersReducedMotion = () =>
   typeof matchMedia !== 'undefined' &&
   matchMedia('(prefers-reduced-motion: reduce)').matches
 
-// The rotating headline pool, per geography (2026-07-24 banner batch):
-// hero_lead first, then the remaining hero picks in exported order, deduped —
-// but only keys whose chart carries a finding for the SELECTED geo, so the
-// banner quotes that geography's own sentences and never another's. The
-// zero-geo `{}` guard the old any-geo check needed collapses into `?.[geo]`
-// naturally. Note: a national/state-scope chart's finding is keyed by ITS
-// OWN fixed geo (e.g. cash_rate -> 'australia' only — pipeline/findings.py's
-// build_findings iterates `chart_geos(chart)`, never replicating a finding
-// across every UI geo), so those charts now drop out of every pool except
-// 'australia' itself, including the melbourne default — see
-// conveyor.test.ts's per-geo describe block for the exact before/after.
-export function headlinePool(site: SiteData, geo: Geo): string[] {
+// A pool slot: the hero key, the geo its finding/value should actually be
+// read at, and (band entries only) the scope badge to show alongside it.
+export type PoolEntry = { key: string; geo: Geo; badge?: string }
+
+// The rotating headline pool, band-aligned (spec §1 amendment, 2026-07-24 —
+// supersedes the earlier same-day strict-geo rule, which collapsed the
+// melbourne banner to whichever hero keys happened to have a literal
+// 'melbourne' finding and dropped cash_rate/mortgage_new permanently: a
+// national-scope chart's finding is authored under its OWN fixed geo, e.g.
+// 'australia', never replicated per UI geo — pipeline/findings.py's
+// build_findings iterates `chart_geos(chart)` only). Band-aligned mirrors
+// the page's own grid bands instead: hero_lead first, then the remaining
+// hero picks in exported order, deduped; for each key —
+//   1. the chart has a finding for the SELECTED geo -> first-class entry
+//      `{ key, geo }`, rendered/quoted at that geo;
+//   2. else the chart's scope is broader than local (state/national/
+//      global) AND it has ANY finding -> a badged entry `{ key, geo:
+//      chart.geos[0], badge: SCOPE_BADGE[scope] }`, rendered at the
+//      chart's own geo — exactly like the grid's "Wider context" band;
+//   3. else (a geo-scope chart lacking this geo, or a broken source with
+//      findings: {}) -> excluded, matching the grid's hidden/absent bands.
+// At the melbourne default this restores the pre-migration pool
+// byte-for-byte (see conveyor.test.ts's regression test) — cash_rate and
+// mortgage_new re-enter, badged 'Australia', at their own geo.
+export function headlinePool(site: SiteData, geo: Geo): PoolEntry[] {
   const lead = site.hero_lead && site.hero_lead !== 'empty' ? [site.hero_lead] : []
   const seen = new Set<string>()
-  const pool: string[] = []
+  const pool: PoolEntry[] = []
   for (const k of [...lead, ...site.hero.map(t => t.key)]) {
     if (k === 'empty' || seen.has(k)) continue
     seen.add(k)
-    const chartId = TILE_CHART[k]
-    if (!chartId || !site.findings[chartId]?.[geo]) continue
     if (!site.hero.some(t => t.key === k)) continue
-    pool.push(k)
+    const chartId = TILE_CHART[k]
+    const chart = chartId ? site.charts.find(c => c.id === chartId) : undefined
+    if (!chart) continue
+    const findings = site.findings[chartId]
+    if (findings?.[geo]) {
+      pool.push({ key: k, geo })
+      continue
+    }
+    const broaderScope = chart.scope === 'state' || chart.scope === 'national' || chart.scope === 'global'
+    const ownGeo = chart.geos[0]
+    if (broaderScope && findings && Object.keys(findings).length > 0 && ownGeo) {
+      pool.push({ key: k, geo: ownGeo as Geo, badge: SCOPE_BADGE[chart.scope] })
+    }
   }
   return pool
 }
