@@ -4,6 +4,7 @@ import { Chip } from './Chip'
 import { lineName, useChartData } from '../lib/selectors'
 import { fmtPeriod, fmtUnit, shortSource } from '../lib/format'
 import { xExtentOf } from '../lib/chartMath'
+import { isDeadChart } from '../lib/geoBands'
 import type { ChartSpec, SiteData } from '../lib/types'
 import type { Geo, Range } from '../lib/urlState'
 
@@ -174,6 +175,35 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
         ? <span>{st.label}</span>
         : <Chip kind={st.kind === 'ageing' ? 'warn' : 'bad'}>{st.label}</Chip>
   )
+
+  // 2026-07-24 banner batch (Task 3, design review "unavailable-source cards
+  // should be much smaller"): a genuinely dead chart — isDeadChart, NOT bare
+  // isBrokenSource/lines.length — renders as one compact row instead of a
+  // full-height card, so an outage never wastes a full card of page space.
+  // NOT keyed on lines.length: a healthy chart merely empty at the current
+  // RANGE keeps the existing full-size `failedEmpty` treatment below
+  // unchanged. NOT keyed on bare isBrokenSource either: see isDeadChart's own
+  // comment (geoBands.ts) — a source whose fetch failed today but that still
+  // carries real historical data for a geo it's known to cover keeps its
+  // full chart. A single <button>, matching the same idiom the compact World
+  // KPI tiles use (HeroTiles' Tile) rather than the two-layer article+button
+  // the full-size card uses below — the row IS the whole clickable surface,
+  // reachable/activatable by keyboard exactly like every other card.
+  if (isDeadChart(chart, entry)) {
+    return (
+      <button type="button" data-testid="outage-row" onClick={() => onOpen(chart.id)}
+              aria-label={`${chart.title} — open details`}
+              className="w-full text-left bg-card border border-line rounded-lg px-4 py-2.5
+                         cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1
+                         hover:border-blue group">
+        <span className="font-medium text-sm group-hover:text-blue">{chart.title}</span>
+        {statusChip}
+        <span className="text-xs text-faint">
+          {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
+        </span>
+      </button>
+    )
+  }
 
   return (
     <article className="bg-card border border-line rounded-lg p-4">

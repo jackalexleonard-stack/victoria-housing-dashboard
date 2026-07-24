@@ -4,9 +4,9 @@ import type { NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate, fmtPeriod } from './lib/format'
 import { sectionOutageNotice, type SectionState } from './lib/sections'
-import { bandFor, hiddenTitles, SCOPE_BADGE } from './lib/geoBands'
+import { bandFor, hiddenTitles, isDeadChart, SCOPE_BADGE } from './lib/geoBands'
 import { GEO_LABEL } from './lib/selectors'
-import { DEFAULT_GEO, DEFAULT_RANGE, useUrlState } from './lib/urlState'
+import { useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead, type FailedSource } from './components/Masthead'
 import { FilterBar } from './components/FilterBar'
@@ -210,7 +210,6 @@ export default function App({ now = new Date() }: { now?: Date }) {
     try { localStorage.setItem(WELCOME_KEY, '1') } catch { /* ignore */ }
     setShowWelcome(false)
   }
-  const filtersActive = state.range !== DEFAULT_RANGE || state.geo !== DEFAULT_GEO
   const failedSources: FailedSource[] = Object.values(site.series)
     .filter(s => staleness(s, now).kind === 'failed')
     .map(s => ({
@@ -252,7 +251,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
       <div ref={el => { sectionsRef.current.today = el }} id="today"
            className="pt-6 scroll-mt-28">
         <TodaySection site={site} news={news} onOpen={openDetail} now={now}
-                      filtersActive={filtersActive} detailOpen={!!detailChart} />
+                      geo={state.geo} detailOpen={!!detailChart} />
       </div>
       {contentSections.map(([id, label]) => {
         const charts = site.charts.filter(c => c.section === id)
@@ -290,22 +289,36 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   // or is a genuine gap for this geography, named in the
                   // footnote instead of rendering a dead-looking card.
                   const sectionCharts = site.charts.filter(c => c.section === id)
-                  const grid = sectionCharts.filter(c =>
+                  const gridAll = sectionCharts.filter(c =>
                     bandFor(c, state.geo, site.series[c.series_id]) === 'grid')
+                  // Design review "unavailable-source cards must always sit
+                  // at the END of a section, never the beginning": split the
+                  // grid band into healthy charts (registry order preserved)
+                  // and dead charts (registry order preserved among
+                  // themselves), and render dead charts LAST, after every
+                  // healthy card — never as the section's spanning lead. The
+                  // D2(e) lead/dangling span logic below is computed against
+                  // the HEALTHY sublist only, so a dead chart can never
+                  // become the section's lead card even when it happens to
+                  // sit first in registry order (e.g. Prices' `auctions`).
+                  const healthy = gridAll.filter(c =>
+                    !isDeadChart(c, site.series[c.series_id]))
+                  const dead = gridAll.filter(c =>
+                    isDeadChart(c, site.series[c.series_id]))
                   const context = sectionCharts.filter(c =>
                     bandFor(c, state.geo, site.series[c.series_id]) === 'context')
                   const hidden = hiddenTitles(sectionCharts, state.geo, site.series)
                   return (
                     <>
                       <div className="grid sm:grid-cols-2 gap-4">
-                        {grid.map((c, i) => {
+                        {healthy.map((c, i) => {
                           // D2(e): the first card always spans full width (the
                           // section's lead chart); everything else pairs up
-                          // 2-per-row. When the remaining count (grid.length -
-                          // 1) is odd, the LAST card is left alone in its own row
-                          // with the right half of the grid empty — span it full
-                          // width too instead of leaving it dangling.
-                          const dangling = i === grid.length - 1 && (grid.length - 1) % 2 === 1
+                          // 2-per-row. When the remaining count (healthy.length
+                          // - 1) is odd, the LAST card is left alone in its own
+                          // row with the right half of the grid empty — span it
+                          // full width too instead of leaving it dangling.
+                          const dangling = i === healthy.length - 1 && (healthy.length - 1) % 2 === 1
                           return (
                             <div key={c.id} className={i === 0 || dangling ? 'sm:col-span-2' : ''}>
                               <ChartCard site={site} chart={c} finding={site.findings[c.id]?.[state.geo] ?? ''}
@@ -314,6 +327,13 @@ export default function App({ now = new Date() }: { now?: Date }) {
                             </div>
                           )
                         })}
+                        {dead.map(c => (
+                          <div key={c.id} className="sm:col-span-2">
+                            <ChartCard site={site} chart={c} finding={site.findings[c.id]?.[state.geo] ?? ''}
+                                       range={state.range} geo={state.geo} now={now}
+                                       onOpen={openDetail} quietOutage={!!outageNotice} />
+                          </div>
+                        ))}
                       </div>
                       {context.length > 0 && (
                         <div data-testid="context-band" className="mt-6">

@@ -463,3 +463,55 @@ test('switching geo changes which charts exist, and the land chart genuinely tra
   await expect(footnote).toContainText(/Construction input costs/i)
   await expect(footnote).not.toContainText(/Greenfield land supply/i)
 })
+
+// 2026-07-24 banner batch: (1) the headline banner is now geo-aware and
+// always on, so it must actually rotate under a non-default geo too, not
+// just under the default melbourne view (already covered by the "headline
+// conveyor" describe above); (2) unavailable-source cards sort to the end of
+// their section as compact rows.
+test.describe('banner + outage cards (2026-07-24)', () => {
+  test.use({ reducedMotion: 'no-preference' })
+
+  // Scratch-checked (see task-3-report.md): site.real.json carries 9 charts
+  // with a regional_vic finding, well above the "≥3" bar this test needs to
+  // safely assert rotation rather than mere static presence.
+  test('the banner rotates under Regional Vic with regional findings', async ({ page }) => {
+    await page.clock.install()
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await gotoDashboard(page, '/?geo=regional_vic')
+    const lead = page.getByTestId('lead-finding')
+    await lead.waitFor()
+    const before = await lead.textContent()
+    await page.clock.fastForward(5100)
+    await expect(lead).not.toHaveText(before!)
+  })
+
+  // site.real.json's Prices section has two dead charts (reiv_median,
+  // auctions — both status 'failed' with no historical geo coverage) and
+  // four healthy ones; reiv_median leads auctions in registry order, ahead
+  // of two of the healthy charts. Assert the STRUCTURAL invariant (every
+  // outage row sits after every healthy card in the section's own chart
+  // grid, never interleaved) rather than just "a row exists somewhere" —
+  // scoped to the grid's own direct children so the (also healthy,
+  // `<article>`-rendering) "Wider context" band underneath it can't
+  // false-fail this by sitting after the outage rows in DOM order.
+  test('dead sources sit at the end of Prices as compact rows, after every healthy card', async ({ page }) => {
+    await gotoDashboard(page, '/?geo=melbourne&sections=prices')
+    const prices = page.locator('section[aria-label="Prices"]')
+    await prices.waitFor()
+    const rows = prices.getByTestId('outage-row')
+    await expect(rows.first()).toBeVisible()
+    expect(await rows.count()).toBeGreaterThanOrEqual(2)   // reiv_median + auctions
+    const orderOk = await page.evaluate(() => {
+      const section = document.querySelector('section[aria-label="Prices"]')!
+      const grid = section.querySelector(':scope > div.grid')
+      if (!grid) return false
+      const cells = [...grid.children]
+      const isOutage = (el: Element) => el.querySelector('[data-testid="outage-row"]') != null
+      const firstOutage = cells.findIndex(isOutage)
+      return firstOutage !== -1 &&
+        cells.every((c, i) => (i < firstOutage) === !isOutage(c))
+    })
+    expect(orderOk).toBe(true)
+  })
+})
