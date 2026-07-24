@@ -75,19 +75,36 @@ function primaryMetricOf(site: SiteData, tileKey: string):
   return metric ? { chart, metric } : null
 }
 
-// Does the EXPORT tile's value equal the chart's primary-metric level at the
-// default view? Some tiles pair a level chart with a rate value (the HVI MoM
-// tiles) — for those, formatting a per-geo primary-metric level with the
-// tile's formatter would misrepresent it, so the banner omits the line
-// instead (spec §1: when in doubt, OMIT). Data-driven — no hand-kept list.
-export function tileValueMatchesPrimary(site: SiteData, tileKey: string): boolean {
+// Final-review fix (2026-07-24): the tri-state successor to the old boolean
+// tileValueMatchesPrimary, which only ever checked the chart's FIRST geo
+// (chart.geos[0]) — fine for a badge entry (always rendered at its own
+// chart.geos[0]) but wrong for a first-class entry rendered at some OTHER
+// geo the chart also covers: vic_approvals' export tile is the vic-wide
+// number (chart.geos = [melbourne, regional_vic, vic, australia]), which the
+// old boolean call — always probing geos[0] === melbourne — evaluated
+// against the MELBOURNE level, mismatched, and so paired the Melbourne
+// finding ("fell 16.3% to 3,343") with the Victoria-wide export value (4,704)
+// on the melbourne default banner. The three-way split lets the caller tell
+// "the tile quotes another geography's own number" (reroute to that geo)
+// apart from "the tile is a different representation of ITS OWN geography"
+// (keep the export value) instead of collapsing both into one false.
+export type TileGeoMatch = { kind: 'at-render-geo' } | { kind: 'other-geo'; geo: string } | { kind: 'none' }
+
+// Which of the chart's own geos (if any) does the EXPORT tile's value match
+// the primary-metric level at? Distinguishes "the tile quotes another
+// geography's number" (reroute) from "the tile is a different representation
+// of its own geography" (keep).
+export function tileValueGeoMatch(site: SiteData, tileKey: string, renderGeo: Geo): TileGeoMatch {
   const tile = site.hero.find(t => t.key === tileKey)
   const pm = primaryMetricOf(site, tileKey)
-  if (!tile || tile.value == null || !pm) return false
-  const geo0 = pm.chart.geos[0]
-  const latest = latestForGeo(site, tileKey, geo0 as Geo)
-  if (!latest) return false
-  return Math.abs(latest.value - tile.value) < 1e-6 * Math.max(1, Math.abs(tile.value))
+  if (!tile || tile.value == null || !pm) return { kind: 'none' }
+  for (const g of pm.chart.geos) {
+    const latest = latestForGeo(site, tileKey, g as Geo)
+    if (latest && Math.abs(latest.value - tile.value) < 1e-6 * Math.max(1, Math.abs(tile.value))) {
+      return g === renderGeo ? { kind: 'at-render-geo' } : { kind: 'other-geo', geo: g }
+    }
+  }
+  return { kind: 'none' }
 }
 
 // Latest value (and same-metric delta) of the tile's chart primary metric at

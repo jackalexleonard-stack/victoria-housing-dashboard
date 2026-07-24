@@ -3,7 +3,7 @@ import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData } from './types'
 import { TILE_CHART } from '../components/HeroTiles'
 import { SCOPE_BADGE } from './geoBands'
-import { headlinePool, latestForGeo, tileValueMatchesPrimary,
+import { headlinePool, latestForGeo, tileValueGeoMatch,
          prefersReducedMotion, useConveyor, MIN_ROTATE, ROTATE_MS } from './conveyor'
 
 const site = assertSiteData(siteEdge)
@@ -198,17 +198,106 @@ describe('latestForGeo', () => {
   })
 })
 
-describe('tileValueMatchesPrimary (the mis-format guard)', () => {
-  test('true when the export tile value IS the primary-metric level (melb_rent)', () => {
-    // hero tile melb_rent.value = 580; median_rent's latest melbourne point
-    // is also 580 (2026-03-31) — same number, same metric.
-    expect(tileValueMatchesPrimary(site, 'melb_rent')).toBe(true)
+// Final-review fix (2026-07-24): tileValueMatchesPrimary's tri-state
+// successor. Traces the same four hero keys the final-review report pins —
+// cash_rate and melb_dwelling_values from the existing fixture as-is;
+// vic_approvals and au_dwelling_values via a fixture-shaped synthetic
+// extension, since site.edge.json's hero predates this batch's real hero set
+// and carries neither the 'approvals' nor 'hvi_australia' chart. Every
+// number below is copied verbatim from web/src/test/fixtures/site.real.json
+// (charts 'approvals'/'hvi_australia', series 'vic_approvals'/'au_hvi', and
+// their hero tiles/findings — read 2026-07-24) — never invented.
+describe('tileValueGeoMatch (the tri-state routing guard)', () => {
+  test('at-render-geo: cash_rate\'s export value IS its own (only) geo\'s cash-rate level', () => {
+    // cash_rate's chart geos = ['australia']; tile.value (3.85) equals
+    // au_cash_rate's latest 'australia' point (also 3.85) — the export tile
+    // and the render geo ('australia') are the SAME geo.
+    expect(tileValueGeoMatch(site, 'cash_rate', 'australia')).toEqual({ kind: 'at-render-geo' })
   })
-  test('false for MoM-style tiles whose value is a different metric (melb_dwelling_values)', () => {
-    // hero tile melb_dwelling_values.value = 0.3 (the MoM %); the chart's
-    // primary metric is hvi_index, whose latest melbourne level is 178.7 —
-    // a different metric entirely, so this must be false, not a near-miss.
-    expect(tileValueMatchesPrimary(site, 'melb_dwelling_values')).toBe(false)
+
+  test('none: melb_dwelling_values\' export value is a MoM% next to an index-LEVEL chart', () => {
+    // hvi_melbourne's only geo is 'melbourne'; tile.value = 0.3 (the MoM%)
+    // never matches the chart's hvi_index level (178.7) at any of its geos
+    // — a different representation of the SAME geo, not a cross-geo mismatch.
+    expect(tileValueGeoMatch(site, 'melb_dwelling_values', 'melbourne')).toEqual({ kind: 'none' })
+  })
+
+  // site.real.json's 'approvals' chart: geos [melbourne, regional_vic, vic,
+  // australia], series 'vic_approvals', metric approvals_dwellings_total.
+  // Melbourne's latest two points are 3996 (Apr) -> 3343 (May); vic's are
+  // 5204 (Apr) -> 4704 (May). hero.vic_approvals = {value: 4704, delta:
+  // -500} — the VIC-wide figure, not Melbourne's own 3,343.
+  const siteApprovals: typeof site = {
+    ...site,
+    charts: [...site.charts, {
+      id: 'approvals', section: 'supply', title: 'Dwelling approvals',
+      series_id: 'vic_approvals', metrics: null, region_mode: 'geo', scope: 'geo',
+      geos: ['melbourne', 'regional_vic', 'vic', 'australia'],
+      percent: false, markers: false, annotate: false,
+    }],
+    series: { ...site.series, vic_approvals: {
+      status: 'ok' as const,
+      meta: { source_name: 'ABS Building Approvals (BA_GCCSA)',
+               source_url: 'https://data.api.abs.gov.au/rest/data/BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M',
+               frequency: 'monthly', last_fetched: '2026-07-24T01:10:51Z',
+               last_changed: '2026-07-23T07:28:16Z', last_data_date: '2026-05-31',
+               error: null, cadence_days: 31 },
+      units: { approvals_dwellings_total: 'dwellings' },
+      points: [
+        { date: '2026-04-30', region: 'melbourne', metric: 'approvals_dwellings_total', value: 3996 },
+        { date: '2026-05-31', region: 'melbourne', metric: 'approvals_dwellings_total', value: 3343 },
+        { date: '2026-04-30', region: 'vic', metric: 'approvals_dwellings_total', value: 5204 },
+        { date: '2026-05-31', region: 'vic', metric: 'approvals_dwellings_total', value: 4704 },
+      ],
+    } },
+    hero: [site.hero[0], site.hero[1],
+      { key: 'vic_approvals', label: 'Vic dwelling approvals (mth)', value: 4704, delta: -500,
+        delta_color: 'normal', last_date: '2026-05-31' },
+      site.hero[3], site.hero[4]],
+  }
+
+  test('other-geo: vic_approvals\' export value is the VIC-wide number, not Melbourne\'s (the actual defect)', () => {
+    // At geo='melbourne' the tile's value (4704) matches the chart's OWN
+    // 'vic' geo, not 'melbourne' -> reroute to the vic geo's number, never
+    // fast-pathed onto the Melbourne finding it sits under.
+    expect(tileValueGeoMatch(siteApprovals, 'vic_approvals', 'melbourne'))
+      .toEqual({ kind: 'other-geo', geo: 'vic' })
+  })
+
+  // site.real.json's 'hvi_australia' chart: geos ['australia'] only, series
+  // 'au_hvi', metric hvi_index. hero.au_dwelling_values = {value: -0.58,
+  // delta: 6.13} — a MoM%, never the AU hvi_index level (221.53).
+  const siteAuHvi: typeof site = {
+    ...site,
+    charts: [...site.charts, {
+      id: 'hvi_australia', section: 'prices', title: 'AU dwelling values',
+      series_id: 'au_hvi', metrics: ['hvi_index'], region_mode: 'fixed:australia',
+      scope: 'national', geos: ['australia'], percent: false, markers: false, annotate: true,
+    }],
+    series: { ...site.series, au_hvi: {
+      status: 'ok' as const,
+      meta: { source_name: 'Cotality Home Value Index — 5-capital-city aggregate',
+               source_url: 'https://www.cotality.com/au/our-data/indices',
+               frequency: 'daily', last_fetched: '2026-07-24T01:11:03Z',
+               last_changed: '2026-07-23T23:34:37Z', last_data_date: '2026-07-24',
+               error: null, cadence_days: 3 },
+      units: { hvi_index: 'index' },
+      points: [
+        { date: '2026-07-22', region: 'australia', metric: 'hvi_index', value: 221.69 },
+        { date: '2026-07-24', region: 'australia', metric: 'hvi_index', value: 221.53 },
+      ],
+    } },
+    hero: [site.hero[0], site.hero[1],
+      { key: 'au_dwelling_values', label: 'AU dwelling values (MoM)', value: -0.58, delta: 6.13,
+        delta_color: 'normal', last_date: '2026-06-30' },
+      site.hero[3], site.hero[4]],
+  }
+
+  test('none: au_dwelling_values\' export value is also a MoM% (a national badge, not a cross-geo mismatch)', () => {
+    // Same 'none' shape as melb_dwelling_values above — there's only one
+    // geo ('australia') to check, so there's no OTHER geo to confuse this
+    // with; it's purely a different representation of its own chart.
+    expect(tileValueGeoMatch(siteAuHvi, 'au_dwelling_values', 'australia')).toEqual({ kind: 'none' })
   })
 })
 

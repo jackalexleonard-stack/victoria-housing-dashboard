@@ -516,5 +516,20 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ## Completion
 
-Whole-branch review, then merge to `main` (auto-deploys). The default view must be visually
-byte-identical except for outage-card placement/size — call that out to the reviewer.
+Whole-branch review, then merge to `main` (auto-deploys). The default view is **not**
+byte-identical — a final-review fix (2026-07-24, user-approved) replaced the banner's
+value-line routing with a tri-state rule (`tileValueGeoMatch`), correcting two mismatches
+the old geo===DEFAULT_GEO fast path / binary guard split had introduced. Call out these
+sanctioned default-view deltas to the reviewer, alongside the outage-card placement/size
+change:
+
+- Australia-scope hero tiles (cash_rate, mortgage_new, and any future national/state/global
+  badge entry) render as badges on their own national/state cards, not silently folded into
+  the selected geo.
+- `vic_approvals`' value line now agrees with its own finding's number (3,343 at the
+  melbourne default) instead of pairing the Melbourne finding sentence with the Victoria-wide
+  export figure (4,704) — the actual defect the tri-state fix corrects.
+- `au_dwelling_values`' MoM value/delta line is restored (the old binary guard silently
+  dropped it, since it only ever checked the chart's first geo for a level match, never a
+  representation match).
+- Outage cards render compact and last within their section, as designed above.

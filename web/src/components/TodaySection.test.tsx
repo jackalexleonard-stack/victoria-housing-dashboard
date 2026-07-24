@@ -4,7 +4,7 @@ import siteEdge from '../test/fixtures/site.edge.json'
 import { assertSiteData, type HeroTile, type NewsData } from '../lib/types'
 import { TodaySection } from './TodaySection'
 import { PALETTE } from '../theme/tokens'
-import { tileValueMatchesPrimary } from '../lib/conveyor'
+import { tileValueGeoMatch } from '../lib/conveyor'
 
 const site = assertSiteData(siteEdge)
 const NOW = new Date('2026-07-18T00:00:00Z')
@@ -87,20 +87,141 @@ test('non-default geo: the banner shows that geo\'s finding and value, never Mel
   expect(within(card).queryByText('$580/wk')).not.toBeInTheDocument()
 })
 
-test('default geo: value line still comes from the export tiles (byte-identical default view)', () => {
+test('default geo, at-render-geo case: value line comes from the export tiles (melb_rent\'s own number)', () => {
+  // Final-review note: the blanket "byte-identical default view" constraint
+  // is superseded (user-approved 2026-07-24) for the vic_approvals/
+  // au_dwelling_values fixes below — but melb_rent's OWN case is genuinely
+  // unaffected: its export tile value (580) IS median_rent's melbourne
+  // level, so tileValueGeoMatch classifies it 'at-render-geo' either way,
+  // and the tri-state rule shows the export tile verbatim exactly as the
+  // old fast path did. This test still pins that (unchanged) case.
   render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
   const card = screen.getByTestId('lead-finding-card')
   expect(within(card).getByText('$580/wk')).toBeInTheDocument()   // the existing pinned tile value
 })
 
-test('mis-format guard: an hvi-style tile shows no value line off-default', () => {
-  // melb_dwelling_values pairs a MoM tile value with an index-level chart —
-  // under any non-default geo its cards must omit the line rather than
-  // format an index level as a percentage. The fixture's hvi chart has no
-  // non-melbourne geo (geos=['melbourne']), so that guard is unreachable in
-  // production for this key today — assert the guard itself directly
-  // (TodaySection's value-line branch consults exactly this predicate).
-  expect(tileValueMatchesPrimary(site, 'melb_dwelling_values')).toBe(false)
+test('mis-format guard (\'none\' case): an hvi-style tile\'s export value never matches its own level', () => {
+  // melb_dwelling_values pairs a MoM tile value (0.3) with an index-LEVEL
+  // chart (hvi_index, latest melbourne level 178.7) — tileValueGeoMatch must
+  // classify this 'none' (a different representation of its own chart, not
+  // a cross-geo mismatch), which is what lets TodaySection's tri-state rule
+  // still show it (entry.geo === chart.geos[0]) while never treating a
+  // level number as if it were the tile's own MoM% at some OTHER geo. The
+  // fixture's hvi chart has no non-melbourne geo (geos=['melbourne']), so
+  // the omit-elsewhere branch is unreachable in production for this key
+  // today — assert the classification itself directly (TodaySection's
+  // value-line rule consults exactly this).
+  expect(tileValueGeoMatch(site, 'melb_dwelling_values', 'melbourne')).toEqual({ kind: 'none' })
+})
+
+// Final-review regression tests (2026-07-24): the actual defects this batch
+// fixes. site.edge.json predates this batch's real hero set and carries
+// neither the 'approvals' nor 'hvi_australia' chart — extend fixture-shaped
+// synthetic sites instead of inventing numbers. Every value below is copied
+// verbatim from web/src/test/fixtures/site.real.json (charts 'approvals'/
+// 'hvi_australia', series 'vic_approvals'/'au_hvi', their findings and hero
+// tiles — read 2026-07-24; see conveyor.test.ts's tileValueGeoMatch
+// describe block for the same data, unit-tested at the pure-function level).
+const siteApprovals: typeof site = {
+  ...site,
+  charts: [...site.charts, {
+    id: 'approvals', section: 'supply', title: 'Dwelling approvals',
+    series_id: 'vic_approvals', metrics: null, region_mode: 'geo', scope: 'geo',
+    geos: ['melbourne', 'regional_vic', 'vic', 'australia'],
+    percent: false, markers: false, annotate: false,
+  }],
+  findings: { ...site.findings,
+    approvals: { melbourne: 'Dwelling approvals fell 16.3% to 3,343 in May 2026' } },
+  series: { ...site.series, vic_approvals: {
+    status: 'ok' as const,
+    meta: { source_name: 'ABS Building Approvals (BA_GCCSA)',
+             source_url: 'https://data.api.abs.gov.au/rest/data/BA_GCCSA/1.1.9.1.110+150+100.10.2+2GMEL+2RVIC+AUS.M',
+             frequency: 'monthly', last_fetched: '2026-07-24T01:10:51Z',
+             last_changed: '2026-07-23T07:28:16Z', last_data_date: '2026-05-31',
+             error: null, cadence_days: 31 },
+    units: { approvals_dwellings_total: 'dwellings' },
+    points: [
+      { date: '2026-04-30', region: 'melbourne', metric: 'approvals_dwellings_total', value: 3996 },
+      { date: '2026-05-31', region: 'melbourne', metric: 'approvals_dwellings_total', value: 3343 },
+      { date: '2026-04-30', region: 'vic', metric: 'approvals_dwellings_total', value: 5204 },
+      { date: '2026-05-31', region: 'vic', metric: 'approvals_dwellings_total', value: 4704 },
+    ],
+  } },
+  // Real production hero.vic_approvals tile — the vic-wide figure (4,704),
+  // paired (pre-fix) with Melbourne's own finding sentence above.
+  hero: [site.hero[0], site.hero[1], site.hero[2],
+    { key: 'vic_approvals', label: 'Vic dwelling approvals (mth)', value: 4704, delta: -500,
+      delta_color: 'normal', last_date: '2026-05-31' },
+    site.hero[4]],
+  hero_lead: 'vic_approvals',
+}
+
+test('vic_approvals: the value line agrees with its own finding\'s number, never the vic-wide export figure', () => {
+  // THE regression this whole batch exists for: on the default Melbourne
+  // banner, vic_approvals used to pair the Melbourne finding ("fell 16.3% to
+  // 3,343") with the Victoria-wide export tile value (4,704 -500) because
+  // the old geo===DEFAULT_GEO fast path skipped the mis-format guard
+  // entirely. tileValueGeoMatch classifies this 'other-geo' (the tile's
+  // 4704 matches the chart's OWN 'vic' geo, not 'melbourne'), so the tri-
+  // state rule reroutes to melbourne's own number (latestForGeo) instead.
+  render(<TodaySection site={siteApprovals} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
+  const lead = screen.getByTestId('lead-finding')
+  expect(lead).toHaveTextContent('Dwelling approvals fell 16.3% to 3,343 in May 2026')
+  const card = screen.getByTestId('lead-finding-card')
+  // Melbourne's own approvals count (3,343 -> the same number named in the
+  // finding above), and its own delta (3343 - 3996 = -653) — never the
+  // vic-wide 4,704/-500 the export tile actually carries.
+  expect(within(card).getByText('3,343')).toBeInTheDocument()
+  expect(within(card).getByText('-653')).toBeInTheDocument()
+  expect(within(card).queryByText('4,704')).not.toBeInTheDocument()
+  expect(within(card).queryByText('-500')).not.toBeInTheDocument()
+})
+
+const siteAuHvi: typeof site = {
+  ...site,
+  charts: [...site.charts, {
+    id: 'hvi_australia', section: 'prices', title: 'AU dwelling values',
+    series_id: 'au_hvi', metrics: ['hvi_index'], region_mode: 'fixed:australia',
+    scope: 'national', geos: ['australia'], percent: false, markers: false, annotate: true,
+  }],
+  findings: { ...site.findings,
+    hvi_australia: { australia: 'AU dwelling values fell 0.6% in Jun 2026 (+6.1% over the year)' } },
+  series: { ...site.series, au_hvi: {
+    status: 'ok' as const,
+    meta: { source_name: 'Cotality Home Value Index — 5-capital-city aggregate',
+             source_url: 'https://www.cotality.com/au/our-data/indices',
+             frequency: 'daily', last_fetched: '2026-07-24T01:11:03Z',
+             last_changed: '2026-07-23T23:34:37Z', last_data_date: '2026-07-24',
+             error: null, cadence_days: 3 },
+    units: { hvi_index: 'index' },
+    points: [
+      { date: '2026-07-22', region: 'australia', metric: 'hvi_index', value: 221.69 },
+      { date: '2026-07-24', region: 'australia', metric: 'hvi_index', value: 221.53 },
+    ],
+  } },
+  // Real production hero.au_dwelling_values tile — a MoM% (-0.58, +6.13 yr),
+  // never the AU hvi_index level (221.53).
+  hero: [site.hero[0], site.hero[1], site.hero[2], site.hero[3],
+    { key: 'au_dwelling_values', label: 'AU dwelling values (MoM)', value: -0.58, delta: 6.13,
+      delta_color: 'normal', last_date: '2026-06-30' }],
+  hero_lead: 'au_dwelling_values',
+}
+
+test('au_dwelling_values: the badge entry regains its MoM value/delta line (the binary guard used to drop it)', () => {
+  // The old binary tileValueMatchesPrimary only ever checked chart.geos[0]
+  // (here, 'australia') for a LEVEL match — au_dwelling_values' tile value
+  // is a MoM% (-0.58), never the hvi_index level (221.53), so the guard
+  // failed and the line was silently omitted. tileValueGeoMatch classifies
+  // this 'none' (a representation, not a mismatch) — the tri-state rule
+  // still shows the export tile's value/delta because entry.geo IS the
+  // chart's own primary geo (chart.geos[0] === 'australia').
+  render(<TodaySection site={siteAuHvi} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
+  const lead = screen.getByTestId('lead-finding')
+  expect(lead).toHaveTextContent('AU dwelling values fell 0.6% in Jun 2026 (+6.1% over the year)')
+  const card = screen.getByTestId('lead-finding-card')
+  expect(within(card).getByText('Australia')).toBeInTheDocument()   // scope badge
+  expect(within(card).getByText('-0.6%')).toBeInTheDocument()
+  expect(within(card).getByText('+6.1% yr')).toBeInTheDocument()
 })
 
 test('a context entry renders its own-geo finding with the scope badge (cash_rate under a Victorian geo)', () => {
@@ -118,21 +239,22 @@ test('a context entry renders its own-geo finding with the scope badge (cash_rat
 })
 
 test('badge entries render byte-identical value/delta text at the default geo (bypass-path regression guard)', () => {
-  // Review follow-up (post-Task-2 approval): a badge entry's entry.geo is
-  // its OWN fixed geo ('australia' for cash_rate/mortgage_new), which is
-  // never DEFAULT_GEO ('melbourne') — so LeadCard/SecondaryCard's
-  // `geo === DEFAULT_GEO` fast path NEVER fires for a badge entry, even
-  // when the PAGE's selected geo IS the default. Badge entries always go
-  // through tileValueMatchesPrimary/latestForGeo instead. Today that's
-  // numerically identical to the export tile — tileValueMatchesPrimary's
-  // own guard computes latestForGeo at exactly chart.geos[0], the same geo
-  // a badge entry renders at, so whenever the guard passes the two numbers
-  // are provably the same one — but nothing pinned that identity as
-  // rendered TEXT until now. If this test ever fails after adding a new
-  // national-scope hero tile, the fix is to special-case badge entries at
-  // the page's default geo, NOT to weaken this pin: a silent value-line
-  // loss on the default view would violate the byte-identical-default-view
-  // constraint with no red test to catch it.
+  // Review follow-up (post-Task-2 approval; final-review note 2026-07-24: the
+  // predicate this guards is now tileValueGeoMatch, not the retired
+  // tileValueMatchesPrimary, but the regression it guards is unchanged). A
+  // badge entry's entry.geo is its OWN fixed geo ('australia' for cash_rate/
+  // mortgage_new), which is never DEFAULT_GEO ('melbourne') — so the old
+  // `geo === DEFAULT_GEO` fast path never fired for a badge entry, even when
+  // the PAGE's selected geo IS the default; badge entries always went
+  // through the guard/latestForGeo path instead. Today that's numerically
+  // identical to the export tile — cash_rate's chart has one geo
+  // ('australia'), the same geo the badge renders at, so tileValueGeoMatch
+  // classifies it 'at-render-geo' and the tri-state rule shows the export
+  // tile verbatim — but nothing pinned that identity as rendered TEXT until
+  // now. If this test ever fails after adding a new national-scope hero
+  // tile, the fix is to special-case badge entries at the page's default
+  // geo, NOT to weaken this pin: a silent value-line loss on the default
+  // view is exactly the class of bug this whole batch exists to catch.
   const siteNoLead = { ...site, hero_lead: undefined }
   render(<TodaySection site={siteNoLead} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
   // cash_rate leads here (see 'no hero_lead' test, above) — badged
@@ -141,6 +263,27 @@ test('badge entries render byte-identical value/delta text at the default geo (b
   const card = screen.getByTestId('lead-finding-card')
   expect(within(card).getByText('3.85%')).toBeInTheDocument()
   expect(within(card).getByText('+0.00 pp')).toBeInTheDocument()
+})
+
+test('badge-entry DELTA comes from the export tile, not a recomputed series delta (final-review Item 2)', () => {
+  // The test above pins cash_rate's delta as "+0.00 pp", but site.edge.json's
+  // au_cash_rate series is flat (every point is 3.85) — latestForGeo would
+  // ALSO compute a 0.00 delta from the raw series, so that pin can't tell
+  // "the tri-state rule used the export tile's delta" apart from "the code
+  // silently recomputed it from the series and got the same number by
+  // coincidence". Diverge them here: keep the series flat (still a 3.85
+  // level match, so tileValueGeoMatch still classifies 'at-render-geo') but
+  // give the EXPORT tile an explicit non-zero delta (0.10) that the flat
+  // series could never produce on its own. If a future change swaps the
+  // 'at-render-geo' branch to recompute from latestForGeo instead of
+  // reading tile.delta, this fails ("+0.00 pp" would render) — the tri-state
+  // routing (not this pin) is what to revisit if that happens.
+  const siteNoLead = { ...site, hero_lead: undefined,
+    hero: [{ ...site.hero[0], delta: 0.10 }, ...site.hero.slice(1)] }
+  render(<TodaySection site={siteNoLead} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
+  const card = screen.getByTestId('lead-finding-card')
+  expect(within(card).getByText('+0.10 pp')).toBeInTheDocument()
+  expect(within(card).queryByText('+0.00 pp')).not.toBeInTheDocument()
 })
 
 test('the compact strip renders sentence-case labels with cadence codes moved to the delta line', () => {

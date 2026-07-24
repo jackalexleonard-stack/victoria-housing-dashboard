@@ -5,9 +5,9 @@ import { Chip } from './Chip'
 import { TILE_FMT, fmtPeriod, newsByline } from '../lib/format'
 import { staleness } from '../lib/staleness'
 import { headlinePool, latestForGeo, MIN_ROTATE, prefersReducedMotion,
-         tileValueMatchesPrimary, useConveyor, type PoolEntry } from '../lib/conveyor'
+         tileValueGeoMatch, useConveyor, type PoolEntry } from '../lib/conveyor'
 import { PALETTE } from '../theme/tokens'
-import { DEFAULT_GEO, type Geo } from '../lib/urlState'
+import type { Geo } from '../lib/urlState'
 import type { HeroTile, NewsData, SiteData } from '../lib/types'
 
 const WHATS_NEW_CAP = 6
@@ -27,21 +27,68 @@ function whatsNewVintage(t: HeroTile, site: SiteData, now: Date):
   return { text: fmtPeriod(t.last_date, entry.meta.frequency), kind: st.kind }
 }
 
+// Final-review fix (2026-07-24): the tri-state value-line rule shared by
+// LeadCard and SecondaryCard, superseding the old two-path version (a
+// geo===DEFAULT_GEO fast path for the default view, plus a binary
+// tileValueMatchesPrimary guard for everything else). That split had two
+// bugs, both stemming from the fast path trusting the export tile's value
+// unconditionally whenever the RENDER geo happened to be the default,
+// without checking whether the tile's number actually described that geo:
+//   - a band/badge entry's `entry.geo` is always its OWN chart geo (e.g.
+//     'australia' for a national card), never DEFAULT_GEO, so the fast path
+//     never fired for it — au_dwelling_values then fell to the binary guard,
+//     which only ever probed chart.geos[0] for a match; its export value is
+//     a MoM% (not the geos[0] level), so the guard failed and the value line
+//     was silently dropped.
+//   - a first-class entry CAN land on DEFAULT_GEO with an export tile whose
+//     number belongs to a DIFFERENT geo the same chart also covers —
+//     vic_approvals' tile is the vic-wide figure, but at geo='melbourne' the
+//     fast path paired it with the Melbourne finding sentence regardless,
+//     mismatching a "fell 16.3% to 3,343" headline with a "4,704" number.
+// tileValueGeoMatch(site, key, entry.geo) replaces both paths with one
+// three-way read of what the export tile's number actually IS, relative to
+// the geo this card is rendering:
+//   'at-render-geo' -> the tile's value already IS entry.geo's primary-metric
+//     level -> show the export tile's value/delta verbatim.
+//   'other-geo'      -> the tile's value is the SAME metric at a DIFFERENT
+//     geo of this chart -> recompute value+delta from the chart's own series
+//     AT entry.geo instead, so the number always agrees with the finding
+//     sentence sitting above it.
+//   'none'           -> the tile is a different REPRESENTATION of its own
+//     chart (e.g. an HVI MoM% next to a level chart) -> still show the
+//     export tile's value/delta, but only when entry.geo IS that chart's own
+//     primary geo (chart.geos[0]); anywhere else the number isn't honestly
+//     attributable to the rendered geo, so the line is omitted entirely
+//     (spec §1: when in doubt, omit). `deltaColor` always receives the
+//     DISPLAYED delta paired with the registry's own delta_color.
+function valueLine(site: SiteData, tileKey: string, entry: PoolEntry, tile: HeroTile):
+    { valueText: string; deltaText: string | null; deltaSrc: { delta: number | null
+        delta_color: HeroTile['delta_color'] } } | null {
+  const fmt = TILE_FMT[tileKey]
+  if (!fmt) return null
+  const match = tileValueGeoMatch(site, tileKey, entry.geo)
+  if (match.kind === 'other-geo') {
+    const latest = latestForGeo(site, tileKey, entry.geo)
+    if (!latest) return null
+    return { valueText: fmt.value(latest.value),
+             deltaText: latest.delta != null ? fmt.delta(latest.delta) : null,
+             deltaSrc: { delta: latest.delta, delta_color: tile.delta_color } }
+  }
+  const ownGeo = match.kind === 'at-render-geo' ||
+    site.charts.find(c => c.id === TILE_CHART[tileKey])?.geos[0] === entry.geo
+  if (!ownGeo || tile.value == null) return null
+  return { valueText: fmt.value(tile.value),
+           deltaText: tile.delta != null ? fmt.delta(tile.delta) : null,
+           deltaSrc: tile }
+}
+
 // The lead-finding card [P0-1]: a pool entry names a hero registry key, the
 // geo its finding/value should render at, and (band entries only) a scope
 // badge — look up the chart via TILE_CHART and the sentence via
 // site.findings, exactly the contract T1 exported headlinePool for. Renders
 // nothing (not a broken card) when any link in that chain is missing, e.g.
 // hero_lead is absent (older export) or resolves to the "empty" sentinel.
-//
-// Value line (2026-07-24 banner batch, Task 2): the default (melbourne)
-// view keeps the export tiles verbatim — byte-identical to the pre-geo
-// banner. Off-default, or for a band entry rendered away from the default
-// geo, the line is instead computed client-side from the chart's own
-// series at entry.geo, gated by tileValueMatchesPrimary so a tile whose
-// export value isn't the chart's primary-metric level (e.g. the HVI MoM
-// tiles) never mis-formats a level as a rate — it just omits the line
-// (spec §1: when in doubt, omit).
+// Value line: see valueLine's tri-state rule, above.
 function LeadCard({ site, entry, onOpen }: {
   site: SiteData; entry: PoolEntry; onOpen: (id: string) => void }) {
   const { key: leadKey, geo, badge } = entry
@@ -49,21 +96,11 @@ function LeadCard({ site, entry, onOpen }: {
   const chartId = TILE_CHART[leadKey]
   const finding = chartId ? site.findings[chartId]?.[geo] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
-  const fmt = TILE_FMT[leadKey]
-  let valueText: string | null = null
-  let deltaText: string | null = null
-  let deltaSrc: { delta: number | null; delta_color: HeroTile['delta_color'] } = tile
-  if (geo === DEFAULT_GEO) {
-    valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
-    deltaText = tile.delta != null && fmt ? fmt.delta(tile.delta) : null
-  } else if (fmt && tileValueMatchesPrimary(site, leadKey)) {
-    const latest = latestForGeo(site, leadKey, geo)
-    if (latest) {
-      valueText = fmt.value(latest.value)
-      deltaText = latest.delta != null ? fmt.delta(latest.delta) : null
-      deltaSrc = { delta: latest.delta, delta_color: tile.delta_color }
-    }
-  }
+  const line = valueLine(site, leadKey, entry, tile)
+  const valueText = line?.valueText ?? null
+  const deltaText = line?.deltaText ?? null
+  const deltaSrc: { delta: number | null; delta_color: HeroTile['delta_color'] } =
+    line?.deltaSrc ?? tile
   return (
     <article data-testid="lead-finding-card"
               className="sm:col-span-2 bg-card border border-line rounded-lg p-5">
@@ -96,8 +133,8 @@ function LeadCard({ site, entry, onOpen }: {
 // exported tile order — no client-side re-scoring), excluding whichever
 // entry is leading. In production those two are almost always the cash-
 // rate/Melb-values pins (they sit earliest in `hero`), which also satisfies
-// "keep the pins visually first". Same per-geo/mis-format-guard value-line
-// rule as LeadCard, above, minus the delta (it never showed one).
+// "keep the pins visually first". Same tri-state value-line rule as
+// LeadCard, above (valueLine), minus the delta (it never showed one).
 function SecondaryCard({ site, entry, onOpen }: {
   site: SiteData; entry: PoolEntry; onOpen: (id: string) => void }) {
   const { key: tileKey, geo, badge } = entry
@@ -105,14 +142,7 @@ function SecondaryCard({ site, entry, onOpen }: {
   const chartId = TILE_CHART[tileKey]
   const finding = chartId ? site.findings[chartId]?.[geo] ?? '' : undefined
   if (!tile || !chartId || !finding) return null
-  const fmt = TILE_FMT[tileKey]
-  let valueText: string | null = null
-  if (geo === DEFAULT_GEO) {
-    valueText = tile.value != null && fmt ? fmt.value(tile.value) : null
-  } else if (fmt && tileValueMatchesPrimary(site, tileKey)) {
-    const latest = latestForGeo(site, tileKey, geo)
-    if (latest) valueText = fmt.value(latest.value)
-  }
+  const valueText = valueLine(site, tileKey, entry, tile)?.valueText ?? null
   return (
     <article className="bg-card border border-line rounded-lg p-3">
       <button type="button" onClick={() => onOpen(chartId)} className="block w-full text-left group">
