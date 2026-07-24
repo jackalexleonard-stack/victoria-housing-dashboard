@@ -117,6 +117,32 @@ test('a context entry renders its own-geo finding with the scope badge (cash_rat
   expect(within(card).getByText('Australia')).toBeInTheDocument()
 })
 
+test('badge entries render byte-identical value/delta text at the default geo (bypass-path regression guard)', () => {
+  // Review follow-up (post-Task-2 approval): a badge entry's entry.geo is
+  // its OWN fixed geo ('australia' for cash_rate/mortgage_new), which is
+  // never DEFAULT_GEO ('melbourne') — so LeadCard/SecondaryCard's
+  // `geo === DEFAULT_GEO` fast path NEVER fires for a badge entry, even
+  // when the PAGE's selected geo IS the default. Badge entries always go
+  // through tileValueMatchesPrimary/latestForGeo instead. Today that's
+  // numerically identical to the export tile — tileValueMatchesPrimary's
+  // own guard computes latestForGeo at exactly chart.geos[0], the same geo
+  // a badge entry renders at, so whenever the guard passes the two numbers
+  // are provably the same one — but nothing pinned that identity as
+  // rendered TEXT until now. If this test ever fails after adding a new
+  // national-scope hero tile, the fix is to special-case badge entries at
+  // the page's default geo, NOT to weaken this pin: a silent value-line
+  // loss on the default view would violate the byte-identical-default-view
+  // constraint with no red test to catch it.
+  const siteNoLead = { ...site, hero_lead: undefined }
+  render(<TodaySection site={siteNoLead} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
+  // cash_rate leads here (see 'no hero_lead' test, above) — badged
+  // 'Australia', entry.geo = 'australia'. Pinned from site.edge.json's
+  // cash_rate hero tile (value 3.85, delta 0.0) via TILE_FMT.cash_rate.
+  const card = screen.getByTestId('lead-finding-card')
+  expect(within(card).getByText('3.85%')).toBeInTheDocument()
+  expect(within(card).getByText('+0.00 pp')).toBeInTheDocument()
+})
+
 test('the compact strip renders sentence-case labels with cadence codes moved to the delta line', () => {
   render(<TodaySection site={site} news={news} now={NOW} onOpen={() => {}} geo="melbourne" />)
   const strip = screen.getByTestId('hero-strip')
