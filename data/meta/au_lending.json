@@ -4,7 +4,7 @@
   "source_url": "https://data.api.abs.gov.au/rest/data/LEND_HOUSING/FIN_VAL.NEWCOMMITS.DV8368.TOTDWELL+TOTHOUS.TOT.DV5167+DV5168+DV5167_FHB+TOT.20.2+AUS.Q",
   "frequency": "quarterly",
   "status": "ok",
-  "last_fetched": "2026-07-24T05:58:23Z",
+  "last_fetched": "2026-07-25T05:40:23Z",
   "error": null,
   "last_data_date": "2026-03-31",
   "last_changed": "2026-07-24T01:10:52Z",
