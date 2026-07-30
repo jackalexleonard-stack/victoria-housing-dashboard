@@ -5819,6 +5819,11 @@ date,region,metric,value,unit
 2026-07-16,global,brent_crude,81.23,usd_per_barrel
 2026-07-17,global,brent_crude,85.01,usd_per_barrel
 2026-07-20,global,brent_crude,86.99,usd_per_barrel
+2026-07-21,global,brent_crude,93.85,usd_per_barrel
+2026-07-22,global,brent_crude,94.12,usd_per_barrel
+2026-07-23,global,brent_crude,105.32,usd_per_barrel
+2026-07-24,global,brent_crude,100.31,usd_per_barrel
+2026-07-27,global,brent_crude,91.82,usd_per_barrel
 2015-01-02,global,us_10y_treasury,2.12,percent
 2015-01-05,global,us_10y_treasury,2.04,percent
 2015-01-06,global,us_10y_treasury,1.97,percent
@@ -8711,3 +8716,4 @@ date,region,metric,value,unit
 2026-07-23,global,us_10y_treasury,4.71,percent
 2026-07-24,global,us_10y_treasury,4.69,percent
 2026-07-27,global,us_10y_treasury,4.65,percent
+2026-07-28,global,us_10y_treasury,4.61,percent
