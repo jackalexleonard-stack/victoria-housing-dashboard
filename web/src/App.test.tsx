@@ -105,8 +105,10 @@ test('jump targets carry scroll-margin so a scrolled-to heading clears the stick
 test('masthead only counts sources that are actually overdue, singular wording', async () => {
   history.replaceState(null, '', '/')
   mockFetch()
-  // vic_auctions: failed, no data -> counts.
-  // vic_rents: failed, last_data 2026-03-31, cadence 92 -> gap ~109d <= 1.5*92=138 -> quiet, does not count.
+  // vic_auctions: failed, no data at all -> kind 'failed', counts.
+  // vic_rents: failed but retains data (last_data 2026-03-31) -> age-only
+  // taxonomy governs it (fresh/ageing/stale) -> kind is never 'failed' while
+  // data exists, so it never counts, regardless of date.
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
   await screen.findByText('Victorian Housing')
   expect(await screen.findByText('1 source unavailable')).toBeInTheDocument()
@@ -326,20 +328,22 @@ describe('World KPI tile row (D1f)', () => {
   })
 })
 
-// --- D2(e): dangling last card spans full width ---
+// --- D2(e)/§2.2: height-aware row spans in both the grid and context bands ---
 
 describe('trailing card grid (D2e)', () => {
   // T4: Money's own cash_rate/mortgage_rates are national-scope (their data
   // is australia-only) -> under the default melbourne geo they now sit in
   // the "Wider context" band, not the grid (see the 'geo banding' describe
-  // below) — the grid band ends up holding only 'lending'. Context-band
-  // cards never dangle-span (App.tsx's context.map applies no col-span
-  // logic at all), so D2(e)'s dangling rule is only exercised by whatever
-  // lands in `grid`; these two tests still cover the SAME dangling/lead
-  // col-span-2 rule and the "context cards never span" behaviour, just with
-  // the post-banding composition spelled out below instead of the pre-T4
-  // flat 3-/4-card layout.
-  test('an even-remainder section: money\'s single grid card (lending) spans as the lead; its national-scope siblings (context) never span', async () => {
+  // below) — the grid band ends up holding only 'lending'. Spec §2.2 (Task
+  // 8/9) repealed the old "context cards never span" rule: the context band
+  // now runs through the same height-aware buildRows as the grid, so a
+  // 'standard' card with no same-class neighbour (cash_rate) and a 'tall'
+  // card that can never pair (mortgage_rates, always tall) both end up as
+  // their own spanning rows. These two tests still cover the SAME
+  // dangling/lead col-span-2 rule for the grid band, plus the new
+  // height-aware context-band spanning, with the post-banding composition
+  // spelled out below instead of the pre-T4 flat 3-/4-card layout.
+  test('an even-remainder section: money\'s single grid card (lending) spans as the lead; its context-band siblings (standard cash_rate, tall mortgage_rates) both span too (spec §2.2)', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
@@ -348,10 +352,11 @@ describe('trailing card grid (D2e)', () => {
     const articles = within(section).getAllByRole('article')
     expect(articles).toHaveLength(3)   // lending (grid), cash_rate + mortgage_rates (context)
     expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // lending — the grid's lead (and only) card
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
+    expect(articles[1].parentElement).toHaveClass('sm:col-span-2')   // cash_rate — standard, no same-class neighbour: spans
+    expect(articles[2].parentElement).toHaveClass('sm:col-span-2')   // mortgage_rates — always tall, never pairs: spans
   })
 
-  test('an odd-remainder grid (2 grid cards): lead and dangle rules coincide, so both span full width', async () => {
+  test('an odd-remainder grid (2 grid cards): lead and dangle rules coincide, so both span full width; the context band spans both its cards too (spec §2.2)', async () => {
     history.replaceState(null, '', '/')
     const mutated = JSON.parse(JSON.stringify(siteEdge))
     // scope 'geo' + geos ['melbourne']: a synthetic Melbourne-specific mover
@@ -376,8 +381,8 @@ describe('trailing card grid (D2e)', () => {
     // remainder" dangle condition is true for the LAST grid card too —
     // with only 2 cards in the grid, lead and dangle are the same card.
     expect(articles[1].parentElement).toHaveClass('sm:col-span-2')       // credit — grid's dangling last card
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // cash_rate — context band, never spans
-    expect(articles[3].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
+    expect(articles[2].parentElement).toHaveClass('sm:col-span-2')       // cash_rate — standard, no same-class neighbour: spans (spec §2.2)
+    expect(articles[3].parentElement).toHaveClass('sm:col-span-2')       // mortgage_rates — always tall, never pairs: spans (spec §2.2)
   })
 })
 
@@ -527,16 +532,36 @@ describe('shared-outage section notice', () => {
     async () => {
       history.replaceState(null, '', '/')
       mockFetch()
-      const stale = new Date('2027-01-01T00:00:00Z')   // trips vic_rents' failed gate
+      // Age-only taxonomy: this pushes vic_rents (last_data 2026-03-31,
+      // cadence 92) past 2.5x cadence into kind 'stale' — never 'failed',
+      // since it still carries data — which is enough on its own to satisfy
+      // sectionOutageNotice's stale-or-failed gate.
+      const stale = new Date('2027-01-01T00:00:00Z')
       render(<App now={stale} />)
       await screen.findByText('Victorian Housing')
       const section = await openSection('Rents & vacancy')
-      expect(within(section).getByText(/DFFH source unavailable — data to Mar qtr 2026/))
-        .toBeInTheDocument()
+      const banner = within(section).getByRole('button',
+        { name: /DFFH — awaiting new release · data to Mar qtr 2026/ })
+      expect(banner).toBeInTheDocument()
+      // jsdom can't see layout, so these are the class-level guards that the
+      // real full-width warn bar depends on: the button itself must stretch
+      // (`w-full`), and its Popover root must be a block box, not the
+      // default `inline-block` (which would shrink-wrap to the text and
+      // render a text-width pill instead of a full-width bar).
+      expect(banner.className).toContain('w-full')
+      expect(banner.parentElement?.className).toContain('block')
+      expect(banner.parentElement?.className).not.toContain('inline-block')
       // The per-card chip drops to the quiet form instead of repeating the
       // full staleness sentence at full strength (two cards share vic_rents
-      // in the fixture, so both carry the quiet chip).
-      expect(within(section).getAllByText(/Mar qtr 2026 · unavailable/).length).toBeGreaterThan(0)
+      // in the fixture, so both carry the quiet chip). Age-only taxonomy:
+      // vic_rents is 'stale' here (not 'failed', per the comment above), so
+      // the quiet chip says "· stale", not a blanket "· unavailable".
+      expect(within(section).getAllByText(/Mar qtr 2026 · stale/).length).toBeGreaterThan(0)
+      // The banner is the same Popover mechanism the chips use — clicking it
+      // opens the shared ExplainerPanel, not a bespoke tooltip.
+      await userEvent.click(banner)
+      expect(within(section).getByRole('group', { name: /why this section.s data is old/i }))
+        .toBeInTheDocument()
     })
 
   test('no shared-outage notice when the section is not uniformly stale/failed (e.g. Money, at the default NOW)',
@@ -546,8 +571,21 @@ describe('shared-outage section notice', () => {
       render(<App now={new Date('2026-07-18T10:00:00Z')} />)
       await screen.findByText('Victorian Housing')
       const section = await openSection('Money & credit')
-      expect(within(section).queryByText(/source unavailable — data to/)).not.toBeInTheDocument()
+      expect(within(section).queryByText(/awaiting new release · data to/)).not.toBeInTheDocument()
     })
+})
+
+test('the detail modal chip opens the explainer popover', async () => {
+  history.replaceState(null, '', '/')
+  mockFetch()
+  const stale = new Date('2027-01-01T00:00:00Z')
+  render(<App now={stale} />)
+  await screen.findByText('Victorian Housing')
+  const section = await openSection('Rents & vacancy')
+  await userEvent.click(within(section).getAllByRole('button', { name: /open details/ })[0])
+  const dialog = await screen.findByRole('dialog')
+  await userEvent.click(within(dialog).getByRole('button', { name: /— why\?$/ }))
+  expect(within(dialog).getByRole('group', { name: /details$/ })).toBeInTheDocument()
 })
 
 describe('geo banding', () => {

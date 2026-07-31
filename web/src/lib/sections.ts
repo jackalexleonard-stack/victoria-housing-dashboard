@@ -5,7 +5,7 @@ import type { ChartSpec, SeriesEntry, SiteData } from './types'
 import { staleness } from './staleness'
 import { fmtPeriod, shortSource } from './format'
 
-export interface SectionOutage { token: string; period: string }
+export interface SectionOutage { token: string; period: string; seriesId: string }
 
 // Section-level shared-outage notice (Rents, design review P1-outage): only
 // fires when EVERY distinct series backing the section's charts is
@@ -36,7 +36,8 @@ export function sectionOutageNotice(charts: ChartSpec[], site: SiteData, now: Da
   const primaryId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
   const primary = site.series[primaryId]
   if (!primary) return null
-  return { token: shortSource(primary.meta.source_name), period: fmtPeriod(lastDate, primary.meta.frequency) }
+  return { token: shortSource(primary.meta.source_name),
+           period: fmtPeriod(lastDate, primary.meta.frequency), seriesId: primaryId }
 }
 
 export type SectionState = 'open' | 'closed'

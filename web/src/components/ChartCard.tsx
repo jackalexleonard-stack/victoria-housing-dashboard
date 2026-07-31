@@ -1,8 +1,9 @@
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
+import { StatusChip } from './StatusChip'
 import { lineName, useChartData } from '../lib/selectors'
-import { fmtPeriod, fmtUnit, shortSource } from '../lib/format'
+import { fmtUnit, shortSource } from '../lib/format'
 import { xExtentOf } from '../lib/chartMath'
 import { isDeadChart } from '../lib/geoBands'
 import type { ChartSpec, SiteData } from '../lib/types'
@@ -31,16 +32,12 @@ const FINDING_PRIMARY_METRIC: Record<string, string> = {
 // repeat one generic sentence three times over (serif headline, body
 // placeholder, red chip) — the headline now carries the series name instead
 // (see the `failedEmpty` branch below), so the body only needs to add ONE
-// honest, source-specific line. Keyed by chart id since that's what
-// distinguishes the two currently-dead Prices cards even though they're
-// blocked for different reasons; anything else dead falls back to a plain,
-// non-presumptuous line (no promised fix date — the pipeline doesn't record
-// a first-failure date yet).
-const DEAD_CARD_BODY: Record<string, string> = {
-  reiv_median: 'REIV blocks automated access; this card will populate if the source opens up.',
-  auctions: 'Melbourne auction results aren’t reachable from an automated source right now; ' +
-    'this card will populate if that changes.',
-}
+// honest, source-specific line. Task 5: that line now comes from the
+// pipeline's own curated `meta.status_note` (export.py's STATUS_NOTES —
+// character-for-character, so the frontend never re-authors cause copy) with
+// this as the honest, non-presumptuous fallback for a source the pipeline
+// hasn't curated a note for (no promised fix date — the pipeline doesn't
+// record a first-failure date yet).
 const DEFAULT_DEAD_BODY = 'This source isn’t returning data right now; the card will populate once it does.'
 
 // Design review P0-4: the per-move annotation "picket fence" is replaced,
@@ -71,7 +68,7 @@ function visibleAnnotationCount(
 }
 
 export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quietOutage,
-                            scopeBadge }: {
+                            scopeBadge, fullWidth }: {
   site: SiteData; chart: ChartSpec; finding: string; range: Range; geo: Geo
   now: Date; onOpen: (id: string) => void
   // Design review P1-outage: set when this card's section has a hoisted,
@@ -82,8 +79,13 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // T4: set by App's "Wider context" band — the chart's real scope
   // ('Victoria-wide'/'Australia'/'Global'), so a context card is never
   // mistaken for the selected geography.
-  scopeBadge?: string }) {
-  const { entry, lines, scopeNote, unitByName, primaryMetric, unit, st } =
+  scopeBadge?: string
+  // Task 9/spec §2.2: set by App when buildRows placed this card on a
+  // spanning (full sm:col-span-2) row — the mortgage card is the one
+  // consumer today, laying its two minis side-by-side instead of stacked
+  // since a spanning row gives it the width to do so.
+  fullWidth?: boolean }) {
+  const { entry, lines, scopeNote, unitByName, primaryMetric, unit } =
     useChartData(site, chart, range, geo, now)
   const annotations = chart.annotate
     ? site.annotations.cash_rate_moves.map(m => ({
@@ -151,6 +153,15 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // reads as a fake result, and repeating it again in the body/chip is the
   // "triple-repeat" the review calls out.
   const headline = failedEmpty ? chart.title : finding
+  // Task 5: the dead/empty body line is the pipeline's own curated cause
+  // (meta.status_note, export.py's STATUS_NOTES), falling back to the
+  // honest generic line only when the pipeline hasn't curated one for this
+  // source. Computed once and reused by both the compact outage row and the
+  // full-size card's `failedEmpty` paragraph below. It also now feeds the
+  // range-empty `failedEmpty` paragraph for every curated series, not only
+  // genuinely dead (isDeadChart) ones — a healthy source with zero points at
+  // the currently selected range gets the same honest, source-specific line.
+  const deadBody = entry?.meta.status_note ?? DEFAULT_DEAD_BODY
   // Design review d2: prefer the chart's own per-series source override
   // (the three FRED world charts) over the series' one shared
   // meta.source_name — shortSource() collapses either to the same "FRED"
@@ -162,19 +173,10 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
        onClick={e => e.stopPropagation()}>
       {shortSource(chart.source_name ?? entry.meta.source_name)}</a>
   )
-  const statusChip = st && (
-    quietOutage && (st.kind === 'stale' || st.kind === 'failed')
-      // Section-level shared-outage notice already said this once, loudly —
-      // the per-card chip drops to a quiet warn pill instead of repeating
-      // the full staleness sentence at full (red) strength.
-      ? <Chip kind="warn">
-          {entry?.meta.last_data_date
-            ? fmtPeriod(entry.meta.last_data_date, entry.meta.frequency) : 'No data'} · unavailable
-        </Chip>
-      : st.kind === 'fresh'
-        ? <span>{st.label}</span>
-        : <Chip kind={st.kind === 'ageing' ? 'warn' : 'bad'}>{st.label}</Chip>
-  )
+  // Task 5: every non-fresh staleness tag renders through the shared
+  // StatusChip (spec §1.3) — clickable, with a popover explainer — instead
+  // of ChartCard hand-rolling its own Chip/label logic per render site.
+  const statusChip = <StatusChip entry={entry} now={now} quiet={quietOutage} />
 
   // 2026-07-24 banner batch (Task 3, design review "unavailable-source cards
   // should be much smaller"): a genuinely dead chart — isDeadChart, NOT bare
@@ -191,44 +193,46 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // reachable/activatable by keyboard exactly like every other card.
   if (isDeadChart(chart, entry)) {
     return (
-      <button type="button" data-testid="outage-row" onClick={() => onOpen(chart.id)}
-              aria-label={`${chart.title} — open details`}
-              className="w-full text-left bg-card border border-line rounded-lg px-4 py-2.5
-                         cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1
-                         hover:border-blue group">
-        <span className="font-medium text-sm group-hover:text-blue">{chart.title}</span>
+      <div data-testid="outage-row"
+           className="w-full h-full bg-card border border-line rounded-lg px-4 py-2.5
+                      flex flex-wrap items-center gap-x-3 gap-y-1 hover:border-blue">
+        <button type="button" onClick={() => onOpen(chart.id)}
+                aria-label={`${chart.title} — open details`}
+                className="text-left cursor-pointer group flex-1 min-w-[12rem]">
+          <span className="font-medium text-sm group-hover:text-blue">{chart.title}</span>{' '}
+          <span className="text-xs text-faint">{deadBody}</span>
+        </button>
         {statusChip}
-        <span className="text-xs text-faint">
-          {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
-        </span>
-      </button>
+      </div>
     )
   }
 
   return (
-    <article className="bg-card border border-line rounded-lg p-4">
+    <article className="bg-card border border-line rounded-lg p-4 h-full flex flex-col">
       <button type="button" onClick={() => onOpen(chart.id)}
-              className="block w-full text-left cursor-pointer group"
+              className="w-full text-left cursor-pointer group flex-1 flex flex-col"
               aria-label={`${chart.title} — open details`}>
         <h3 className="font-display text-lg leading-snug mb-2 group-hover:text-blue">
           {headline}
         </h3>
         {failedEmpty ? (
           <p className="text-sm text-muted py-6 text-center">
-            {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
+            {deadBody}
           </p>
         ) : isStatTile ? (
           // No <svg>, short fixed height — a plotted line would be zero-length
           // ink here anyway (every line has under 2 points). The headline
           // above already carries the finding sentence; this body's only job
-          // is the primary metric's own latest figure, large.
-          <div className="h-24 flex items-center justify-center">
+          // is the primary metric's own latest figure, large. flex-1 lets it
+          // absorb the extra height when this card shares a spanning row with
+          // a taller sibling, instead of leaving dead space below the number.
+          <div className="flex-1 min-h-24 flex items-center justify-center">
             <p className="num text-4xl font-semibold text-ink">
               {statValue != null ? fmtUnit(statValue, statUnit) : '—'}
             </p>
           </div>
         ) : isMortgage ? (
-          <div className="space-y-3">
+          <div className={fullWidth ? 'grid gap-3 sm:grid-cols-2' : 'space-y-3'}>
             <div>
               <p className="text-xs font-medium text-muted mb-1">New</p>
               <LineChart lines={newLines} percent={chart.percent} unit={unit}
@@ -261,7 +265,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           (added there — see DetailView.tsx). Dead cards skip the repeated
           title (already the headline above) and have no table to toggle. */}
       {!failedEmpty ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-auto pt-2">
           <span>{chart.title}</span>
           {sourceToken}
           {statusChip}
@@ -270,7 +274,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           <DataTable lines={lines} unit={unit} unitByName={unitByName} />
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-auto pt-2">
           {sourceToken}
           {statusChip}
           {scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAll } from './lib/load'
-import type { NewsData, SiteData } from './lib/types'
+import type { ChartSpec, NewsData, SiteData } from './lib/types'
 import { siteIsStale, staleness } from './lib/staleness'
 import { fmtDate, fmtPeriod } from './lib/format'
 import { sectionOutageNotice, type SectionState } from './lib/sections'
 import { bandFor, hiddenTitles, isDeadChart, SCOPE_BADGE } from './lib/geoBands'
 import { GEO_LABEL } from './lib/selectors'
+import { buildRows, heightClassFor } from './lib/rows'
 import { useUrlState } from './lib/urlState'
 import { PALETTE } from './theme/tokens'
 import { Masthead, type FailedSource } from './components/Masthead'
@@ -16,6 +17,8 @@ import { NewsSection } from './components/NewsSection'
 import { WorldTiles } from './components/WorldTiles'
 import { DetailView } from './components/DetailView'
 import { WelcomeModal } from './components/WelcomeModal'
+import { Popover } from './components/Popover'
+import { ExplainerPanel } from './components/StatusChip'
 
 const DATA_URL =
   'https://github.com/jackalexleonard-stack/victoria-housing-dashboard/tree/main/data'
@@ -268,12 +271,23 @@ export default function App({ now = new Date() }: { now?: Date }) {
                     instead of five identical red chips (each card's own
                     chip still shows, just downgraded to a quiet pill via
                     ChartCard's `quietOutage`). */}
-                {outageNotice && (
-                  <p role="status" className="text-sm rounded-md px-3 py-2 mb-3"
-                     style={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
-                    {outageNotice.token} source unavailable — data to {outageNotice.period}
-                  </p>
-                )}
+                {outageNotice && (() => {
+                  const nEntry = site.series[outageNotice.seriesId]
+                  const nSt = nEntry ? staleness(nEntry, now) : null
+                  if (!nEntry || !nSt || nSt.kind === 'fresh') return null
+                  return (
+                    <div className="mb-3">
+                      <Popover panelLabel="Why this section’s data is old" block
+                               trigger={`${outageNotice.token} — awaiting new release · data to ${outageNotice.period}`}
+                               triggerClassName="text-sm rounded-md px-3 py-2 w-full text-left cursor-pointer border-0"
+                               triggerStyle={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
+                        <ExplainerPanel entry={nEntry}
+                                        kind={nSt.kind as 'ageing' | 'stale' | 'failed'}
+                                        now={now} />
+                      </Popover>
+                    </div>
+                  )
+                })()}
                 {id === 'news' ? (
                   <NewsSection news={news} now={now} />
                 ) : id === 'world' ? (
@@ -308,25 +322,28 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   const context = sectionCharts.filter(c =>
                     bandFor(c, state.geo, site.series[c.series_id]) === 'context')
                   const hidden = hiddenTitles(sectionCharts, state.geo, site.series)
+                  // Spec §2.1/§2.2 (Task 8/9): every card's row placement now
+                  // comes from its own intrinsic height class (heightClassFor)
+                  // via buildRows, not a hardcoded lead/dangle index rule —
+                  // buildRows still produces the identical lead-spans /
+                  // dangling-last-spans behaviour for the grid band (D2e)
+                  // because a same-class pair is the only thing that avoids a
+                  // span, and it now ALSO decides the context band's spans
+                  // (the old "context cards never span" rule is repealed).
+                  const classForGrid = (c: ChartSpec) =>
+                    heightClassFor(site, c, state.range, state.geo, now)
                   return (
                     <>
                       <div className="grid sm:grid-cols-2 gap-4">
-                        {healthy.map((c, i) => {
-                          // D2(e): the first card always spans full width (the
-                          // section's lead chart); everything else pairs up
-                          // 2-per-row. When the remaining count (healthy.length
-                          // - 1) is odd, the LAST card is left alone in its own
-                          // row with the right half of the grid empty — span it
-                          // full width too instead of leaving it dangling.
-                          const dangling = i === healthy.length - 1 && (healthy.length - 1) % 2 === 1
-                          return (
-                            <div key={c.id} className={i === 0 || dangling ? 'sm:col-span-2' : ''}>
+                        {buildRows(healthy, classForGrid, { leadSpans: true }).flatMap(row =>
+                          row.cards.map(c => (
+                            <div key={c.id} className={row.span ? 'sm:col-span-2' : ''}>
                               <ChartCard site={site} chart={c} finding={site.findings[c.id]?.[state.geo] ?? ''}
                                          range={state.range} geo={state.geo} now={now}
-                                         onOpen={openDetail} quietOutage={!!outageNotice} />
+                                         onOpen={openDetail} quietOutage={!!outageNotice}
+                                         fullWidth={row.span} />
                             </div>
-                          )
-                        })}
+                          )))}
                         {dead.map(c => (
                           <div key={c.id} className="sm:col-span-2">
                             <ChartCard site={site} chart={c} finding={site.findings[c.id]?.[state.geo] ?? ''}
@@ -340,23 +357,35 @@ export default function App({ now = new Date() }: { now?: Date }) {
                           <h3 className="text-xs text-faint uppercase tracking-wide mb-2">
                             Wider context</h3>
                           <div className="grid sm:grid-cols-2 gap-4">
-                            {context.map(c => {
-                              // A context card is NOT about the selected geo — render it at its
-                              // OWN primary geo, for both the data and the finding. Passing
-                              // state.geo here would filter a region_mode='geo' context chart
-                              // (e.g. `activity` under melbourne) down to zero rows and render
-                              // an empty card that falsely reads as a source outage.
-                              const own = (c.geos[0] ?? state.geo) as typeof state.geo
-                              return (
-                                <div key={c.id}>
-                                  <ChartCard site={site} chart={c}
-                                             finding={site.findings[c.id]?.[own] ?? ''}
-                                             range={state.range} geo={own} now={now}
-                                             onOpen={openDetail} quietOutage={!!outageNotice}
-                                             scopeBadge={SCOPE_BADGE[c.scope]} />
-                                </div>
-                              )
-                            })}
+                            {/* CRITICAL (spec §2.2): classFn must use each
+                                card's OWN geo, never state.geo — a context
+                                chart with zero rows at state.geo would
+                                otherwise misclassify as a 'tile' (empty ->
+                                every line short) instead of its real height,
+                                the same own-geo rule the render below already
+                                follows for data/finding. */}
+                            {buildRows(context,
+                              c => heightClassFor(site, c, state.range,
+                                (c.geos[0] ?? state.geo) as typeof state.geo, now),
+                              { leadSpans: false }).flatMap(row =>
+                              row.cards.map(c => {
+                                // A context card is NOT about the selected geo — render it at its
+                                // OWN primary geo, for both the data and the finding. Passing
+                                // state.geo here would filter a region_mode='geo' context chart
+                                // (e.g. `activity` under melbourne) down to zero rows and render
+                                // an empty card that falsely reads as a source outage.
+                                const own = (c.geos[0] ?? state.geo) as typeof state.geo
+                                return (
+                                  <div key={c.id} className={row.span ? 'sm:col-span-2' : ''}>
+                                    <ChartCard site={site} chart={c}
+                                               finding={site.findings[c.id]?.[own] ?? ''}
+                                               range={state.range} geo={own} now={now}
+                                               onOpen={openDetail} quietOutage={!!outageNotice}
+                                               scopeBadge={SCOPE_BADGE[c.scope]}
+                                               fullWidth={row.span} />
+                                  </div>
+                                )
+                              }))}
                           </div>
                         </div>
                       )}

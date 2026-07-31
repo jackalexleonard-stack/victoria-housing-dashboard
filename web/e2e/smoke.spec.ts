@@ -24,6 +24,28 @@ async function gotoDashboard(page: import('@playwright/test').Page, url = '/') {
   await page.goto(url)
 }
 
+// Shared by every axe scan that runs against the live dashboard (not the
+// welcome modal, which is scoped to `dialog[open]` instead and doesn't need
+// this): the headline conveyor's lead card fades in on mount (opacity 0 ->
+// 1), and axe multiplies a mid-fade element's opacity into its effective
+// contrast — scanning during the fade reads the (fully-legible-at-rest) lead
+// finding as a transient color-contrast violation. Wait until its EFFECTIVE
+// opacity (its own times every ancestor's — exactly what axe blends into
+// contrast) reaches 1 before analysing. Callers must also emulateMedia
+// reduce first so the 5s rotation timer stays off and no further fade can
+// start mid-scan.
+async function waitForSettledLeadOpacity(page: Page) {
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-testid="lead-finding"]')
+    if (!el) return false
+    let eff = 1
+    for (let n: Element | null = el; n; n = n.parentElement) {
+      eff *= parseFloat(getComputedStyle(n).opacity || '1')
+    }
+    return eff > 0.999
+  })
+}
+
 test('loads the briefing with real fixture data', async ({ page }) => {
   await gotoDashboard(page, '/')
   await expect(page.getByRole('heading', { name: 'Victorian Housing' })).toBeVisible()
@@ -147,15 +169,7 @@ test('axe scan has no serious violations', async ({ page }) => {
   //    the per-test emulateMedia above does.
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await gotoDashboard(page, '/')
-  await page.waitForFunction(() => {
-    const el = document.querySelector('[data-testid="lead-finding"]')
-    if (!el) return false
-    let eff = 1
-    for (let n: Element | null = el; n; n = n.parentElement) {
-      eff *= parseFloat(getComputedStyle(n).opacity || '1')
-    }
-    return eff > 0.999
-  })
+  await waitForSettledLeadOpacity(page)
   const results = await new AxeBuilder({ page }).analyze()
   const serious = results.violations.filter(v =>
     v.impact === 'serious' || v.impact === 'critical')
@@ -513,5 +527,112 @@ test.describe('banner + outage cards (2026-07-24)', () => {
         cells.every((c, i) => (i < firstOutage) === !isOutage(c))
     })
     expect(orderOk).toBe(true)
+  })
+})
+
+// Task 10: staleness-chip explainer popovers + the height-aware grid.
+// e2e's `now` is the wall clock running against frozen fixtures, so NOTHING
+// below may assert a specific ageing/stale kind or date — every assertion is
+// kind-independent (the stable ' — why?' trigger suffix, ' — details' panel
+// suffix, 'Latest data:' body text, or a structural DOM/layout check).
+test.describe('staleness-chip explainer popovers (Task 10)', () => {
+  // Adaptation from the brief: `getByRole('button', { name: 'Rents & vacancy' })`
+  // (no `exact`) is ambiguous in the real app — FilterBar's always-rendered
+  // "Jump to section" row (outside the hidden sm:flex / sm:hidden split, see
+  // the "section jump" test above) has its own button
+  // `aria-label="Jump to Rents & vacancy"`, and Playwright's default
+  // substring name-matching matches "Rents & vacancy" against that longer
+  // label too — two matches, `.click()` throws a strict-mode violation.
+  // `exact: true` scopes it to the disclosure toggle alone (confirmed
+  // against the built app: non-exact matches 2, exact matches 1).
+  test('staleness chip opens a keyboard-operable explainer popover', async ({ page }) => {
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Rents & vacancy', exact: true }).click()
+    const chip = page.getByRole('button', { name: / — why\?$/ }).first()
+    await chip.focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByRole('group', { name: / — details$/ }).first()
+    await expect(panel).toBeVisible()
+    await expect(panel).toContainText('Latest data:')
+    await page.keyboard.press('Escape')
+    await expect(panel).toBeHidden()
+    await expect(chip).toBeFocused()
+  })
+
+  test('axe: no serious violations with an explainer popover open', async ({ page }) => {
+    // Same settled-opacity guard as the main axe scan above (post-2.5
+    // lesson: axe must never scan mid-fade) — the popover itself doesn't
+    // animate, but the page it's opened on on still carries the headline
+    // conveyor's mount-fade.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await gotoDashboard(page, '/')
+    await waitForSettledLeadOpacity(page)
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Rents & vacancy', exact: true }).click()
+    await page.getByRole('button', { name: / — why\?$/ }).first().click()
+    await expect(page.getByRole('group', { name: / — details$/ }).first()).toBeVisible()
+    const results = await new AxeBuilder({ page }).analyze()
+    expect(results.violations.filter(v => v.impact === 'serious' || v.impact === 'critical'))
+      .toEqual([])
+  })
+
+  // Same exact-match adaptation as above ("Jump to Money & credit" is a
+  // substring superset of "Money & credit").
+  test('wider-context band never leaves a half-empty row', async ({ page }) => {
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Money & credit', exact: true }).click()
+    const band = page.getByTestId('context-band').first()
+    await expect(band).toBeVisible()
+    // every direct child of the band's grid is either paired or spanning:
+    // count children with/without the span class; an unpaired non-spanning
+    // child is the void this feature removes.
+    const counts = await band.locator(':scope > div.grid > div').evaluateAll(els => {
+      const spans = els.filter(e => e.className.includes('col-span-2')).length
+      return { total: els.length, spans }
+    })
+    expect((counts.total - counts.spans) % 2).toBe(0)
+  })
+
+  // Task 9: the spanning mortgage card lays its two minis ('New' /
+  // 'Outstanding') side-by-side once the row gives it the width to
+  // (ChartCard's `fullWidth`, driven by buildRows — a JS decision, not a
+  // media query), but the `sm:grid-cols-2` class that realises that only
+  // takes effect at >=640px, so the visual result still differs by
+  // viewport: stacked on the narrow mobile (Pixel 7) project, side-by-side
+  // on desktop. Confirmed against the built app: mobile boxes have disjoint
+  // y-ranges (dy ~192px); desktop boxes share the same y (dx ~485px, dy 0).
+  // Follows the file's existing per-project `test.skip` idiom (see "mobile
+  // fold: lead-finding card" above) rather than branching assertions
+  // in one test on `testInfo.project.name`.
+  test('mortgage minis stack vertically on the mobile project', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'viewport-specific layout check')
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Money & credit', exact: true }).click()
+    const newBox = await page.getByText('New', { exact: true }).boundingBox()
+    const outBox = await page.getByText('Outstanding', { exact: true }).boundingBox()
+    expect(newBox).not.toBeNull()
+    expect(outBox).not.toBeNull()
+    // Stacked: no vertical overlap between the two headings' bounding boxes.
+    const overlapY = newBox!.y < outBox!.y + outBox!.height &&
+      outBox!.y < newBox!.y + newBox!.height
+    expect(overlapY).toBe(false)
+  })
+
+  test('mortgage minis sit side-by-side on the desktop project', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'viewport-specific layout check')
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Money & credit', exact: true }).click()
+    const newBox = await page.getByText('New', { exact: true }).boundingBox()
+    const outBox = await page.getByText('Outstanding', { exact: true }).boundingBox()
+    expect(newBox).not.toBeNull()
+    expect(outBox).not.toBeNull()
+    // Side-by-side: the two headings' vertical ranges overlap (same row).
+    const overlapY = newBox!.y < outBox!.y + outBox!.height &&
+      outBox!.y < newBox!.y + newBox!.height
+    expect(overlapY).toBe(true)
   })
 })

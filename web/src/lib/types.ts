@@ -5,6 +5,10 @@ export interface SeriesMeta {
   frequency: string | null; last_fetched: string | null
   last_changed: string | null; last_data_date: string | null
   error: string | null; cadence_days: number
+  // T2 (frontend half of the pipeline's status_note export): a human-
+  // readable note on WHY a source is in its current state (e.g. a specific
+  // fetch error). Optional so older fixtures/exports without it stay valid.
+  status_note?: string | null
 }
 
 export interface SeriesEntry {

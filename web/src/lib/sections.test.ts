@@ -45,7 +45,7 @@ describe('sectionOutageNotice', () => {
       chart({ id: 'vacancy', series_id: 'vic_vacancy' }),
     ]
     const notice = sectionOutageNotice(charts, s, NOW)
-    expect(notice).toEqual({ token: 'DFFH', period: 'Sep qtr 2025' })
+    expect(notice).toEqual({ token: 'DFFH', period: 'Sep qtr 2025', seriesId: 'vic_rents' })
   })
 
   test('does not fire when one series is fresh', () => {

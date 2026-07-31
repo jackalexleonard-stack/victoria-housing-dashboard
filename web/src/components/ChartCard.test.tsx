@@ -27,6 +27,10 @@ test('leads with the finding and opens on click', async () => {
 
 // --- P1-outage / 2026-07-24 banner batch: dead charts compact to a single
 // full-width outage row (no triple-repeated placeholder, no wasted card) ---
+// Task 5: the row is now a <div data-testid="outage-row"> containing TWO
+// sibling buttons — a title/body button that opens the modal, and the
+// clickable StatusChip (Task 4) — never a chip nested inside the row's own
+// button (a <button> can't legally contain another <button>).
 
 test('a dead chart (failed, no historical geo coverage) renders as a compact outage row — no chart area', () => {
   const auctionsChart = chart('auctions')
@@ -34,38 +38,63 @@ test('a dead chart (failed, no historical geo coverage) renders as a compact out
                     finding="No recent data — source currently unavailable"
                     range="5y" geo="melbourne" now={NOW} onOpen={() => {}} />)
   const row = screen.getByTestId('outage-row')
+  expect(row.tagName).toBe('DIV')
   expect(within(row).queryByRole('img')).not.toBeInTheDocument()      // no chart svg
   expect(within(row).getByText(/Auction clearance/)).toBeInTheDocument()
   // Headlines the series name — the generic finding sentence never renders
   // (P1-outage: no triple-repeated "source unavailable" placeholder).
   expect(within(row).queryByText('No recent data — source currently unavailable'))
     .not.toBeInTheDocument()
-  expect(within(row).getByText(/source unavailable/i)).toBeInTheDocument()
 })
 
-test('the compact outage row still opens the detail modal, keyboard-reachable like every other card', async () => {
+test('the outage row is a title/body button and a SEPARATE chip button — never nested', () => {
+  const auctionsChart = chart('auctions')
+  render(<ChartCard site={site} chart={auctionsChart} finding="f" range="5y"
+                    geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const row = screen.getByTestId('outage-row')
+  const titleBtn = within(row).getByRole('button', { name: `${auctionsChart.title} — open details` })
+  const chipBtn = within(row).getByRole('button', { name: 'No data · source unavailable — why?' })
+  expect(titleBtn).not.toBe(chipBtn)
+  // A <button> can never legally nest another <button> — assert the chip's
+  // nearest button ancestor is itself, not the title/body button.
+  expect(chipBtn.closest('button')).toBe(chipBtn)
+  expect(titleBtn.contains(chipBtn)).toBe(false)
+})
+
+test('the outage row title/body button opens the detail modal, keyboard-reachable like every other card', async () => {
   const onOpen = vi.fn()
   const auctionsChart = chart('auctions')
   render(<ChartCard site={site} chart={auctionsChart} finding="" range="5y"
                     geo="melbourne" now={NOW} onOpen={onOpen} />)
   const row = screen.getByTestId('outage-row')
-  expect(row.tagName).toBe('BUTTON')   // the same clickable-surface idiom as every other card
-  await userEvent.click(row)
+  await userEvent.click(
+    within(row).getByRole('button', { name: `${auctionsChart.title} — open details` }))
   expect(onOpen).toHaveBeenCalledWith(auctionsChart.id)
 })
 
-test('a dead chart shows one honest, source-specific body line — not the generic sentence repeated', () => {
+test('a dead chart shows one honest, source-specific body line from the pipeline status_note — not the generic sentence repeated', () => {
   render(<ChartCard site={site} chart={chart('auctions')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
   expect(within(screen.getByTestId('outage-row'))
-    .getByText(/auction results aren.t reachable/i, { selector: 'span' })).toBeInTheDocument()
+    .getByText(/Melbourne auction results aren.t reachable/i, { selector: 'span' })).toBeInTheDocument()
 })
 
 test('the outage row still surfaces a failure chip, but no table toggle (no data to tabulate)', () => {
   render(<ChartCard site={site} chart={chart('auctions')} finding="f"
                     range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
-  expect(screen.getByText(/source unavailable/i, { selector: 'span' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'No data · source unavailable — why?' }))
+    .toBeInTheDocument()
   expect(screen.queryByText(/view data table/i)).not.toBeInTheDocument()
+})
+
+test('caption chip opens the explainer without opening the modal', async () => {
+  const onOpen = vi.fn()
+  const stale = new Date('2027-01-01T00:00:00Z')
+  render(<ChartCard site={site} chart={chart('median_rent')} finding="f"
+                    range="all" geo="melbourne" now={stale} onOpen={onOpen} />)
+  await userEvent.click(screen.getByRole('button', { name: /· stale — why\?$/ }))
+  expect(screen.getByRole('group', { name: 'Stale data — details' })).toBeInTheDocument()
+  expect(onOpen).not.toHaveBeenCalled()
 })
 
 test('data table disclosure exposes the values', async () => {
@@ -143,11 +172,14 @@ test('quietOutage downgrades a stale/failed chip to the quiet "{period} · unava
   expect(screen.getByText(/Mar qtr 2026/)).toBeInTheDocument()
 })
 
-test('quietOutage renders the compact "period · unavailable" chip for a genuinely stale card', () => {
+test('quietOutage renders the compact "period · stale" chip for a genuinely stale card', () => {
   const stale = new Date('2027-01-01T00:00:00Z')   // well past vic_rents' cadence
   render(<ChartCard site={site} chart={chart('median_rent')} finding="f" quietOutage
                     range="all" geo="melbourne" now={stale} onOpen={() => {}} />)
-  expect(screen.getByText(/Mar qtr 2026 · unavailable/)).toBeInTheDocument()
+  // Age-only taxonomy (spec §1.1): vic_rents still carries data, so it's
+  // 'stale', never 'failed' — the quiet form must say so, not blanket every
+  // quiet chip with "unavailable" regardless of kind.
+  expect(screen.getByText(/Mar qtr 2026 · stale/)).toBeInTheDocument()
   expect(screen.queryByText(/source unavailable/i)).not.toBeInTheDocument()
 })
 
@@ -204,6 +236,23 @@ test('the mortgage-rates card small-multiples into two full-colour minis (New / 
   const deemphPaths = [...container.querySelectorAll('path')]
     .filter(p => p.getAttribute('stroke') === PALETTE.deemphasis)
   expect(deemphPaths.length).toBe(0)
+})
+
+// --- Task 9: fullWidth mortgage minis lay side-by-side on a spanning row ---
+
+test('a full-width mortgage card lays its two minis side-by-side', () => {
+  render(<ChartCard site={site} chart={chart('mortgage_rates')} finding="f" fullWidth
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const minis = screen.getByText('New').parentElement!.parentElement!
+  expect(minis.className).toContain('sm:grid-cols-2')
+})
+
+test('without fullWidth, the mortgage card stacks its two minis instead', () => {
+  render(<ChartCard site={site} chart={chart('mortgage_rates')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const minis = screen.getByText('New').parentElement!.parentElement!
+  expect(minis.className).toContain('space-y-3')
+  expect(minis.className).not.toContain('sm:grid-cols-2')
 })
 
 // --- design review P1: structural shared x-domain + degenerate band gating ---
