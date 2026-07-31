@@ -16,6 +16,8 @@ import { NewsSection } from './components/NewsSection'
 import { WorldTiles } from './components/WorldTiles'
 import { DetailView } from './components/DetailView'
 import { WelcomeModal } from './components/WelcomeModal'
+import { Popover } from './components/Popover'
+import { ExplainerPanel } from './components/StatusChip'
 
 const DATA_URL =
   'https://github.com/jackalexleonard-stack/victoria-housing-dashboard/tree/main/data'
@@ -268,12 +270,23 @@ export default function App({ now = new Date() }: { now?: Date }) {
                     instead of five identical red chips (each card's own
                     chip still shows, just downgraded to a quiet pill via
                     ChartCard's `quietOutage`). */}
-                {outageNotice && (
-                  <p role="status" className="text-sm rounded-md px-3 py-2 mb-3"
-                     style={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
-                    {outageNotice.token} source unavailable — data to {outageNotice.period}
-                  </p>
-                )}
+                {outageNotice && (() => {
+                  const nEntry = site.series[outageNotice.seriesId]
+                  const nSt = nEntry ? staleness(nEntry, now) : null
+                  if (!nEntry || !nSt || nSt.kind === 'fresh') return null
+                  return (
+                    <div className="mb-3">
+                      <Popover panelLabel="Why this section’s data is old"
+                               trigger={`${outageNotice.token} — awaiting new release · data to ${outageNotice.period}`}
+                               triggerClassName="text-sm rounded-md px-3 py-2 w-full text-left cursor-pointer border-0"
+                               triggerStyle={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>
+                        <ExplainerPanel entry={nEntry}
+                                        kind={nSt.kind as 'ageing' | 'stale' | 'failed'}
+                                        now={now} />
+                      </Popover>
+                    </div>
+                  )
+                })()}
                 {id === 'news' ? (
                   <NewsSection news={news} now={now} />
                 ) : id === 'world' ? (

@@ -537,14 +537,20 @@ describe('shared-outage section notice', () => {
       render(<App now={stale} />)
       await screen.findByText('Victorian Housing')
       const section = await openSection('Rents & vacancy')
-      expect(within(section).getByText(/DFFH source unavailable — data to Mar qtr 2026/))
-        .toBeInTheDocument()
+      const banner = within(section).getByRole('button',
+        { name: /DFFH — awaiting new release · data to Mar qtr 2026/ })
+      expect(banner).toBeInTheDocument()
       // The per-card chip drops to the quiet form instead of repeating the
       // full staleness sentence at full strength (two cards share vic_rents
       // in the fixture, so both carry the quiet chip). Age-only taxonomy:
       // vic_rents is 'stale' here (not 'failed', per the comment above), so
       // the quiet chip says "· stale", not a blanket "· unavailable".
       expect(within(section).getAllByText(/Mar qtr 2026 · stale/).length).toBeGreaterThan(0)
+      // The banner is the same Popover mechanism the chips use — clicking it
+      // opens the shared ExplainerPanel, not a bespoke tooltip.
+      await userEvent.click(banner)
+      expect(within(section).getByRole('group', { name: /why this section.s data is old/i }))
+        .toBeInTheDocument()
     })
 
   test('no shared-outage notice when the section is not uniformly stale/failed (e.g. Money, at the default NOW)',
@@ -554,7 +560,7 @@ describe('shared-outage section notice', () => {
       render(<App now={new Date('2026-07-18T10:00:00Z')} />)
       await screen.findByText('Victorian Housing')
       const section = await openSection('Money & credit')
-      expect(within(section).queryByText(/source unavailable — data to/)).not.toBeInTheDocument()
+      expect(within(section).queryByText(/awaiting new release · data to/)).not.toBeInTheDocument()
     })
 })
 
