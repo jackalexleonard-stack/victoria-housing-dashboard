@@ -23,7 +23,7 @@ DATA = Path("data")
 OUT = Path("web/public/data")
 ACCORD_START = "2024-07-01"
 META_KEYS = ("source_name", "source_url", "frequency", "last_fetched",
-             "last_changed", "last_data_date", "error")
+             "last_changed", "last_data_date", "error", "status_note")
 EMPTY_TILE = {"key": "empty", "label": "—", "value": None,
               "delta": None, "delta_color": "normal", "last_date": None}
 
@@ -68,6 +68,33 @@ def repo_series_ids() -> list[str]:
                   if p.stem != "news")
 
 
+# Curated per-source cause notes surfaced in the frontend's staleness-chip
+# explainer popovers (spec 2026-07-31 §1.4). Qualitative ONLY — never bake in
+# a count of missed releases or a specific edition; the frontend computes
+# "~n releases behind" live from cadence + data age.
+STATUS_NOTES = {
+    "vic_rents": (
+        "Homes Victoria hasn't published a new Rental Report for several "
+        "quarters — the publisher is running behind its usual quarterly "
+        "schedule. Its site also blocks automated fetchers, so this series "
+        "refreshes from a manual run once a new report appears."),
+    "vic_vacancy": (
+        "Vacancy comes from the Rental Report's SQM-sourced sheet, and Homes "
+        "Victoria hasn't published a new edition for several quarters. Its "
+        "site also blocks automated fetchers, so this series refreshes from "
+        "a manual run once a new report appears."),
+    "vic_social_waitlist": (
+        "homes.vic.gov.au blocks automated fetchers, so this series refreshes "
+        "from a manual run when the quarterly dashboard updates."),
+    "vic_auctions": (
+        "Melbourne auction results aren't reachable from an automated source "
+        "right now; this card will populate if that changes."),
+    "vic_median_price": (
+        "REIV blocks automated access; this card will populate if the source "
+        "opens up."),
+}
+
+
 def _series_entry(sid: str, ls: Loader, lm: Loader) -> dict:
     meta = lm(sid) or {}
     df = ls(sid)
@@ -81,6 +108,7 @@ def _series_entry(sid: str, ls: Loader, lm: Loader) -> dict:
                   for r in df.itertuples()]
     status = meta.get("status", "ok" if points else "failed")
     out_meta = {k: meta.get(k) for k in META_KEYS}
+    out_meta["status_note"] = STATUS_NOTES.get(sid)
     out_meta["cadence_days"] = scoring.NORMAL_CADENCE.get(
         meta.get("frequency", "monthly"), 31)
     return {"status": status, "meta": out_meta, "units": units, "points": points}
@@ -318,6 +346,9 @@ def validate_site(site: dict) -> None:
             date.fromisoformat(str(p["date"]))
         if entry["meta"].get("cadence_days") is None:
             _fail(f"missing cadence for {sid}")
+        sn = entry["meta"].get("status_note")
+        if sn is not None and (not isinstance(sn, str) or not sn):
+            _fail(f"bad status_note for {sid}")
     if len(site.get("hero", [])) != 5:
         _fail("hero must have exactly 5 tiles")
     if not isinstance(site.get("hero_lead"), str) or not site["hero_lead"]:

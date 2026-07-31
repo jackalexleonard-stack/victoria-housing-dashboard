@@ -397,3 +397,47 @@ def test_every_registry_chart_declares_a_valid_scope():
     valid = {"geo", "state", "national", "global"}
     for c in CHARTS:
         assert c["scope"] in valid, f"{c['id']} has invalid scope {c.get('scope')!r}"
+
+
+# ---------------------------------------------------------------------------
+# status_note — Task 1: curated per-source explainer notes
+# ---------------------------------------------------------------------------
+
+def _minimal_valid_site():
+    """Minimal valid site with single series for validate_site tests."""
+    ls, lm = _loaders()
+    site = export.build_site(ls, lm, date(2026, 7, 18), series_ids=list(METAS))
+    return site
+
+
+def test_series_entry_carries_curated_status_note():
+    from pipeline.export import _series_entry, STATUS_NOTES
+    lm = lambda sid: {"source_name": "DFFH / Homes Victoria Rental Report",
+                      "frequency": "quarterly", "status": "failed",
+                      "last_data_date": "2025-09-30"}
+    ls = lambda sid: None
+    entry = _series_entry("vic_rents", ls, lm)
+    assert entry["meta"]["status_note"] == STATUS_NOTES["vic_rents"]
+    # a series with no curated note exports an explicit None, never a KeyError
+    entry2 = _series_entry("cash_rate", ls, lm)
+    assert entry2["meta"]["status_note"] is None
+
+
+def test_validate_site_rejects_empty_status_note():
+    import copy
+    from pipeline.export import validate_site
+    # reuse the module's existing minimal-valid-site helper if one exists in
+    # this test file; otherwise build from the smallest passing site dict
+    # already constructed by neighbouring validate_site tests.
+    site = copy.deepcopy(_minimal_valid_site())
+    sid = next(iter(site["series"]))
+    site["series"][sid]["meta"]["status_note"] = ""
+    try:
+        validate_site(site)
+        assert False, "empty status_note should fail validation"
+    except ValueError:
+        pass
+    site["series"][sid]["meta"]["status_note"] = None
+    validate_site(site)   # None is fine
+    site["series"][sid]["meta"]["status_note"] = "a real note"
+    validate_site(site)   # non-empty string is fine
