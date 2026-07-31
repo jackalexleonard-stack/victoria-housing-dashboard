@@ -558,6 +558,19 @@ describe('shared-outage section notice', () => {
     })
 })
 
+test('the detail modal chip opens the explainer popover', async () => {
+  history.replaceState(null, '', '/')
+  mockFetch()
+  const stale = new Date('2027-01-01T00:00:00Z')
+  render(<App now={stale} />)
+  await screen.findByText('Victorian Housing')
+  const section = await openSection('Rents & vacancy')
+  await userEvent.click(within(section).getAllByRole('button', { name: /open details/ })[0])
+  const dialog = await screen.findByRole('dialog')
+  await userEvent.click(within(dialog).getByRole('button', { name: /— why\?$/ }))
+  expect(within(dialog).getByRole('group', { name: /details$/ })).toBeInTheDocument()
+})
+
 describe('geo banding', () => {
   beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
 

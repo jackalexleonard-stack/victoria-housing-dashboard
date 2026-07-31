@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
+import { StatusChip } from './StatusChip'
 import { chartPoints, useChartData } from '../lib/selectors'
 import { nextUpdate } from '../lib/staleness'
 import { ago, fmtPeriod, fmtUnit } from '../lib/format'
@@ -151,8 +152,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
           <a href={entry.meta.source_url} target="_blank" rel="noreferrer"
              className="underline underline-offset-2 hover:text-blue">
             {chart.source_name ?? entry.meta.source_name}</a>}
-        {st && (st.kind === 'fresh' ? <span>{st.label}</span>
-          : <Chip kind={st.kind === 'ageing' ? 'warn' : 'bad'}>{st.label}</Chip>)}
+        <StatusChip entry={entry} st={st} now={now} />
         {entry && <span>fetched {ago(entry.meta.last_fetched, now)}</span>}
         {entry && nextUpdate(entry, now) && <span>{nextUpdate(entry, now)}</span>}
         {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
