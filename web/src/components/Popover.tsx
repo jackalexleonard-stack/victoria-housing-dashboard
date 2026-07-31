@@ -7,13 +7,19 @@ import { useLayoutEffect, useRef, useState } from 'react'
 // right viewport edge (jsdom rects are all zero, so the flip only ever
 // engages in a real browser — covered by e2e, not vitest).
 export function Popover({ trigger, ariaLabel, triggerStyle, triggerClassName,
-                          panelLabel, align = 'left', children }: {
+                          panelLabel, align = 'left', block = false, children }: {
   trigger: React.ReactNode
   ariaLabel?: string
   triggerStyle?: React.CSSProperties
   triggerClassName?: string
   panelLabel: string
   align?: 'left' | 'right'
+  // Opt-in: the root defaults to `inline-block`, which shrink-wraps to the
+  // trigger's content width — fine for chip-sized triggers, but wrong for a
+  // full-width banner trigger (its `w-full` button would resolve against
+  // the shrunk root, not the container). Set `block` to make the root a
+  // block box instead so a `w-full` trigger actually spans the container.
+  block?: boolean
   children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [flip, setFlip] = useState(false)
@@ -36,7 +42,8 @@ export function Popover({ trigger, ariaLabel, triggerStyle, triggerClassName,
   const side = flip || align === 'right' ? 'right-0' : 'left-0'
 
   return (
-    <span ref={root} className="relative inline-block" onKeyDown={onKeyDown} onBlur={onBlur}>
+    <span ref={root} className={`relative ${block ? 'block' : 'inline-block'}`}
+          onKeyDown={onKeyDown} onBlur={onBlur}>
       <button type="button" aria-expanded={open} aria-haspopup="true"
               aria-label={ariaLabel}
               onClick={e => { e.stopPropagation(); setOpen(o => !o) }}

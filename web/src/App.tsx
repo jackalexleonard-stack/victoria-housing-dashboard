@@ -276,7 +276,7 @@ export default function App({ now = new Date() }: { now?: Date }) {
                   if (!nEntry || !nSt || nSt.kind === 'fresh') return null
                   return (
                     <div className="mb-3">
-                      <Popover panelLabel="Why this section’s data is old"
+                      <Popover panelLabel="Why this section’s data is old" block
                                trigger={`${outageNotice.token} — awaiting new release · data to ${outageNotice.period}`}
                                triggerClassName="text-sm rounded-md px-3 py-2 w-full text-left cursor-pointer border-0"
                                triggerStyle={{ background: PALETTE.chip_warn, color: PALETTE.chip_warn_text }}>

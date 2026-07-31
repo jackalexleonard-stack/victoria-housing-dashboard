@@ -540,6 +540,14 @@ describe('shared-outage section notice', () => {
       const banner = within(section).getByRole('button',
         { name: /DFFH — awaiting new release · data to Mar qtr 2026/ })
       expect(banner).toBeInTheDocument()
+      // jsdom can't see layout, so these are the class-level guards that the
+      // real full-width warn bar depends on: the button itself must stretch
+      // (`w-full`), and its Popover root must be a block box, not the
+      // default `inline-block` (which would shrink-wrap to the text and
+      // render a text-width pill instead of a full-width bar).
+      expect(banner.className).toContain('w-full')
+      expect(banner.parentElement?.className).toContain('block')
+      expect(banner.parentElement?.className).not.toContain('inline-block')
       // The per-card chip drops to the quiet form instead of repeating the
       // full staleness sentence at full strength (two cards share vic_rents
       // in the fixture, so both carry the quiet chip). Age-only taxonomy:

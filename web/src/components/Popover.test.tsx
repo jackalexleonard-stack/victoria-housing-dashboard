@@ -34,3 +34,16 @@ test('ariaLabel overrides the accessible name without changing the visible text'
   expect(screen.getByRole('button', { name: 'Sep qtr 2025 · stale — why?' }))
     .toHaveTextContent('Sep qtr 2025 · stale')
 })
+
+test('root wrapper defaults to inline-block; the `block` prop opts into a full-width block root', () => {
+  const { rerender } = render(
+    <Popover trigger="why?" panelLabel="Details"><p>x</p></Popover>)
+  const root = screen.getByRole('button', { name: 'why?' }).parentElement
+  expect(root).toHaveClass('inline-block')
+  expect(root).not.toHaveClass('block')
+
+  rerender(<Popover trigger="why?" panelLabel="Details" block><p>x</p></Popover>)
+  const blockRoot = screen.getByRole('button', { name: 'why?' }).parentElement
+  expect(blockRoot).toHaveClass('block')
+  expect(blockRoot).not.toHaveClass('inline-block')
+})
