@@ -105,8 +105,10 @@ test('jump targets carry scroll-margin so a scrolled-to heading clears the stick
 test('masthead only counts sources that are actually overdue, singular wording', async () => {
   history.replaceState(null, '', '/')
   mockFetch()
-  // vic_auctions: failed, no data -> counts.
-  // vic_rents: failed, last_data 2026-03-31, cadence 92 -> gap ~109d <= 1.5*92=138 -> quiet, does not count.
+  // vic_auctions: failed, no data at all -> kind 'failed', counts.
+  // vic_rents: failed but retains data (last_data 2026-03-31) -> age-only
+  // taxonomy governs it (fresh/ageing/stale) -> kind is never 'failed' while
+  // data exists, so it never counts, regardless of date.
   render(<App now={new Date('2026-07-18T10:00:00Z')} />)
   await screen.findByText('Victorian Housing')
   expect(await screen.findByText('1 source unavailable')).toBeInTheDocument()
@@ -527,7 +529,11 @@ describe('shared-outage section notice', () => {
     async () => {
       history.replaceState(null, '', '/')
       mockFetch()
-      const stale = new Date('2027-01-01T00:00:00Z')   // trips vic_rents' failed gate
+      // Age-only taxonomy: this pushes vic_rents (last_data 2026-03-31,
+      // cadence 92) past 2.5x cadence into kind 'stale' — never 'failed',
+      // since it still carries data — which is enough on its own to satisfy
+      // sectionOutageNotice's stale-or-failed gate.
+      const stale = new Date('2027-01-01T00:00:00Z')
       render(<App now={stale} />)
       await screen.findByText('Victorian Housing')
       const section = await openSection('Rents & vacancy')

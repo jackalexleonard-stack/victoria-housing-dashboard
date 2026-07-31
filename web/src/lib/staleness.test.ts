@@ -1,4 +1,4 @@
-import { staleness, nextUpdate, siteIsStale } from './staleness'
+import { staleness, nextUpdate, releasesBehind, siteIsStale } from './staleness'
 import type { SeriesEntry } from './types'
 
 const entry = (over: Partial<SeriesEntry['meta']>, status: 'ok' | 'failed' = 'ok'): SeriesEntry => ({
@@ -20,15 +20,38 @@ test('ageing past 1.5 cadences, stale past 2.5', () => {
     .toBe('Data to Apr 2026 · stale')
 })
 
-test('failed only wins when the data is overdue', () => {
+test('failed fetch never changes the label while data exists — age alone decides', () => {
   const s = staleness(entry({ last_data_date: null }, 'failed'), NOW)
   expect(s).toEqual({ kind: 'failed', label: 'No data · source unavailable' })
-  // failed fetch, but retained data is still within 1.5x cadence -> stays quiet
+  // failed fetch, data current -> fresh, quiet
   expect(staleness(entry({}, 'failed'), NOW))
     .toEqual({ kind: 'fresh', label: 'Data to Jun 2026' })
-  // failed fetch AND the retained data is overdue -> chip fires
+  // failed fetch, data past 1.5x cadence -> ageing, same as an ok series
+  expect(staleness(entry({ last_data_date: '2026-05-20' }, 'failed'), NOW))
+    .toEqual({ kind: 'ageing', label: 'Data to May 2026 · ageing' })
+  // failed fetch, data past 2.5x cadence -> stale, NEVER "source unavailable"
   expect(staleness(entry({ last_data_date: '2026-04-01' }, 'failed'), NOW))
-    .toEqual({ kind: 'failed', label: 'Data to Apr 2026 · source unavailable' })
+    .toEqual({ kind: 'stale', label: 'Data to Apr 2026 · stale' })
+})
+
+test('releasesBehind grants one cadence of publication lag, then counts', () => {
+  // gap 18d / 31d cadence -> 0 behind
+  expect(releasesBehind(entry({}), NOW)).toBe(0)
+  // gap ~48d -> floor(1.5)-1 = 0
+  expect(releasesBehind(entry({ last_data_date: '2026-05-31' }), NOW)).toBe(0)
+  // gap ~78d -> floor(2.5)-1 = 1
+  expect(releasesBehind(entry({ last_data_date: '2026-05-01' }), NOW)).toBe(1)
+  // quarterly example — the DFFH shape: ~304d gap / 92d cadence -> 2
+  expect(releasesBehind(entry({ last_data_date: '2025-09-30', frequency: 'quarterly',
+                                cadence_days: 92 }), NOW)).toBe(2)
+  expect(releasesBehind(entry({ last_data_date: null }), NOW)).toBe(0)
+})
+
+test('nextUpdate flips to "was due" when the estimate is in the past', () => {
+  expect(nextUpdate(entry({}), NOW)).toBe('next update ~Jul 2026')
+  expect(nextUpdate(entry({ last_data_date: '2026-04-01' }), NOW))
+    .toBe('next update was due ~May 2026')
+  expect(nextUpdate(entry({ last_data_date: null }), NOW)).toBeNull()
 })
 
 test('next update estimate and site banner', () => {
