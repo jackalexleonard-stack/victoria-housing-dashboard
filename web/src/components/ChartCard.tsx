@@ -1,8 +1,9 @@
 import { LineChart } from './LineChart'
 import { DataTable } from './DataTable'
 import { Chip } from './Chip'
+import { StatusChip } from './StatusChip'
 import { lineName, useChartData } from '../lib/selectors'
-import { fmtPeriod, fmtUnit, shortSource } from '../lib/format'
+import { fmtUnit, shortSource } from '../lib/format'
 import { xExtentOf } from '../lib/chartMath'
 import { isDeadChart } from '../lib/geoBands'
 import type { ChartSpec, SiteData } from '../lib/types'
@@ -31,16 +32,12 @@ const FINDING_PRIMARY_METRIC: Record<string, string> = {
 // repeat one generic sentence three times over (serif headline, body
 // placeholder, red chip) — the headline now carries the series name instead
 // (see the `failedEmpty` branch below), so the body only needs to add ONE
-// honest, source-specific line. Keyed by chart id since that's what
-// distinguishes the two currently-dead Prices cards even though they're
-// blocked for different reasons; anything else dead falls back to a plain,
-// non-presumptuous line (no promised fix date — the pipeline doesn't record
-// a first-failure date yet).
-const DEAD_CARD_BODY: Record<string, string> = {
-  reiv_median: 'REIV blocks automated access; this card will populate if the source opens up.',
-  auctions: 'Melbourne auction results aren’t reachable from an automated source right now; ' +
-    'this card will populate if that changes.',
-}
+// honest, source-specific line. Task 5: that line now comes from the
+// pipeline's own curated `meta.status_note` (export.py's STATUS_NOTES —
+// character-for-character, so the frontend never re-authors cause copy) with
+// this as the honest, non-presumptuous fallback for a source the pipeline
+// hasn't curated a note for (no promised fix date — the pipeline doesn't
+// record a first-failure date yet).
 const DEFAULT_DEAD_BODY = 'This source isn’t returning data right now; the card will populate once it does.'
 
 // Design review P0-4: the per-move annotation "picket fence" is replaced,
@@ -151,6 +148,12 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // reads as a fake result, and repeating it again in the body/chip is the
   // "triple-repeat" the review calls out.
   const headline = failedEmpty ? chart.title : finding
+  // Task 5: the dead/empty body line is the pipeline's own curated cause
+  // (meta.status_note, export.py's STATUS_NOTES), falling back to the
+  // honest generic line only when the pipeline hasn't curated one for this
+  // source. Computed once and reused by both the compact outage row and the
+  // full-size card's `failedEmpty` paragraph below.
+  const deadBody = entry?.meta.status_note ?? DEFAULT_DEAD_BODY
   // Design review d2: prefer the chart's own per-series source override
   // (the three FRED world charts) over the series' one shared
   // meta.source_name — shortSource() collapses either to the same "FRED"
@@ -162,19 +165,10 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
        onClick={e => e.stopPropagation()}>
       {shortSource(chart.source_name ?? entry.meta.source_name)}</a>
   )
-  const statusChip = st && (
-    quietOutage && (st.kind === 'stale' || st.kind === 'failed')
-      // Section-level shared-outage notice already said this once, loudly —
-      // the per-card chip drops to a quiet warn pill instead of repeating
-      // the full staleness sentence at full (red) strength.
-      ? <Chip kind="warn">
-          {entry?.meta.last_data_date
-            ? fmtPeriod(entry.meta.last_data_date, entry.meta.frequency) : 'No data'} · unavailable
-        </Chip>
-      : st.kind === 'fresh'
-        ? <span>{st.label}</span>
-        : <Chip kind={st.kind === 'ageing' ? 'warn' : 'bad'}>{st.label}</Chip>
-  )
+  // Task 5: every non-fresh staleness tag renders through the shared
+  // StatusChip (spec §1.3) — clickable, with a popover explainer — instead
+  // of ChartCard hand-rolling its own Chip/label logic per render site.
+  const statusChip = <StatusChip entry={entry} st={st} now={now} quiet={quietOutage} />
 
   // 2026-07-24 banner batch (Task 3, design review "unavailable-source cards
   // should be much smaller"): a genuinely dead chart — isDeadChart, NOT bare
@@ -191,17 +185,17 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // reachable/activatable by keyboard exactly like every other card.
   if (isDeadChart(chart, entry)) {
     return (
-      <button type="button" data-testid="outage-row" onClick={() => onOpen(chart.id)}
-              aria-label={`${chart.title} — open details`}
-              className="w-full text-left bg-card border border-line rounded-lg px-4 py-2.5
-                         cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1
-                         hover:border-blue group">
-        <span className="font-medium text-sm group-hover:text-blue">{chart.title}</span>
+      <div data-testid="outage-row"
+           className="w-full bg-card border border-line rounded-lg px-4 py-2.5
+                      flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button type="button" onClick={() => onOpen(chart.id)}
+                aria-label={`${chart.title} — open details`}
+                className="text-left cursor-pointer group flex-1 min-w-[12rem]">
+          <span className="font-medium text-sm group-hover:text-blue">{chart.title}</span>{' '}
+          <span className="text-xs text-faint">{deadBody}</span>
+        </button>
         {statusChip}
-        <span className="text-xs text-faint">
-          {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
-        </span>
-      </button>
+      </div>
     )
   }
 
@@ -215,7 +209,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
         </h3>
         {failedEmpty ? (
           <p className="text-sm text-muted py-6 text-center">
-            {DEAD_CARD_BODY[chart.id] ?? DEFAULT_DEAD_BODY}
+            {deadBody}
           </p>
         ) : isStatTile ? (
           // No <svg>, short fixed height — a plotted line would be zero-length

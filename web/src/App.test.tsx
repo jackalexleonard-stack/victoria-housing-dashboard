@@ -541,8 +541,10 @@ describe('shared-outage section notice', () => {
         .toBeInTheDocument()
       // The per-card chip drops to the quiet form instead of repeating the
       // full staleness sentence at full strength (two cards share vic_rents
-      // in the fixture, so both carry the quiet chip).
-      expect(within(section).getAllByText(/Mar qtr 2026 · unavailable/).length).toBeGreaterThan(0)
+      // in the fixture, so both carry the quiet chip). Age-only taxonomy:
+      // vic_rents is 'stale' here (not 'failed', per the comment above), so
+      // the quiet chip says "· stale", not a blanket "· unavailable".
+      expect(within(section).getAllByText(/Mar qtr 2026 · stale/).length).toBeGreaterThan(0)
     })
 
   test('no shared-outage notice when the section is not uniformly stale/failed (e.g. Money, at the default NOW)',
