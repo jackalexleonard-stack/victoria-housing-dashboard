@@ -10,7 +10,7 @@ const entry = (over: Partial<SeriesEntry['meta']> = {},
   meta: { source_name: 'DFFH / Homes Victoria Rental Report', source_url: 'u',
     frequency: 'quarterly', last_fetched: '2026-07-30T05:39:44Z', last_changed: null,
     last_data_date: '2025-09-30', error: null, cadence_days: 92,
-    status_note: 'Homes Victoria hasn’t published a new Rental Report for several quarters.',
+    status_note: 'A curated cause note from the pipeline.',
     ...over },
 })
 const chip = (e: SeriesEntry, quiet = false) =>
@@ -30,12 +30,12 @@ test('stale chip is a button; popover explains cause, releases behind, next due'
   // pointer-coarse:* classes in every browser, making the 44px coarse-pointer
   // touch-target bump dead code — guard the bump the same way DetailView's
   // and FilterBar's own coarse-pointer tests do.
-  expect(btn).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-2.5')
+  expect(btn).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-3.5')
   await userEvent.click(btn)
   const panel = screen.getByRole('group', { name: 'Stale data — details' })
   expect(panel).toHaveTextContent('Well past this series’ expected release date.')
   expect(panel).toHaveTextContent('Latest data: Sep qtr 2025 · published quarterly · ~2 releases behind')
-  expect(panel).toHaveTextContent('Homes Victoria hasn’t published a new Rental Report')
+  expect(panel).toHaveTextContent('A curated cause note from the pipeline.')
   expect(panel).toHaveTextContent('next update was due ~Dec qtr 2025')
 })
 

@@ -63,7 +63,7 @@ export function StatusChip({ entry, now, quiet }: {
   return (
     <Popover trigger={label} ariaLabel={`${label} — why?`}
              panelLabel={`${TITLE[kind]} — details`}
-             triggerClassName="px-2.5 py-0.5 pointer-coarse:px-4 pointer-coarse:py-2.5
+             triggerClassName="px-2.5 py-0.5 pointer-coarse:px-4 pointer-coarse:py-3.5
                                 hover:ring-1 hover:ring-inset hover:ring-current/40"
              triggerStyle={{ background: s.bg, color: s.fg, borderRadius: 999,
                              fontSize: 12, fontWeight: 500,
