@@ -238,6 +238,23 @@ test('the mortgage-rates card small-multiples into two full-colour minis (New / 
   expect(deemphPaths.length).toBe(0)
 })
 
+// --- Task 9: fullWidth mortgage minis lay side-by-side on a spanning row ---
+
+test('a full-width mortgage card lays its two minis side-by-side', () => {
+  render(<ChartCard site={site} chart={chart('mortgage_rates')} finding="f" fullWidth
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const minis = screen.getByText('New').parentElement!.parentElement!
+  expect(minis.className).toContain('sm:grid-cols-2')
+})
+
+test('without fullWidth, the mortgage card stacks its two minis instead', () => {
+  render(<ChartCard site={site} chart={chart('mortgage_rates')} finding="f"
+                    range="all" geo="melbourne" now={NOW} onOpen={() => {}} />)
+  const minis = screen.getByText('New').parentElement!.parentElement!
+  expect(minis.className).toContain('space-y-3')
+  expect(minis.className).not.toContain('sm:grid-cols-2')
+})
+
 // --- design review P1: structural shared x-domain + degenerate band gating ---
 
 test('mortgage-rates minis share one STRUCTURALLY-computed x-domain even when their subsets end at different dates', () => {

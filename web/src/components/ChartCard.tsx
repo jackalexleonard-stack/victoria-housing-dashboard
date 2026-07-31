@@ -68,7 +68,7 @@ function visibleAnnotationCount(
 }
 
 export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quietOutage,
-                            scopeBadge }: {
+                            scopeBadge, fullWidth }: {
   site: SiteData; chart: ChartSpec; finding: string; range: Range; geo: Geo
   now: Date; onOpen: (id: string) => void
   // Design review P1-outage: set when this card's section has a hoisted,
@@ -79,7 +79,12 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // T4: set by App's "Wider context" band — the chart's real scope
   // ('Victoria-wide'/'Australia'/'Global'), so a context card is never
   // mistaken for the selected geography.
-  scopeBadge?: string }) {
+  scopeBadge?: string
+  // Task 9/spec §2.2: set by App when buildRows placed this card on a
+  // spanning (full sm:col-span-2) row — the mortgage card is the one
+  // consumer today, laying its two minis side-by-side instead of stacked
+  // since a spanning row gives it the width to do so.
+  fullWidth?: boolean }) {
   const { entry, lines, scopeNote, unitByName, primaryMetric, unit, st } =
     useChartData(site, chart, range, geo, now)
   const annotations = chart.annotate
@@ -186,7 +191,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   if (isDeadChart(chart, entry)) {
     return (
       <div data-testid="outage-row"
-           className="w-full bg-card border border-line rounded-lg px-4 py-2.5
+           className="w-full h-full bg-card border border-line rounded-lg px-4 py-2.5
                       flex flex-wrap items-center gap-x-3 gap-y-1">
         <button type="button" onClick={() => onOpen(chart.id)}
                 aria-label={`${chart.title} — open details`}
@@ -200,9 +205,9 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   }
 
   return (
-    <article className="bg-card border border-line rounded-lg p-4">
+    <article className="bg-card border border-line rounded-lg p-4 h-full flex flex-col">
       <button type="button" onClick={() => onOpen(chart.id)}
-              className="block w-full text-left cursor-pointer group"
+              className="block w-full text-left cursor-pointer group flex-1 flex flex-col"
               aria-label={`${chart.title} — open details`}>
         <h3 className="font-display text-lg leading-snug mb-2 group-hover:text-blue">
           {headline}
@@ -215,14 +220,16 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           // No <svg>, short fixed height — a plotted line would be zero-length
           // ink here anyway (every line has under 2 points). The headline
           // above already carries the finding sentence; this body's only job
-          // is the primary metric's own latest figure, large.
-          <div className="h-24 flex items-center justify-center">
+          // is the primary metric's own latest figure, large. flex-1 lets it
+          // absorb the extra height when this card shares a spanning row with
+          // a taller sibling, instead of leaving dead space below the number.
+          <div className="flex-1 min-h-24 flex items-center justify-center">
             <p className="num text-4xl font-semibold text-ink">
               {statValue != null ? fmtUnit(statValue, statUnit) : '—'}
             </p>
           </div>
         ) : isMortgage ? (
-          <div className="space-y-3">
+          <div className={fullWidth ? 'grid gap-3 sm:grid-cols-2' : 'space-y-3'}>
             <div>
               <p className="text-xs font-medium text-muted mb-1">New</p>
               <LineChart lines={newLines} percent={chart.percent} unit={unit}
@@ -255,7 +262,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           (added there — see DetailView.tsx). Dead cards skip the repeated
           title (already the headline above) and have no table to toggle. */}
       {!failedEmpty ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-auto pt-2">
           <span>{chart.title}</span>
           {sourceToken}
           {statusChip}
@@ -264,7 +271,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
           <DataTable lines={lines} unit={unit} unitByName={unitByName} />
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-auto pt-2">
           {sourceToken}
           {statusChip}
           {scopeBadge && <Chip kind="neutral">{scopeBadge}</Chip>}

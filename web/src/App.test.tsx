@@ -328,20 +328,22 @@ describe('World KPI tile row (D1f)', () => {
   })
 })
 
-// --- D2(e): dangling last card spans full width ---
+// --- D2(e)/§2.2: height-aware row spans in both the grid and context bands ---
 
 describe('trailing card grid (D2e)', () => {
   // T4: Money's own cash_rate/mortgage_rates are national-scope (their data
   // is australia-only) -> under the default melbourne geo they now sit in
   // the "Wider context" band, not the grid (see the 'geo banding' describe
-  // below) — the grid band ends up holding only 'lending'. Context-band
-  // cards never dangle-span (App.tsx's context.map applies no col-span
-  // logic at all), so D2(e)'s dangling rule is only exercised by whatever
-  // lands in `grid`; these two tests still cover the SAME dangling/lead
-  // col-span-2 rule and the "context cards never span" behaviour, just with
-  // the post-banding composition spelled out below instead of the pre-T4
-  // flat 3-/4-card layout.
-  test('an even-remainder section: money\'s single grid card (lending) spans as the lead; its national-scope siblings (context) never span', async () => {
+  // below) — the grid band ends up holding only 'lending'. Spec §2.2 (Task
+  // 8/9) repealed the old "context cards never span" rule: the context band
+  // now runs through the same height-aware buildRows as the grid, so a
+  // 'standard' card with no same-class neighbour (cash_rate) and a 'tall'
+  // card that can never pair (mortgage_rates, always tall) both end up as
+  // their own spanning rows. These two tests still cover the SAME
+  // dangling/lead col-span-2 rule for the grid band, plus the new
+  // height-aware context-band spanning, with the post-banding composition
+  // spelled out below instead of the pre-T4 flat 3-/4-card layout.
+  test('an even-remainder section: money\'s single grid card (lending) spans as the lead; its context-band siblings (standard cash_rate, tall mortgage_rates) both span too (spec §2.2)', async () => {
     history.replaceState(null, '', '/')
     mockFetch()
     render(<App now={new Date('2026-07-18T10:00:00Z')} />)
@@ -350,10 +352,11 @@ describe('trailing card grid (D2e)', () => {
     const articles = within(section).getAllByRole('article')
     expect(articles).toHaveLength(3)   // lending (grid), cash_rate + mortgage_rates (context)
     expect(articles[0].parentElement).toHaveClass('sm:col-span-2')   // lending — the grid's lead (and only) card
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
+    expect(articles[1].parentElement).toHaveClass('sm:col-span-2')   // cash_rate — standard, no same-class neighbour: spans
+    expect(articles[2].parentElement).toHaveClass('sm:col-span-2')   // mortgage_rates — always tall, never pairs: spans
   })
 
-  test('an odd-remainder grid (2 grid cards): lead and dangle rules coincide, so both span full width', async () => {
+  test('an odd-remainder grid (2 grid cards): lead and dangle rules coincide, so both span full width; the context band spans both its cards too (spec §2.2)', async () => {
     history.replaceState(null, '', '/')
     const mutated = JSON.parse(JSON.stringify(siteEdge))
     // scope 'geo' + geos ['melbourne']: a synthetic Melbourne-specific mover
@@ -378,8 +381,8 @@ describe('trailing card grid (D2e)', () => {
     // remainder" dangle condition is true for the LAST grid card too —
     // with only 2 cards in the grid, lead and dangle are the same card.
     expect(articles[1].parentElement).toHaveClass('sm:col-span-2')       // credit — grid's dangling last card
-    expect(articles[2].parentElement).not.toHaveClass('sm:col-span-2')   // cash_rate — context band, never spans
-    expect(articles[3].parentElement).not.toHaveClass('sm:col-span-2')   // mortgage_rates — context band, never spans
+    expect(articles[2].parentElement).toHaveClass('sm:col-span-2')       // cash_rate — standard, no same-class neighbour: spans (spec §2.2)
+    expect(articles[3].parentElement).toHaveClass('sm:col-span-2')       // mortgage_rates — always tall, never pairs: spans (spec §2.2)
   })
 })
 
