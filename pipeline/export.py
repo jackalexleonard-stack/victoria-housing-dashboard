@@ -74,20 +74,20 @@ def repo_series_ids() -> list[str]:
 # "~n releases behind" live from cadence + data age.
 STATUS_NOTES = {
     "vic_rents": (
-        "Homes Victoria hasn't published a new Rental Report for several "
+        "Homes Victoria hasn’t published a new Rental Report for several "
         "quarters — the publisher is running behind its usual quarterly "
         "schedule. Its site also blocks automated fetchers, so this series "
         "refreshes from a manual run once a new report appears."),
     "vic_vacancy": (
-        "Vacancy comes from the Rental Report's SQM-sourced sheet, and Homes "
-        "Victoria hasn't published a new edition for several quarters. Its "
+        "Vacancy comes from the Rental Report’s SQM-sourced sheet, and Homes "
+        "Victoria hasn’t published a new edition for several quarters. Its "
         "site also blocks automated fetchers, so this series refreshes from "
         "a manual run once a new report appears."),
     "vic_social_waitlist": (
         "homes.vic.gov.au blocks automated fetchers, so this series refreshes "
         "from a manual run when the quarterly dashboard updates."),
     "vic_auctions": (
-        "Melbourne auction results aren't reachable from an automated source "
+        "Melbourne auction results aren’t reachable from an automated source "
         "right now; this card will populate if that changes."),
     "vic_median_price": (
         "REIV blocks automated access; this card will populate if the source "
