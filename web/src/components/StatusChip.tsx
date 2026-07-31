@@ -11,9 +11,9 @@ const TITLE: Record<BadKind, string> = {
   ageing: "Ageing data", stale: "Stale data", failed: "Source unavailable",
 }
 const MEANING: Record<BadKind, string> = {
-  ageing: "The newest figures are older than this series' usual release rhythm.",
-  stale: "Well past this series' expected release date.",
-  failed: "The daily updater can't retrieve this series, and there's no history to show.",
+  ageing: 'The newest figures are older than this series’ usual release rhythm.',
+  stale: 'Well past this series’ expected release date.',
+  failed: 'The daily updater can’t retrieve this series, and there’s no history to show.',
 }
 
 // The popover body — what a tag means, how far behind the data is (computed
@@ -25,9 +25,9 @@ export function ExplainerPanel({ entry, kind, now }: {
   const m = entry.meta
   const behind = releasesBehind(entry, now)
   const cause = m.status_note ?? (entry.status === "failed"
-    ? `The source hasn't responded to the daily updater. Last attempt: ${
+    ? `The source hasn’t responded to the daily updater. Last attempt: ${
         m.last_fetched ? fmtDate(m.last_fetched) : "unknown"}.`
-    : "The publisher hasn't released newer figures yet.")
+    : 'The publisher hasn’t released newer figures yet.')
   const next = nextUpdate(entry, now)
   return (
     <div className="space-y-1.5">
