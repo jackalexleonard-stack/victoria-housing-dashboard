@@ -1,10 +1,9 @@
 import { Popover } from './Popover'
-import { CHIP_STYLES } from './Chip'
+import { CHIP_STYLES } from '../theme/tokens'
 import { releasesBehind, nextUpdate, staleness } from '../lib/staleness'
 import { fmtDate, fmtPeriod } from '../lib/format'
 import type { SeriesEntry } from '../lib/types'
 
-type St = ReturnType<typeof staleness>
 type BadKind = 'ageing' | 'stale' | 'failed'
 
 const TITLE: Record<BadKind, string> = {
@@ -49,24 +48,25 @@ export function ExplainerPanel({ entry, kind, now }: {
 // Every non-fresh staleness tag in the app renders through this one
 // component, so "clickable chip with an explanation" can't drift per
 // call-site (spec §1.3). Fresh stays an inert span — nothing to explain.
-export function StatusChip({ entry, st, now, quiet }: {
-  entry: SeriesEntry | undefined; st: St | null; now: Date; quiet?: boolean }) {
+export function StatusChip({ entry, now, quiet }: {
+  entry: SeriesEntry | undefined; now: Date; quiet?: boolean }) {
+  const st = entry ? staleness(entry, now) : null
   if (!st) return null
   if (st.kind === 'fresh') return <span>{st.label}</span>
   if (!entry) return null
   const kind = st.kind as BadKind
   const useQuiet = !!quiet && (kind === 'stale' || kind === 'failed')
   const label = useQuiet && entry.meta.last_data_date
-    ? `${fmtPeriod(entry.meta.last_data_date, entry.meta.frequency)} · ${
-        kind === 'failed' ? 'unavailable' : kind}`
+    ? `${fmtPeriod(entry.meta.last_data_date, entry.meta.frequency)} · ${kind}`
     : st.label
   const s = CHIP_STYLES[useQuiet || kind === 'ageing' ? 'warn' : 'bad']
   return (
     <Popover trigger={label} ariaLabel={`${label} — why?`}
              panelLabel={`${TITLE[kind]} — details`}
-             triggerClassName="pointer-coarse:py-2.5 pointer-coarse:px-4"
+             triggerClassName="px-2.5 py-0.5 pointer-coarse:px-4 pointer-coarse:py-2.5
+                                hover:ring-1 hover:ring-inset hover:ring-current/40"
              triggerStyle={{ background: s.bg, color: s.fg, borderRadius: 999,
-                             padding: '2px 10px', fontSize: 12, fontWeight: 500,
+                             fontSize: 12, fontWeight: 500,
                              border: 0, cursor: 'pointer' }}>
       <ExplainerPanel entry={entry} kind={kind} now={now} />
     </Popover>

@@ -33,7 +33,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
     return () => d?.removeEventListener('cancel', onCancel)
   }, [onClose])
 
-  const { entry, lines, scopeNote, unitByName: primaryUnitsRaw, unit, st } =
+  const { entry, lines, scopeNote, unitByName: primaryUnitsRaw, unit } =
     useChartData(site, chart, localRange, geo, now)
   // useChartData leaves unitByName undefined when the series can't be found
   // at all (mirrors ChartCard's own convention) — this component always
@@ -143,7 +143,12 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
       )}
       {lines.length > 0 &&
         <DataTable lines={[...lines, ...cmpLines]} unit={unit} unitByName={unitByName} />}
-      <p className="flex flex-wrap items-center gap-2 text-xs text-faint mt-3">
+      {/* A <div>, not a <p>: the popover trigger below renders a div-of-p's
+          when open, which a real <p> can't legally contain (the browser
+          would silently close the paragraph early and break the row) — the
+          same invalid-flow-content fix ChartCard's own caption row already
+          applies (see ChartCard.tsx). */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-faint mt-3">
         {/* Design review d2: prefer the chart's own per-series source
             override (the three FRED world charts, which all share intl_fred's
             single meta.source_name) so the modal cites the right instrument
@@ -152,11 +157,11 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
           <a href={entry.meta.source_url} target="_blank" rel="noreferrer"
              className="underline underline-offset-2 hover:text-blue">
             {chart.source_name ?? entry.meta.source_name}</a>}
-        <StatusChip entry={entry} st={st} now={now} />
+        <StatusChip entry={entry} now={now} />
         {entry && <span>fetched {ago(entry.meta.last_fetched, now)}</span>}
         {entry && nextUpdate(entry, now) && <span>{nextUpdate(entry, now)}</span>}
         {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
-      </p>
+      </div>
       {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
       {/* Design review P1-touch: this row's actions were px-3 py-1.5
           (~30px tall) — below the project's 44px mandate. pointer-coarse:

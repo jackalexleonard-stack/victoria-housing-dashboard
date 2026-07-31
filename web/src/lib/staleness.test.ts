@@ -41,7 +41,7 @@ test('releasesBehind grants one cadence of publication lag, then counts', () => 
   expect(releasesBehind(entry({ last_data_date: '2026-05-31' }), NOW)).toBe(0)
   // gap ~78d -> floor(2.5)-1 = 1
   expect(releasesBehind(entry({ last_data_date: '2026-05-01' }), NOW)).toBe(1)
-  // quarterly example — the DFFH shape: ~304d gap / 92d cadence -> 2
+  // quarterly example — the DFFH shape: ~291d gap / 92d cadence -> 2
   expect(releasesBehind(entry({ last_data_date: '2025-09-30', frequency: 'quarterly',
                                 cadence_days: 92 }), NOW)).toBe(2)
   expect(releasesBehind(entry({ last_data_date: null }), NOW)).toBe(0)

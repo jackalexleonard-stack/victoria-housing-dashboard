@@ -33,3 +33,13 @@ export const COLORWAY = ['#4385BE', '#DA702C', '#3AABB0',
 
 export const FONT_UI = "'Inter Variable', 'Helvetica Neue', Arial, sans-serif"
 export const FONT_DISPLAY = "'Newsreader Variable', Georgia, serif"
+
+// Moved from components/Chip.tsx: exporting a constant from a component
+// module trips oxlint react(only-export-components) (breaks Fast Refresh for
+// that file). Lives here with the rest of the theme tokens instead.
+export const CHIP_STYLES = {
+  good: { bg: PALETTE.chip_up, fg: PALETTE.chip_up_text },
+  warn: { bg: PALETTE.chip_warn, fg: PALETTE.chip_warn_text },
+  bad: { bg: PALETTE.chip_down, fg: PALETTE.chip_down_text },
+  neutral: { bg: PALETTE.bg2, fg: PALETTE.muted },
+} as const

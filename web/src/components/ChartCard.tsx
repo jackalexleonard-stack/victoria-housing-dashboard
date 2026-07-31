@@ -85,7 +85,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // consumer today, laying its two minis side-by-side instead of stacked
   // since a spanning row gives it the width to do so.
   fullWidth?: boolean }) {
-  const { entry, lines, scopeNote, unitByName, primaryMetric, unit, st } =
+  const { entry, lines, scopeNote, unitByName, primaryMetric, unit } =
     useChartData(site, chart, range, geo, now)
   const annotations = chart.annotate
     ? site.annotations.cash_rate_moves.map(m => ({
@@ -157,7 +157,10 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // (meta.status_note, export.py's STATUS_NOTES), falling back to the
   // honest generic line only when the pipeline hasn't curated one for this
   // source. Computed once and reused by both the compact outage row and the
-  // full-size card's `failedEmpty` paragraph below.
+  // full-size card's `failedEmpty` paragraph below. It also now feeds the
+  // range-empty `failedEmpty` paragraph for every curated series, not only
+  // genuinely dead (isDeadChart) ones — a healthy source with zero points at
+  // the currently selected range gets the same honest, source-specific line.
   const deadBody = entry?.meta.status_note ?? DEFAULT_DEAD_BODY
   // Design review d2: prefer the chart's own per-series source override
   // (the three FRED world charts) over the series' one shared
@@ -173,7 +176,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   // Task 5: every non-fresh staleness tag renders through the shared
   // StatusChip (spec §1.3) — clickable, with a popover explainer — instead
   // of ChartCard hand-rolling its own Chip/label logic per render site.
-  const statusChip = <StatusChip entry={entry} st={st} now={now} quiet={quietOutage} />
+  const statusChip = <StatusChip entry={entry} now={now} quiet={quietOutage} />
 
   // 2026-07-24 banner batch (Task 3, design review "unavailable-source cards
   // should be much smaller"): a genuinely dead chart — isDeadChart, NOT bare
@@ -192,7 +195,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
     return (
       <div data-testid="outage-row"
            className="w-full h-full bg-card border border-line rounded-lg px-4 py-2.5
-                      flex flex-wrap items-center gap-x-3 gap-y-1">
+                      flex flex-wrap items-center gap-x-3 gap-y-1 hover:border-blue">
         <button type="button" onClick={() => onOpen(chart.id)}
                 aria-label={`${chart.title} — open details`}
                 className="text-left cursor-pointer group flex-1 min-w-[12rem]">
@@ -207,7 +210,7 @@ export function ChartCard({ site, chart, finding, range, geo, now, onOpen, quiet
   return (
     <article className="bg-card border border-line rounded-lg p-4 h-full flex flex-col">
       <button type="button" onClick={() => onOpen(chart.id)}
-              className="block w-full text-left cursor-pointer group flex-1 flex flex-col"
+              className="w-full text-left cursor-pointer group flex-1 flex flex-col"
               aria-label={`${chart.title} — open details`}>
         <h3 className="font-display text-lg leading-snug mb-2 group-hover:text-blue">
           {headline}

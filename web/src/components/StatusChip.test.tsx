@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StatusChip } from './StatusChip'
-import { staleness } from '../lib/staleness'
 import type { SeriesEntry } from '../lib/types'
 
 const NOW = new Date('2026-07-31T00:00:00Z')
@@ -15,7 +14,7 @@ const entry = (over: Partial<SeriesEntry['meta']> = {},
     ...over },
 })
 const chip = (e: SeriesEntry, quiet = false) =>
-  render(<StatusChip entry={e} st={staleness(e, NOW)} now={NOW} quiet={quiet} />)
+  render(<StatusChip entry={e} now={NOW} quiet={quiet} />)
 
 test('fresh renders inert text, no button', () => {
   chip(entry({ last_data_date: '2026-06-30' }))
@@ -27,6 +26,11 @@ test('stale chip is a button; popover explains cause, releases behind, next due'
   chip(entry({}, 'failed'))
   const btn = screen.getByRole('button',
     { name: 'Data to Sep qtr 2025 · stale — why?' })
+  // Design review: triggerStyle's inline padding used to beat the
+  // pointer-coarse:* classes in every browser, making the 44px coarse-pointer
+  // touch-target bump dead code — guard the bump the same way DetailView's
+  // and FilterBar's own coarse-pointer tests do.
+  expect(btn).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-2.5')
   await userEvent.click(btn)
   const panel = screen.getByRole('group', { name: 'Stale data — details' })
   expect(panel).toHaveTextContent('Well past this series’ expected release date.')

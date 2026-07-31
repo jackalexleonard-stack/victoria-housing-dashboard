@@ -11,6 +11,15 @@ const fn = (x: ChartSpec) => classes[x.id] ?? 'standard'
 const ids = (rows: ReturnType<typeof buildRows>) =>
   rows.map(r => ({ ids: r.cards.map(x => x.id), span: r.span }))
 
+// Test-isolation hardening: several tests below mutate this module-level
+// fixture (classes.tile1 = 'tile', etc.) rather than passing their own
+// height-class map, so a later test that forgets to set a key would
+// otherwise silently inherit an earlier test's leftover overrides. Reset to
+// empty before every test so each one starts from the 'standard' default.
+beforeEach(() => {
+  for (const key of Object.keys(classes)) delete classes[key]
+})
+
 describe('buildRows', () => {
   test('lead spans, then same-class neighbours pair, trailing odd card spans', () => {
     const rows = buildRows([c('a'), c('b'), c('d'), c('e')], fn, { leadSpans: true })
