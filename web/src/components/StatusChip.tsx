@@ -8,7 +8,7 @@ type St = ReturnType<typeof staleness>
 type BadKind = 'ageing' | 'stale' | 'failed'
 
 const TITLE: Record<BadKind, string> = {
-  ageing: "Ageing data", stale: "Stale data", failed: "Source unavailable",
+  ageing: 'Ageing data', stale: 'Stale data', failed: 'Source unavailable',
 }
 const MEANING: Record<BadKind, string> = {
   ageing: 'The newest figures are older than this series’ usual release rhythm.',
@@ -24,9 +24,9 @@ export function ExplainerPanel({ entry, kind, now }: {
   entry: SeriesEntry; kind: BadKind; now: Date }) {
   const m = entry.meta
   const behind = releasesBehind(entry, now)
-  const cause = m.status_note ?? (entry.status === "failed"
+  const cause = m.status_note ?? (entry.status === 'failed'
     ? `The source hasn’t responded to the daily updater. Last attempt: ${
-        m.last_fetched ? fmtDate(m.last_fetched) : "unknown"}.`
+        m.last_fetched ? fmtDate(m.last_fetched) : 'unknown'}.`
     : 'The publisher hasn’t released newer figures yet.')
   const next = nextUpdate(entry, now)
   return (
