@@ -55,13 +55,26 @@ def test_parse_greenfield_offline():
     assert set(df.region) == {"melbourne"}
     assert (df.date == "2024-12-31").all()
     assert set(df.metric) == {
-        "greenfield_lots_titled", "greenfield_lot_supply", "greenfield_years_of_supply",
+        "greenfield_lots_titled", "greenfield_lot_supply",
+        "greenfield_lot_supply_zoned", "greenfield_lot_supply_unzoned",
+        "greenfield_years_of_supply",
     }
 
     v = df.set_index("metric")
     assert v.loc["greenfield_lots_titled", "value"] == 18543
     assert v.loc["greenfield_lot_supply", "value"] == 334019
+    # Zoned/unzoned split of the same supply total (verified against DTP's
+    # UDP 2025 Melbourne page AND live WFS 2026-08-03): zoned = Proposed
+    # 39,812 + Zoned englobo 165,671 (gazetted PSP); unzoned = 128,536
+    # englobo lots still awaiting a PSP. The split partitions supply exactly.
+    assert v.loc["greenfield_lot_supply_zoned", "value"] == 205483
+    assert v.loc["greenfield_lot_supply_unzoned", "value"] == 128536
+    assert (v.loc["greenfield_lot_supply_zoned", "value"]
+            + v.loc["greenfield_lot_supply_unzoned", "value"]
+            == v.loc["greenfield_lot_supply", "value"])
     assert v.loc["greenfield_lots_titled", "unit"] == "lots"
+    assert v.loc["greenfield_lot_supply_zoned", "unit"] == "lots"
+    assert v.loc["greenfield_lot_supply_unzoned", "unit"] == "lots"
     assert v.loc["greenfield_years_of_supply", "unit"] == "years"
 
     # years-of-supply is supply / lots-titled.
@@ -86,7 +99,9 @@ def test_parse_greenfield_parses_the_fixture_into_tidy_rows_with_the_expected_re
     assert set(df["region"]) == {"melbourne", "regional_vic"}
     # (2) Metrics are the ones the chart will plot, nothing stray.
     assert set(df["metric"]) == {
-        "greenfield_lots_titled", "greenfield_lot_supply", "greenfield_years_of_supply",
+        "greenfield_lots_titled", "greenfield_lot_supply",
+        "greenfield_lot_supply_zoned", "greenfield_lot_supply_unzoned",
+        "greenfield_years_of_supply",
     }
     # (3) Spot value hand-verified against the fixture (independent pandas
     # aggregation, not via the parser): regional_vic's latest titled bucket
@@ -112,3 +127,16 @@ def test_parse_greenfield_parses_the_fixture_into_tidy_rows_with_the_expected_re
     # Regional's supply figure and derived years-of-supply.
     assert v.loc[("regional_vic", "greenfield_lot_supply"), "value"] == 187819
     assert v.loc[("regional_vic", "greenfield_years_of_supply"), "value"] == pytest.approx(71.6, abs=0.05)
+
+    # Zoned/unzoned split, both regions (independent pandas aggregation of
+    # the fixture, cross-checked live 2026-08-03; metro also matches DTP's
+    # UDP 2025 Melbourne page): zoned = Proposed + Zoned englobo (gazetted
+    # PSP), unzoned = englobo awaiting a PSP — partitions supply exactly.
+    assert v.loc[("melbourne", "greenfield_lot_supply_zoned"), "value"] == 205483
+    assert v.loc[("melbourne", "greenfield_lot_supply_unzoned"), "value"] == 128536
+    assert v.loc[("regional_vic", "greenfield_lot_supply_zoned"), "value"] == 76022
+    assert v.loc[("regional_vic", "greenfield_lot_supply_unzoned"), "value"] == 111797
+    for region in ("melbourne", "regional_vic"):
+        assert (v.loc[(region, "greenfield_lot_supply_zoned"), "value"]
+                + v.loc[(region, "greenfield_lot_supply_unzoned"), "value"]
+                == v.loc[(region, "greenfield_lot_supply"), "value"])

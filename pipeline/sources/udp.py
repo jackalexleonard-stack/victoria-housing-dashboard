@@ -20,9 +20,20 @@ The two layers do NOT share a schema (verified live 2026-07-24):
 From each layer we derive, per region (melbourne = the 7 metro growth-area
 LGAs: Cardinia, Casey, Hume, Melton, Mitchell, Whittlesea, Wyndham; regional_vic
 = the regional fringe areas the UDP tracks):
-* ``greenfield_lots_titled``     — lots titled in the latest reporting period
-* ``greenfield_lot_supply``      — remaining supply lots (Proposed+Zoned+Unzoned)
-* ``greenfield_years_of_supply`` — supply / lots titled (transparent derivation)
+* ``greenfield_lots_titled``          — lots titled in the latest reporting period
+* ``greenfield_lot_supply``           — remaining supply lots (Proposed+Zoned+Unzoned)
+* ``greenfield_lot_supply_zoned``     — Proposed + Zoned englobo (gazetted PSP)
+* ``greenfield_lot_supply_unzoned``   — Unzoned englobo (still awaiting a PSP)
+* ``greenfield_years_of_supply``      — supply / lots titled (transparent derivation)
+
+The zoned/unzoned pair partitions ``greenfield_lot_supply`` exactly, so the
+dashboard can show how much of the headline years-of-supply figure is land a
+developer could actually build on today: ``Proposed`` lots (on proposed or
+approved plans of subdivision) and ``Zoned`` englobo both sit within gazetted
+precinct structure plans, while ``Unzoned`` englobo has no PSP yet. Verified
+live 2026-08-03 against DTP's UDP 2025 Melbourne release page: metro splits
+39,812 Proposed + 165,671 Zoned + 128,536 Unzoned = 334,019 total — i.e. the
+~18-year headline is ~11 years of zoned supply at 2024 titling rates.
 
 CAVEAT: when regional_vic's latest bucket is a half-year snapshot (as it is
 today, "Titled 2024 H1"), its ``greenfield_lots_titled``/``years_of_supply``
@@ -73,6 +84,11 @@ _PAGE = 5000
 _PROPS = "year_titled,development_status,total_lots,lga"
 _REGIONAL_PROPS = "development_status,total_lots,lga"
 _SUPPLY_STATUS = {"Proposed", "Zoned", "Unzoned"}
+# Zoned/unzoned partition of _SUPPLY_STATUS (identical strings in both
+# layers, verified live 2026-08-03): Proposed lots sit on proposed/approved
+# plans of subdivision and Zoned englobo within gazetted PSPs — both are
+# zoned land; Unzoned englobo still awaits a PSP.
+_ZONED_SUPPLY_STATUS = {"Proposed", "Zoned"}
 
 # Region derived from each row's WFS feature id (see module docstring).
 _FID_KIND_RE = re.compile(r"^(r?gf)\d+\.", re.I)
@@ -199,13 +215,15 @@ def parse_greenfield(raw: str) -> pd.DataFrame:
     rows = []
     for region, region_df in df.groupby("_region"):
         date, lots_titled = _titled(region, region_df)
-        supply = float(
-            region_df.loc[region_df["development_status"].isin(_SUPPLY_STATUS), "total_lots"].sum()
-        )
+        status = region_df["development_status"]
+        supply = float(region_df.loc[status.isin(_SUPPLY_STATUS), "total_lots"].sum())
+        zoned = float(region_df.loc[status.isin(_ZONED_SUPPLY_STATUS), "total_lots"].sum())
         years_of_supply = round(supply / lots_titled, 1) if lots_titled else float("nan")
         rows += [
             (date, region, "greenfield_lots_titled", lots_titled, "lots"),
             (date, region, "greenfield_lot_supply", supply, "lots"),
+            (date, region, "greenfield_lot_supply_zoned", zoned, "lots"),
+            (date, region, "greenfield_lot_supply_unzoned", supply - zoned, "lots"),
             (date, region, "greenfield_years_of_supply", years_of_supply, "years"),
         ]
     return pd.DataFrame(rows, columns=common.TIDY_COLUMNS)
