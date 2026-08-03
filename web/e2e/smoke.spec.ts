@@ -636,3 +636,30 @@ test.describe('staleness-chip explainer popovers (Task 10)', () => {
     expect(overlapY).toBe(true)
   })
 })
+
+// Task 2 (2026-08-03): the detail modal's always-on geography chip — every
+// chart modal must name the ONE geography it plots, both in the dialog's
+// accessible name (DetailView's `aria-label={`${chart.title} — ${regionLabel}`}`)
+// and as a visible <Chip> inside it. Targets cash_rate (site.real.json:
+// region_mode "fixed:australia", section "money") specifically: a
+// fixed-region chart's modal geography is always 'Australia' regardless of
+// the selected geo filter, so this is a time-independent, filter-independent
+// assertion — unlike the geo-scoped charts elsewhere in this file, nothing
+// here depends on frozen-fixture staleness kinds or dates.
+test.describe('modal geography chip (Task 2, 2026-08-03)', () => {
+  test('the chart modal always names its geography', async ({ page }) => {
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    // Same exact-match adaptation as the Task 10 tests above ("Jump to Money
+    // & credit" is a substring superset of "Money & credit").
+    await page.getByRole('button', { name: 'Money & credit', exact: true }).click()
+    const money = page.locator('section[aria-label="Money & credit"]')
+    // ChartCard's per-card open button: aria-label={`${chart.title} — open
+    // details`} (cash_rate's title is "RBA cash rate target").
+    await money.getByRole('button', { name: 'RBA cash rate target — open details' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toHaveAccessibleName(/ — Australia$/)
+    await expect(dialog.getByText('Australia', { exact: true })).toBeVisible()
+  })
+})
