@@ -1,4 +1,4 @@
-import { bandFor, hiddenTitles } from './geoBands'
+import { bandFor, hiddenTitles, modalRegion, REGION_BADGE, SCOPE_BADGE } from './geoBands'
 import type { ChartSpec, SeriesEntry } from './types'
 
 const chart = (over: Partial<ChartSpec>): ChartSpec => ({
@@ -108,5 +108,23 @@ describe('a broken source never claims a geography gap', () => {
       expect(hiddenTitles([auctions], g, { vic_auctions: failed })).toEqual([])
       expect(hiddenTitles([auctions], g, {})).toEqual([])   // missing entry too
     }
+  })
+})
+
+describe('modalRegion', () => {
+  test('fixed charts pin their region, geo charts follow the modal geo', () => {
+    expect(modalRegion(chart({ region_mode: 'fixed:australia' }), 'melbourne')).toBe('australia')
+    expect(modalRegion(chart({ region_mode: 'fixed:global' }), 'vic')).toBe('global')
+    expect(modalRegion(chart({ region_mode: 'geo' }), 'regional_vic')).toBe('regional_vic')
+  })
+})
+
+describe('REGION_BADGE', () => {
+  test('speaks the card-badge vocabulary — pinned against SCOPE_BADGE', () => {
+    expect(REGION_BADGE.vic).toBe(SCOPE_BADGE.state)
+    expect(REGION_BADGE.australia).toBe(SCOPE_BADGE.national)
+    expect(REGION_BADGE.global).toBe(SCOPE_BADGE.global)
+    expect(REGION_BADGE.melbourne).toBe('Melbourne')
+    expect(REGION_BADGE.regional_vic).toBe('Regional Vic')
   })
 })

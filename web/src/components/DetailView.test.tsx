@@ -83,6 +83,7 @@ test('a chart-level source_name override shows in the modal instead of the serie
   mutated.charts.push({
     id: 'brent_test', section: 'world', title: 'Brent crude',
     series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+    scope: 'national', geos: ['australia'],
     percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     source_name: 'FRED — Brent crude (DCOILBRENTEU)',
   })
@@ -114,6 +115,38 @@ test('compare series formats with its own unit, not the primary chart’s', asyn
   renderView({ compare: 'median_rent' })
   await userEvent.click(screen.getByText(/view data table/i))
   expect(screen.getByText('$580')).toBeInTheDocument()
+})
+
+// Spec 2026-08-03 §4: a compare overlay pulled from a DIFFERENT geography
+// than the modal's own must say so everywhere its name appears (legend,
+// tooltip, data table, CSV) — otherwise it reads as same-place data.
+test('a compare line from a different region gets suffixed with that region, everywhere its name appears', async () => {
+  // Primary is geo-scoped (median_rent, region_mode 'geo') opened at
+  // melbourne -> modalRegion 'melbourne'. Compare is fixed:australia
+  // (cash_rate) -> modalRegion 'australia'. Different regions.
+  const medianRentChart = site.charts.find(c => c.id === 'median_rent')!
+  render(<DetailView site={site} chart={medianRentChart} finding="f"
+                     range="all" geo="melbourne" compare="cash_rate" now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  await userEvent.click(screen.getByText(/view data table/i))
+  // Scoped to the data table: the compare <select> also has a bare
+  // "RBA cash rate target" <option>, unrelated to this suffix logic.
+  const table = screen.getByRole('table')
+  expect(within(table).getByText('RBA cash rate target — Australia')).toBeInTheDocument()
+  expect(within(table).queryByText('RBA cash rate target')).not.toBeInTheDocument()
+})
+
+test('a compare line from the SAME region as the primary stays bare (no suffix)', async () => {
+  // cash_rate (fixed:australia) as primary, mortgage_rates (also
+  // fixed:australia) as compare -> both resolve to 'australia'.
+  renderView({ compare: 'mortgage_rates' })
+  await userEvent.click(screen.getByText(/view data table/i))
+  // Scoped to the data table: the compare <select> also has an <option>
+  // reading "Mortgage rates (owner-occupier)", so an unscoped query is
+  // ambiguous.
+  const table = screen.getByRole('table')
+  expect(within(table).getByText('Mortgage rates (owner-occupier)')).toBeInTheDocument()
+  expect(within(table).queryByText(/Mortgage rates \(owner-occupier\) —/)).not.toBeInTheDocument()
 })
 
 test('the modal keeps the FULL annotation set (both cash-rate moves), unlike the card\'s single latest-move label', () => {
@@ -161,6 +194,63 @@ test('the inline range control gets the same coarse-pointer touch-size bump as t
     expect(r).toHaveClass('px-2.5', 'py-1', 'text-xs', 'num')   // unchanged
     expect(r).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-3.5')
   }
+})
+
+// --- Fix batch (2026-08-03): no geography claim for unknown-coverage dead
+// charts; dead-modal headline falls back to the chart title; aria suffix
+// dedupe against a title that already ends with the region. ---
+
+test('a dead chart with unknown geo coverage (region_mode geo, geos []) shows NO region chip and its dialog name is the bare title', () => {
+  // Shaped like the real reiv_median chart (site.real.json): region_mode
+  // 'geo' with geos: [] means coverage is genuinely unknown — bandFor's own
+  // dead-chart override renders it at EVERY geo, precisely BECAUSE we don't
+  // know where it belongs, not because it's confirmed to cover whatever geo
+  // happens to be selected. Reuses vic_auctions (an existing failed series
+  // in this fixture) as the series_id so isDeadChart's isBrokenSource half
+  // is satisfied without inventing a new series entry.
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'reiv_test', section: 'prices', title: 'REIV quarterly medians',
+    series_id: 'vic_auctions', metrics: null, region_mode: 'geo',
+    scope: 'geo', geos: [], percent: false, markers: false, annotate: false,
+    note: null, modal_metrics: null,
+  })
+  const s = assertSiteData(mutated)
+  const reivChart = s.charts.find(c => c.id === 'reiv_test')!
+  // No findings.reiv_test entry — mirrors App's own `?? ''` fallback for a
+  // dead chart, whose findings are genuinely {}.
+  render(<DetailView site={s} chart={reivChart} finding=""
+                     range="all" geo="vic" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  // Mutant-honest: were the gate removed, region_mode 'geo' would resolve
+  // modalRegion to the requested geo ('vic' -> REGION_BADGE 'Victoria-wide')
+  // and both of these would fail.
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('REIV quarterly medians')
+  expect(screen.queryByText('Victoria-wide')).not.toBeInTheDocument()
+})
+
+test('the dead-chart modal headline falls back to the chart title when there is no finding', () => {
+  // auctions is region_mode fixed:melbourne with geos: [] — a dead chart
+  // whose findings entry is {} in this fixture (App would pass finding=''
+  // for it), so the old code rendered a blank <h2>.
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding=""
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Auction clearance — Melbourne')
+})
+
+test('a fixed-region chart whose title already ends with " — <Region>" gets no doubled aria suffix, but its chip still renders', () => {
+  // auctions' title is "Auction clearance — Melbourne" and its region_mode
+  // is fixed:melbourne (NOT geo-mode, so the unknown-coverage gate above
+  // does not apply here) — the chip still names Melbourne, but the aria
+  // suffix must not repeat it a second time.
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding=""
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('Auction clearance — Melbourne')
+  expect(screen.getByText('Melbourne')).toBeInTheDocument()
 })
 
 test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {

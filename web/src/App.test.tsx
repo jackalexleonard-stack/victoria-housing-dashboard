@@ -765,11 +765,77 @@ describe('geo banding', () => {
     const card = screen.getByRole('button',
       { name: /Commencements, completions, pipeline — open details/i })
     await userEvent.click(card)
-    const dialog = await screen.findByRole('dialog', { name: 'Commencements, completions, pipeline' })
+    // region_mode 'geo' -> modalRegion is the geo the modal actually opened
+    // at, which is detailGeo (App's own-geo fallback), NOT the requested
+    // melbourne — 'vic', per the comment above -> REGION_BADGE suffix
+    // '— Victoria-wide' (Task 2).
+    const dialog = await screen.findByRole('dialog',
+      { name: 'Commencements, completions, pipeline — Victoria-wide' })
     // (a) the modal chart is NOT the "No recent data" empty state.
     expect(within(dialog).queryByText(/No recent data/i)).not.toBeInTheDocument()
     // (b) the modal's h2 finding matches the same Victorian finding the card showed.
     expect(within(dialog).getByRole('heading', { level: 2 }))
       .toHaveTextContent('Dwellings commenced fell 1.2% to 13,429 in Mar qtr 2026')
+  })
+})
+
+// Task 2 (2026-08-03): every chart-detail modal now carries an always-on
+// geography chip naming the ONE region the modal plots — REGION_BADGE/
+// modalRegion from Task 1 (web/src/lib/geoBands.ts). Distinct from the
+// per-card scopeNote chip (which is now removed from the modal's own
+// caption row; ChartCard's card-level scopeNote chip is untouched).
+describe('modal geography chip', () => {
+  beforeEach(() => { localStorage.clear(); localStorage.setItem('vh.welcomeSeen', '1') })
+
+  test('every modal names its geography: fixed:australia chart under melbourne shows Australia', async () => {
+    // cash_rate is region_mode fixed:australia — a context-band chart under
+    // the default (melbourne) geo, section 'Money & credit'.
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const money = await openSection('Money & credit')
+    await userEvent.click(within(money).getByRole('button', { name: /RBA cash rate target — open details/i }))
+    const dialog = await screen.findByRole('dialog', { name: /— Australia$/ })
+    expect(within(dialog).getByText('Australia')).toBeInTheDocument()
+  })
+
+  test('a geo-scoped chart opened under melbourne shows Melbourne in the modal', async () => {
+    // median_rent is region_mode geo, scope geo — 'Rents & vacancy'.
+    history.replaceState(null, '', '/')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const rents = await openSection('Rents & vacancy')
+    await userEvent.click(within(rents).getByRole('button', { name: /Median weekly rent — open details/i }))
+    const dialog = await screen.findByRole('dialog', { name: /— Melbourne$/ })
+    expect(within(dialog).getByText('Melbourne')).toBeInTheDocument()
+  })
+
+  test('the modal caption no longer repeats the scopeNote chip', async () => {
+    // auctions is region_mode fixed:melbourne with geos: [] (broken source,
+    // no historical geo signal), so App's detailGeo fallback never overrides
+    // the requested geo (see App.tsx's detailGeo comment) — opening it under
+    // 'vic' keeps chartPoints' own scopeNote condition (r !== geo) true, the
+    // exact case the old caption-row chip used to repeat. Deep-linked
+    // (?s=), same pattern as the existing 'deep link opens the detail view'
+    // test, so the modal opens regardless of the card's own grid/context/
+    // hidden/absent band at this geo.
+    history.replaceState(null, '', '/?s=auctions&geo=vic')
+    mockFetch()
+    render(<App now={new Date('2026-07-18T10:00:00Z')} />)
+    await screen.findByText('Victorian Housing')
+    const dialog = await screen.findByRole('dialog', { name: /— Melbourne$/ })
+    // Exactly one region chip in the whole modal — the new one under the
+    // headline — none left in the caption row. On its own this count is
+    // vacuous against a "chip never rendered" mutant, since the OLD
+    // caption-row scopeNote chip alone would also produce exactly one
+    // match — so pin its DOM position too: the h2 lives inside the header
+    // flex div (`<div className="flex items-start gap-2">`), and the chip
+    // div (`<div className="mt-1">`) is that header div's very next
+    // sibling, directly under the headline, not down in the caption row.
+    expect(within(dialog).getAllByText('Melbourne')).toHaveLength(1)
+    const headerRow = within(dialog).getByRole('heading', { level: 2 }).parentElement
+    expect(headerRow?.nextElementSibling).toHaveTextContent('Melbourne')
   })
 })

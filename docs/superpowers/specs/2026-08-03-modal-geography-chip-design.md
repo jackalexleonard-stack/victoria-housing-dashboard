@@ -57,6 +57,13 @@ export function modalRegion(chart: ChartSpec, geo: Geo): string {
   always-on chip is a superset of the information it carried (it only rendered for
   fixed-region charts outside their own geo). ChartCard's own scopeNote chip is
   untouched.
+- Carve-out (fix batch, 2026-08-03): the chip — and the aria-label suffix — is
+  suppressed for a dead chart (`isDeadChart`) whose `region_mode` is `'geo'` and
+  `geos` is `[]` (e.g. `reiv_median`: coverage genuinely unknown, rendered at
+  every geo by `bandFor`'s dead-chart override). Naming whatever geo the filter
+  happened to be on would assert evidence this chart doesn't have. The aria
+  suffix also dedupes when `chart.title` already ends with `` ` — ${regionLabel}` ``
+  (e.g. "Auction clearance — Melbourne") so the accessible name never doubles it.
 
 ### 4. Compare-line region suffix
 
