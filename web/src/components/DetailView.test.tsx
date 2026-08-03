@@ -116,6 +116,38 @@ test('compare series formats with its own unit, not the primary chart’s', asyn
   expect(screen.getByText('$580')).toBeInTheDocument()
 })
 
+// Spec 2026-08-03 §4: a compare overlay pulled from a DIFFERENT geography
+// than the modal's own must say so everywhere its name appears (legend,
+// tooltip, data table, CSV) — otherwise it reads as same-place data.
+test('a compare line from a different region gets suffixed with that region, everywhere its name appears', async () => {
+  // Primary is geo-scoped (median_rent, region_mode 'geo') opened at
+  // melbourne -> modalRegion 'melbourne'. Compare is fixed:australia
+  // (cash_rate) -> modalRegion 'australia'. Different regions.
+  const medianRentChart = site.charts.find(c => c.id === 'median_rent')!
+  render(<DetailView site={site} chart={medianRentChart} finding="f"
+                     range="all" geo="melbourne" compare="cash_rate" now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  await userEvent.click(screen.getByText(/view data table/i))
+  // Scoped to the data table: the compare <select> also has a bare
+  // "RBA cash rate target" <option>, unrelated to this suffix logic.
+  const table = screen.getByRole('table')
+  expect(within(table).getByText('RBA cash rate target — Australia')).toBeInTheDocument()
+  expect(within(table).queryByText('RBA cash rate target')).not.toBeInTheDocument()
+})
+
+test('a compare line from the SAME region as the primary stays bare (no suffix)', async () => {
+  // cash_rate (fixed:australia) as primary, mortgage_rates (also
+  // fixed:australia) as compare -> both resolve to 'australia'.
+  renderView({ compare: 'mortgage_rates' })
+  await userEvent.click(screen.getByText(/view data table/i))
+  // Scoped to the data table: the compare <select> also has an <option>
+  // reading "Mortgage rates (owner-occupier)", so an unscoped query is
+  // ambiguous.
+  const table = screen.getByRole('table')
+  expect(within(table).getByText('Mortgage rates (owner-occupier)')).toBeInTheDocument()
+  expect(within(table).queryByText(/Mortgage rates \(owner-occupier\) —/)).not.toBeInTheDocument()
+})
+
 test('the modal keeps the FULL annotation set (both cash-rate moves), unlike the card\'s single latest-move label', () => {
   // Fixture's cash_rate_moves is [2026-02-28 +0.25, 2026-04-30 -0.25] — the
   // modal (annotationMode="full") must show BOTH as solid clay marker

@@ -52,11 +52,19 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   const cmpEntry = cmpChart ? site.series[cmpChart.series_id] : null
   const cmpMetrics = cmpChart ? (cmpChart.metrics ?? (cmpEntry ? Object.keys(cmpEntry.units) : [])) : []
   const cmpUnit = cmpEntry ? (cmpEntry.units[cmpMetrics[0]] ?? Object.values(cmpEntry.units)[0] ?? '') : ''
+  // A compare overlay from a DIFFERENT geography must say so (spec 2026-08-03
+  // §4): suffix the region, and key unitByName with the SAME suffixed name so
+  // legend, tooltip, table and CSV can never disagree about what it is.
+  const cmpName = cmpChart
+    ? (modalRegion(cmpChart, geo) !== region
+        ? `${cmpChart.title} — ${REGION_BADGE[modalRegion(cmpChart, geo)] ?? modalRegion(cmpChart, geo)}`
+        : cmpChart.title)
+    : ''
   const cmpLines = cmpChart
     ? chartPoints(site, cmpChart, localRange, geo, now).lines.slice(0, 1)
-      .map(l => ({ ...l, name: cmpChart.title }))
+      .map(l => ({ ...l, name: cmpName }))
     : []
-  const unitByName = cmpChart ? { ...primaryUnits, [cmpChart.title]: cmpUnit } : primaryUnits
+  const unitByName = cmpChart ? { ...primaryUnits, [cmpName]: cmpUnit } : primaryUnits
   // The stat block (Latest / vs previous / vs year ago) always describes the
   // primary chart's first line, so it should format with that line's own
   // unit rather than the chart-wide scalar fallback.
