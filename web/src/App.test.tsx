@@ -827,7 +827,15 @@ describe('modal geography chip', () => {
     await screen.findByText('Victorian Housing')
     const dialog = await screen.findByRole('dialog', { name: /— Melbourne$/ })
     // Exactly one region chip in the whole modal — the new one under the
-    // headline — none left in the caption row.
+    // headline — none left in the caption row. On its own this count is
+    // vacuous against a "chip never rendered" mutant, since the OLD
+    // caption-row scopeNote chip alone would also produce exactly one
+    // match — so pin its DOM position too: the h2 lives inside the header
+    // flex div (`<div className="flex items-start gap-2">`), and the chip
+    // div (`<div className="mt-1">`) is that header div's very next
+    // sibling, directly under the headline, not down in the caption row.
     expect(within(dialog).getAllByText('Melbourne')).toHaveLength(1)
+    const headerRow = within(dialog).getByRole('heading', { level: 2 }).parentElement
+    expect(headerRow?.nextElementSibling).toHaveTextContent('Melbourne')
   })
 })
