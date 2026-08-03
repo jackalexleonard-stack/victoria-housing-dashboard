@@ -1,7 +1,11 @@
 date,region,metric,value,unit
 2024-12-31,melbourne,greenfield_lot_supply,334019.0,lots
+2024-12-31,melbourne,greenfield_lot_supply_unzoned,128536.0,lots
+2024-12-31,melbourne,greenfield_lot_supply_zoned,205483.0,lots
 2024-12-31,melbourne,greenfield_lots_titled,18543.0,lots
 2024-12-31,melbourne,greenfield_years_of_supply,18.0,years
 2024-06-30,regional_vic,greenfield_lot_supply,187819.0,lots
+2024-06-30,regional_vic,greenfield_lot_supply_unzoned,111797.0,lots
+2024-06-30,regional_vic,greenfield_lot_supply_zoned,76022.0,lots
 2024-06-30,regional_vic,greenfield_lots_titled,2625.0,lots
 2024-06-30,regional_vic,greenfield_years_of_supply,71.6,years
