@@ -110,3 +110,28 @@ describe('a broken source never claims a geography gap', () => {
     }
   })
 })
+
+import { modalRegion, REGION_BADGE, SCOPE_BADGE } from './geoBands'
+
+const chartWithRegionMode = (region_mode: string): ChartSpec => ({
+  id: 'x', section: 's', title: 'x', series_id: 'x', metrics: null,
+  region_mode, scope: 'geo', geos: ['melbourne'],
+  percent: false, markers: false, annotate: false })
+
+describe('modalRegion', () => {
+  test('fixed charts pin their region, geo charts follow the modal geo', () => {
+    expect(modalRegion(chartWithRegionMode('fixed:australia'), 'melbourne')).toBe('australia')
+    expect(modalRegion(chartWithRegionMode('fixed:global'), 'vic')).toBe('global')
+    expect(modalRegion(chartWithRegionMode('geo'), 'regional_vic')).toBe('regional_vic')
+  })
+})
+
+describe('REGION_BADGE', () => {
+  test('speaks the card-badge vocabulary — pinned against SCOPE_BADGE', () => {
+    expect(REGION_BADGE.vic).toBe(SCOPE_BADGE.state)
+    expect(REGION_BADGE.australia).toBe(SCOPE_BADGE.national)
+    expect(REGION_BADGE.global).toBe(SCOPE_BADGE.global)
+    expect(REGION_BADGE.melbourne).toBe('Melbourne')
+    expect(REGION_BADGE.regional_vic).toBe('Regional Vic')
+  })
+})

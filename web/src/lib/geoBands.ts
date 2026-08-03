@@ -85,3 +85,20 @@ export function hiddenTitles(charts: ChartSpec[], geo: Geo,
 export const SCOPE_BADGE: Record<string, string> = {
   state: 'Victoria-wide', national: 'Australia', global: 'Global',
 }
+
+// Spec 2026-08-03: the modal's always-on geography chip. IDENTICAL wording to
+// the card badges where those exist (SCOPE_BADGE — pinned by unit test) so what
+// a reader saw before opening never changes after; per-region names otherwise.
+export const REGION_BADGE: Record<string, string> = {
+  melbourne: 'Melbourne', regional_vic: 'Regional Vic', vic: 'Victoria-wide',
+  australia: 'Australia', global: 'Global',
+}
+
+// The ONE geography a chart plots inside the detail modal: fixed-region charts
+// pin their region; geo-scoped charts plot the geo the modal was opened at
+// (App's detailGeo already resolved coverage fallbacks).
+export function modalRegion(chart: ChartSpec, geo: Geo): string {
+  return chart.region_mode.startsWith('fixed:')
+    ? chart.region_mode.slice('fixed:'.length)
+    : geo
+}
