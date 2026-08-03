@@ -83,6 +83,7 @@ test('a chart-level source_name override shows in the modal instead of the serie
   mutated.charts.push({
     id: 'brent_test', section: 'world', title: 'Brent crude',
     series_id: 'au_cash_rate', metrics: ['cash_rate'], region_mode: 'fixed:australia',
+    scope: 'national', geos: ['australia'],
     percent: true, markers: false, annotate: false, note: null, modal_metrics: null,
     source_name: 'FRED — Brent crude (DCOILBRENTEU)',
   })
@@ -193,6 +194,63 @@ test('the inline range control gets the same coarse-pointer touch-size bump as t
     expect(r).toHaveClass('px-2.5', 'py-1', 'text-xs', 'num')   // unchanged
     expect(r).toHaveClass('pointer-coarse:px-4', 'pointer-coarse:py-3.5')
   }
+})
+
+// --- Fix batch (2026-08-03): no geography claim for unknown-coverage dead
+// charts; dead-modal headline falls back to the chart title; aria suffix
+// dedupe against a title that already ends with the region. ---
+
+test('a dead chart with unknown geo coverage (region_mode geo, geos []) shows NO region chip and its dialog name is the bare title', () => {
+  // Shaped like the real reiv_median chart (site.real.json): region_mode
+  // 'geo' with geos: [] means coverage is genuinely unknown — bandFor's own
+  // dead-chart override renders it at EVERY geo, precisely BECAUSE we don't
+  // know where it belongs, not because it's confirmed to cover whatever geo
+  // happens to be selected. Reuses vic_auctions (an existing failed series
+  // in this fixture) as the series_id so isDeadChart's isBrokenSource half
+  // is satisfied without inventing a new series entry.
+  const mutated = JSON.parse(JSON.stringify(siteEdge))
+  mutated.charts.push({
+    id: 'reiv_test', section: 'prices', title: 'REIV quarterly medians',
+    series_id: 'vic_auctions', metrics: null, region_mode: 'geo',
+    scope: 'geo', geos: [], percent: false, markers: false, annotate: false,
+    note: null, modal_metrics: null,
+  })
+  const s = assertSiteData(mutated)
+  const reivChart = s.charts.find(c => c.id === 'reiv_test')!
+  // No findings.reiv_test entry — mirrors App's own `?? ''` fallback for a
+  // dead chart, whose findings are genuinely {}.
+  render(<DetailView site={s} chart={reivChart} finding=""
+                     range="all" geo="vic" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  // Mutant-honest: were the gate removed, region_mode 'geo' would resolve
+  // modalRegion to the requested geo ('vic' -> REGION_BADGE 'Victoria-wide')
+  // and both of these would fail.
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('REIV quarterly medians')
+  expect(screen.queryByText('Victoria-wide')).not.toBeInTheDocument()
+})
+
+test('the dead-chart modal headline falls back to the chart title when there is no finding', () => {
+  // auctions is region_mode fixed:melbourne with geos: [] — a dead chart
+  // whose findings entry is {} in this fixture (App would pass finding=''
+  // for it), so the old code rendered a blank <h2>.
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding=""
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Auction clearance — Melbourne')
+})
+
+test('a fixed-region chart whose title already ends with " — <Region>" gets no doubled aria suffix, but its chip still renders', () => {
+  // auctions' title is "Auction clearance — Melbourne" and its region_mode
+  // is fixed:melbourne (NOT geo-mode, so the unknown-coverage gate above
+  // does not apply here) — the chip still names Melbourne, but the aria
+  // suffix must not repeat it a second time.
+  const auctions = site.charts.find(c => c.id === 'auctions')!
+  render(<DetailView site={site} chart={auctions} finding=""
+                     range="all" geo="melbourne" compare={null} now={NOW}
+                     onClose={() => {}} onCompare={() => {}} />)
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('Auction clearance — Melbourne')
+  expect(screen.getByText('Melbourne')).toBeInTheDocument()
 })
 
 test('stat block formats the primary line with its own metric unit on a mixed-unit series', () => {

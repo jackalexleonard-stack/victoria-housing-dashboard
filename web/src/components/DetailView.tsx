@@ -7,7 +7,7 @@ import { chartPoints, useChartData } from '../lib/selectors'
 import { nextUpdate } from '../lib/staleness'
 import { ago, fmtPeriod, fmtUnit } from '../lib/format'
 import { RANGES, type Geo, type Range } from '../lib/urlState'
-import { modalRegion, REGION_BADGE } from '../lib/geoBands'
+import { isDeadChart, modalRegion, REGION_BADGE } from '../lib/geoBands'
 import type { ChartSpec, SiteData } from '../lib/types'
 
 function toCsv(lines: { name: string; pts: { date: string; value: number }[] }[]) {
@@ -43,6 +43,22 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   // for every chart, everywhere.
   const region = modalRegion(chart, geo)
   const regionLabel = REGION_BADGE[region] ?? region
+  // Fix batch (2026-08-03): a dead chart (isDeadChart) whose region_mode is
+  // 'geo' has NO historical geo signal at all (geos: []) — bandFor's own
+  // dead-chart override (geoBands.ts) renders it at EVERY geo precisely
+  // BECAUSE its true coverage is unknown, not because it's confirmed to
+  // cover whatever geo the filter happens to be on. Naming that geo here
+  // would assert evidence this chart doesn't have — a chart may never claim
+  // a geography it can't evidence, the same principle geoBands.ts's own
+  // dead-chart handling already enforces at the grid level. Gate the chip
+  // (and its aria-label suffix) off entirely in this case.
+  const unknownCoverage = isDeadChart(chart, entry) && chart.region_mode === 'geo'
+  // Doubled-suffix guard: some fixed-region chart titles already end with
+  // " — <Region>" (e.g. "Auction clearance — Melbourne") — appending the
+  // suffix again would double it in the dialog's accessible name. The chip
+  // itself still renders in that case; this is aria-only dedupe.
+  const ariaName = !unknownCoverage && !chart.title.endsWith(` — ${regionLabel}`)
+    ? `${chart.title} — ${regionLabel}` : chart.title
   // useChartData leaves unitByName undefined when the series can't be found
   // at all (mirrors ChartCard's own convention) — this component always
   // needs an object here, since it spreads it into the compare-chart merge
@@ -94,20 +110,21 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   }
 
   return (
-    <dialog ref={dlg} aria-label={`${chart.title} — ${regionLabel}`}
+    <dialog ref={dlg} aria-label={ariaName}
             className="w-full sm:max-w-2xl sm:rounded-xl bg-card text-ink p-5 m-auto
                        max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none"
             style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
       <div className="flex items-start gap-2">
         <h2 ref={h2} tabIndex={-1} className="font-display text-xl leading-snug flex-1">
-          {finding}
+          {finding || chart.title}
         </h2>
         <button type="button" onClick={onClose} aria-label="Close"
                 className="text-muted hover:text-ink text-xl leading-none px-1">×</button>
       </div>
-      <div className="mt-1">
-        <Chip kind="neutral">{regionLabel}</Chip>
-      </div>
+      {!unknownCoverage &&
+        <div className="mt-1">
+          <Chip kind="neutral">{regionLabel}</Chip>
+        </div>}
       {/* Design review P1-touch: this inline range control was px-2.5 py-1
           (~24px tall), below the project's 44px mandate — the same defect
           class T5 already fixed on the action row below (Download CSV /
