@@ -137,10 +137,19 @@ def test_exactly_nine_charts_carry_a_note():
     # Task 15: land's region_mode flipped fixed:melbourne -> geo so
     # regional_vic's Task 9 rows stop sitting dormant — the note discloses
     # the two regions' different reporting cadences (not annualised away).
+    # 2026-08-03: extended with the zoned/unzoned caveat — most of the
+    # supply behind the headline years figure is unzoned englobo awaiting a
+    # PSP, so the note stops readers taking it as ready-to-build supply
+    # (qualitative only; the actual split ships as metrics, never baked-in
+    # counts that rot).
     assert noted["land"] == (
         "Melbourne and Regional Victoria publish on different cadences — "
         "Melbourne a full year to Dec, Regional a half-year \"Titled H1\" "
-        "snapshot to Jun — not annualised to match.")
+        "snapshot to Jun — not annualised to match. Years of supply counts "
+        "all identified supply — proposed, zoned and unzoned alike; unzoned "
+        "land still awaits a precinct structure plan, so the headline figure "
+        "overstates zoned, ready-to-build supply (see the zoned/unzoned "
+        "lot-supply split).")
     cash_rate = next(c for c in findings.CHARTS if c["id"] == "cash_rate")
     assert cash_rate["note"] is None
 
@@ -349,6 +358,10 @@ def test_metric_labels_spot_checks():
         "vic_input_costs": _df([
             ("2026-03-31", "melbourne", "input_cement", 120.0, "index"),
         ]),
+        "vic_land": _df([
+            ("2024-12-31", "melbourne", "greenfield_lot_supply_zoned", 205483, "lots"),
+            ("2024-12-31", "melbourne", "greenfield_lot_supply_unzoned", 128536, "lots"),
+        ]),
     })
     labels = findings.build_metric_labels(ls)
     assert labels["credit_owner_occupier_mom"] == "Owner-occupier, monthly"
@@ -358,6 +371,8 @@ def test_metric_labels_spot_checks():
     assert labels["accord_cumulative_actual"] == "Actual (cumulative)"
     assert labels["accord_quarterly_actual"] == "Actual (quarterly)"
     assert labels["input_cement"] == "Cement"
+    assert labels["greenfield_lot_supply_zoned"] == "Lot supply — zoned"
+    assert labels["greenfield_lot_supply_unzoned"] == "Lot supply — unzoned"
 
 
 def test_metric_labels_covers_declared_metrics_even_with_no_data():

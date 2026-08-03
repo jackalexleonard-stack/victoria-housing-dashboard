@@ -63,10 +63,20 @@ _POP_GCCSA_NOTE = ("Annual ABS data (components of population change by "
 # year to Dec, Regional Victoria a running half-year "Titled H1" snapshot to
 # Jun — disclosed here rather than annualised to match (that would fabricate
 # data the source never published; see pipeline/sources/udp.py's caveat).
+# 2026-08-03: extended with the zoned/unzoned caveat — the supply total the
+# headline years figure divides is mostly englobo land, much of it unzoned
+# (no gazetted PSP yet), so the note must stop readers taking ~18 years as
+# zoned or ready-to-build supply. Qualitative only (no counts that rot);
+# the actual split ships as the greenfield_lot_supply_zoned/_unzoned
+# metrics (see udp.py).
 _LAND_NOTE = ("Melbourne and Regional Victoria publish on different "
               "cadences — Melbourne a full year to Dec, Regional a "
               "half-year \"Titled H1\" snapshot to Jun — not annualised "
-              "to match.")
+              "to match. Years of supply counts all identified supply — "
+              "proposed, zoned and unzoned alike; unzoned land still "
+              "awaits a precinct structure plan, so the headline figure "
+              "overstates zoned, ready-to-build supply (see the "
+              "zoned/unzoned lot-supply split).")
 
 
 def _strip_cadence_code(label: str) -> str:
@@ -554,6 +564,8 @@ METRIC_LABELS: dict[str, str] = {
     "social_waitlist_public": "Public housing waitlist",
     # greenfield land supply
     "greenfield_lot_supply": "Lot supply", "greenfield_lots_titled": "Lots titled",
+    "greenfield_lot_supply_zoned": "Lot supply — zoned",
+    "greenfield_lot_supply_unzoned": "Lot supply — unzoned",
     "greenfield_years_of_supply": "Years of supply",
     # construction input costs
     "input_all_groups": "All groups", "input_cement": "Cement",
