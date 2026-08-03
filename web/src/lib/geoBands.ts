@@ -97,6 +97,12 @@ export const REGION_BADGE: Record<string, string> = {
 // The ONE geography a chart plots inside the detail modal: fixed-region charts
 // pin their region; geo-scoped charts plot the geo the modal was opened at
 // (App's detailGeo already resolved coverage fallbacks).
+// Assumes region_mode is 'geo' or 'fixed:*' — the pipeline emits no 'all'-mode
+// charts today. A future 'all'-mode chart plots MULTIPLE regions at once (see
+// chartPoints' own 'all' branch), so it must not fall through to this
+// function's single-region claim; callers gating a per-chart geography claim
+// on region_mode (e.g. DetailView's unknownCoverage) will need an explicit
+// 'all' case added here first.
 export function modalRegion(chart: ChartSpec, geo: Geo): string {
   return chart.region_mode.startsWith('fixed:')
     ? chart.region_mode.slice('fixed:'.length)

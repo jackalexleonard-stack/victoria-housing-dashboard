@@ -1,4 +1,4 @@
-import { bandFor, hiddenTitles } from './geoBands'
+import { bandFor, hiddenTitles, modalRegion, REGION_BADGE, SCOPE_BADGE } from './geoBands'
 import type { ChartSpec, SeriesEntry } from './types'
 
 const chart = (over: Partial<ChartSpec>): ChartSpec => ({
@@ -111,18 +111,11 @@ describe('a broken source never claims a geography gap', () => {
   })
 })
 
-import { modalRegion, REGION_BADGE, SCOPE_BADGE } from './geoBands'
-
-const chartWithRegionMode = (region_mode: string): ChartSpec => ({
-  id: 'x', section: 's', title: 'x', series_id: 'x', metrics: null,
-  region_mode, scope: 'geo', geos: ['melbourne'],
-  percent: false, markers: false, annotate: false })
-
 describe('modalRegion', () => {
   test('fixed charts pin their region, geo charts follow the modal geo', () => {
-    expect(modalRegion(chartWithRegionMode('fixed:australia'), 'melbourne')).toBe('australia')
-    expect(modalRegion(chartWithRegionMode('fixed:global'), 'vic')).toBe('global')
-    expect(modalRegion(chartWithRegionMode('geo'), 'regional_vic')).toBe('regional_vic')
+    expect(modalRegion(chart({ region_mode: 'fixed:australia' }), 'melbourne')).toBe('australia')
+    expect(modalRegion(chart({ region_mode: 'fixed:global' }), 'vic')).toBe('global')
+    expect(modalRegion(chart({ region_mode: 'geo' }), 'regional_vic')).toBe('regional_vic')
   })
 })
 

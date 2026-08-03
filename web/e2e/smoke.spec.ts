@@ -662,4 +662,22 @@ test.describe('modal geography chip (Task 2, 2026-08-03)', () => {
     await expect(dialog).toHaveAccessibleName(/ — Australia$/)
     await expect(dialog.getByText('Australia', { exact: true })).toBeVisible()
   })
+
+  // The fixed:australia case above pins a chart whose region never moves
+  // with the geo filter. This complements it with a geo-scoped chart (region
+  // follows the modal's own geo) — 'Rents & vacancy''s first card
+  // (rent_growth, region_mode "geo") under the default geo. Time-independent:
+  // asserts one of the five canonical REGION_BADGE labels renders, not any
+  // specific one, since the default geo itself isn't pinned by this test.
+  test('a geo-scoped chart modal also names its geography', async ({ page }) => {
+    await gotoDashboard(page, '/')
+    await page.locator('nav[aria-label="Filters and sections"]').waitFor()
+    await page.getByRole('button', { name: 'Rents & vacancy', exact: true }).click()
+    const rents = page.locator('section[aria-label="Rents & vacancy"]')
+    await rents.getByRole('button', { name: /open details/ }).first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(
+      /^(Melbourne|Regional Vic|Victoria-wide|Australia|Global)$/)).toBeVisible()
+  })
 })
