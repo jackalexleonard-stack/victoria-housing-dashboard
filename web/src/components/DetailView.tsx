@@ -7,6 +7,7 @@ import { chartPoints, useChartData } from '../lib/selectors'
 import { nextUpdate } from '../lib/staleness'
 import { ago, fmtPeriod, fmtUnit } from '../lib/format'
 import { RANGES, type Geo, type Range } from '../lib/urlState'
+import { modalRegion, REGION_BADGE } from '../lib/geoBands'
 import type { ChartSpec, SiteData } from '../lib/types'
 
 function toCsv(lines: { name: string; pts: { date: string; value: number }[] }[]) {
@@ -33,8 +34,15 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
     return () => d?.removeEventListener('cancel', onCancel)
   }, [onClose])
 
-  const { entry, lines, scopeNote, unitByName: primaryUnitsRaw, unit } =
+  const { entry, lines, unitByName: primaryUnitsRaw, unit } =
     useChartData(site, chart, localRange, geo, now)
+  // Task 2 (2026-08-03): the modal's always-on geography chip — the ONE
+  // region this modal plots (Task 1's modalRegion/REGION_BADGE). Replaces
+  // the caption row's old scopeNote chip below, which only fired for
+  // fixed-region charts opened away from their own geo; this fires always,
+  // for every chart, everywhere.
+  const region = modalRegion(chart, geo)
+  const regionLabel = REGION_BADGE[region] ?? region
   // useChartData leaves unitByName undefined when the series can't be found
   // at all (mirrors ChartCard's own convention) — this component always
   // needs an object here, since it spreads it into the compare-chart merge
@@ -78,7 +86,7 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
   }
 
   return (
-    <dialog ref={dlg} aria-label={chart.title}
+    <dialog ref={dlg} aria-label={`${chart.title} — ${regionLabel}`}
             className="w-full sm:max-w-2xl sm:rounded-xl bg-card text-ink p-5 m-auto
                        max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none"
             style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}>
@@ -88,6 +96,9 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
         </h2>
         <button type="button" onClick={onClose} aria-label="Close"
                 className="text-muted hover:text-ink text-xl leading-none px-1">×</button>
+      </div>
+      <div className="mt-1">
+        <Chip kind="neutral">{regionLabel}</Chip>
       </div>
       {/* Design review P1-touch: this inline range control was px-2.5 py-1
           (~24px tall), below the project's 44px mandate — the same defect
@@ -160,7 +171,6 @@ export function DetailView({ site, chart, finding, range, geo, compare, now,
         <StatusChip entry={entry} now={now} />
         {entry && <span>fetched {ago(entry.meta.last_fetched, now)}</span>}
         {entry && nextUpdate(entry, now) && <span>{nextUpdate(entry, now)}</span>}
-        {scopeNote && <Chip kind="neutral">{scopeNote}</Chip>}
       </div>
       {chart.note && <p className="text-xs text-faint mt-1">{chart.note}</p>}
       {/* Design review P1-touch: this row's actions were px-3 py-1.5
