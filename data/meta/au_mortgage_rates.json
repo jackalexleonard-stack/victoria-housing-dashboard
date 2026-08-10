@@ -4,8 +4,8 @@
   "source_url": "https://www.rba.gov.au/statistics/tables/csv/f6-data.csv",
   "frequency": "monthly",
   "status": "ok",
-  "last_fetched": "2026-08-09T04:15:27Z",
+  "last_fetched": "2026-08-10T04:26:48Z",
   "error": null,
-  "last_data_date": "2026-05-31",
-  "last_changed": "2026-07-16T03:46:00Z"
+  "last_data_date": "2026-06-30",
+  "last_changed": "2026-08-10T04:26:48Z"
 }

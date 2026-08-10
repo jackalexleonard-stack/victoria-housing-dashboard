@@ -82,6 +82,7 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_new,5.9,percent
 2026-04-30,australia,mortgage_new,6.0,percent
 2026-05-31,australia,mortgage_new,6.2,percent
+2026-06-30,australia,mortgage_new,6.2,percent
 2019-07-31,australia,mortgage_new_fixed,3.4,percent
 2019-08-31,australia,mortgage_new_fixed,3.2,percent
 2019-09-30,australia,mortgage_new_fixed,3.2,percent
@@ -165,6 +166,7 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_new_fixed,5.7,percent
 2026-04-30,australia,mortgage_new_fixed,5.9,percent
 2026-05-31,australia,mortgage_new_fixed,6.1,percent
+2026-06-30,australia,mortgage_new_fixed,6.2,percent
 2019-07-31,australia,mortgage_new_variable,3.5,percent
 2019-08-31,australia,mortgage_new_variable,3.5,percent
 2019-09-30,australia,mortgage_new_variable,3.5,percent
@@ -248,6 +250,7 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_new_variable,5.9,percent
 2026-04-30,australia,mortgage_new_variable,6.0,percent
 2026-05-31,australia,mortgage_new_variable,6.2,percent
+2026-06-30,australia,mortgage_new_variable,6.3,percent
 2019-07-31,australia,mortgage_outstanding,3.8,percent
 2019-08-31,australia,mortgage_outstanding,3.8,percent
 2019-09-30,australia,mortgage_outstanding,3.8,percent
@@ -331,6 +334,7 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_outstanding,5.9,percent
 2026-04-30,australia,mortgage_outstanding,6.0,percent
 2026-05-31,australia,mortgage_outstanding,6.2,percent
+2026-06-30,australia,mortgage_outstanding,6.2,percent
 2019-07-31,australia,mortgage_outstanding_fixed,3.9,percent
 2019-08-31,australia,mortgage_outstanding_fixed,3.9,percent
 2019-09-30,australia,mortgage_outstanding_fixed,3.9,percent
@@ -414,6 +418,7 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_outstanding_fixed,5.4,percent
 2026-04-30,australia,mortgage_outstanding_fixed,5.5,percent
 2026-05-31,australia,mortgage_outstanding_fixed,5.5,percent
+2026-06-30,australia,mortgage_outstanding_fixed,5.6,percent
 2019-07-31,australia,mortgage_outstanding_variable,3.8,percent
 2019-08-31,australia,mortgage_outstanding_variable,3.8,percent
 2019-09-30,australia,mortgage_outstanding_variable,3.8,percent
@@ -497,3 +502,4 @@ date,region,metric,value,unit
 2026-03-31,australia,mortgage_outstanding_variable,5.9,percent
 2026-04-30,australia,mortgage_outstanding_variable,6.0,percent
 2026-05-31,australia,mortgage_outstanding_variable,6.2,percent
+2026-06-30,australia,mortgage_outstanding_variable,6.3,percent
