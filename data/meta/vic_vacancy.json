@@ -4,7 +4,7 @@
   "source_url": "https://www.dffh.vic.gov.au/publications/rental-report",
   "frequency": "monthly",
   "status": "failed",
-  "last_fetched": "2026-08-12T04:54:59Z",
+  "last_fetched": "2026-08-13T04:58:33Z",
   "error": "ReadTimeout: HTTPSConnectionPool(host='www.dffh.vic.gov.au', port=443): Read timed out. (read timeout=60)",
   "last_data_date": "2025-09-30",
   "last_changed": "2026-07-16T06:36:49Z"
