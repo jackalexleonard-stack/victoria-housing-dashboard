@@ -4,7 +4,7 @@
   "source_url": "https://www.homes.vic.gov.au/applications-victorian-housing-register-vhr",
   "frequency": "quarterly",
   "status": "failed",
-  "last_fetched": "2026-08-16T03:50:35Z",
+  "last_fetched": "2026-08-17T03:52:04Z",
   "error": "ReadTimeout: HTTPSConnectionPool(host='www.homes.vic.gov.au', port=443): Read timed out. (read timeout=60)",
   "last_data_date": "2026-03-31",
   "last_changed": "2026-07-16T05:41:09Z"
