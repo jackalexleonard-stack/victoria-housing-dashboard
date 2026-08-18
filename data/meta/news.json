@@ -4,10 +4,10 @@
   "source_url": "multiple feeds \u2014 see pipeline/sources/news.py",
   "frequency": "daily",
   "status": "ok",
-  "last_fetched": "2026-08-17T03:55:20Z",
+  "last_fetched": "2026-08-18T03:52:44Z",
   "feeds_ok": 11,
   "feeds_failed": 0,
-  "item_count": 257,
-  "last_item_date": "2026-08-17",
+  "item_count": 262,
+  "last_item_date": "2026-08-18",
   "error": null
 }
