@@ -1,5 +1,5 @@
 date,region,metric,value,unit
-2019-07-31,australia,mortgage_new,3.5,percent
+2019-07-31,australia,mortgage_new,3.49,percent
 2019-08-31,australia,mortgage_new,3.5,percent
 2019-09-30,australia,mortgage_new,3.4,percent
 2019-10-31,australia,mortgage_new,3.3,percent
@@ -83,7 +83,8 @@ date,region,metric,value,unit
 2026-04-30,australia,mortgage_new,6.0,percent
 2026-05-31,australia,mortgage_new,6.2,percent
 2026-06-30,australia,mortgage_new,6.2,percent
-2019-07-31,australia,mortgage_new_fixed,3.4,percent
+2026-07-31,australia,mortgage_new,6.2,percent
+2019-07-31,australia,mortgage_new_fixed,3.43,percent
 2019-08-31,australia,mortgage_new_fixed,3.2,percent
 2019-09-30,australia,mortgage_new_fixed,3.2,percent
 2019-10-31,australia,mortgage_new_fixed,3.0,percent
@@ -167,6 +168,7 @@ date,region,metric,value,unit
 2026-04-30,australia,mortgage_new_fixed,5.9,percent
 2026-05-31,australia,mortgage_new_fixed,6.1,percent
 2026-06-30,australia,mortgage_new_fixed,6.2,percent
+2026-07-31,australia,mortgage_new_fixed,6.3,percent
 2019-07-31,australia,mortgage_new_variable,3.5,percent
 2019-08-31,australia,mortgage_new_variable,3.5,percent
 2019-09-30,australia,mortgage_new_variable,3.5,percent
@@ -251,7 +253,8 @@ date,region,metric,value,unit
 2026-04-30,australia,mortgage_new_variable,6.0,percent
 2026-05-31,australia,mortgage_new_variable,6.2,percent
 2026-06-30,australia,mortgage_new_variable,6.3,percent
-2019-07-31,australia,mortgage_outstanding,3.8,percent
+2026-07-31,australia,mortgage_new_variable,6.2,percent
+2019-07-31,australia,mortgage_outstanding,3.84,percent
 2019-08-31,australia,mortgage_outstanding,3.8,percent
 2019-09-30,australia,mortgage_outstanding,3.8,percent
 2019-10-31,australia,mortgage_outstanding,3.7,percent
@@ -335,7 +338,8 @@ date,region,metric,value,unit
 2026-04-30,australia,mortgage_outstanding,6.0,percent
 2026-05-31,australia,mortgage_outstanding,6.2,percent
 2026-06-30,australia,mortgage_outstanding,6.2,percent
-2019-07-31,australia,mortgage_outstanding_fixed,3.9,percent
+2026-07-31,australia,mortgage_outstanding,6.2,percent
+2019-07-31,australia,mortgage_outstanding_fixed,3.94,percent
 2019-08-31,australia,mortgage_outstanding_fixed,3.9,percent
 2019-09-30,australia,mortgage_outstanding_fixed,3.9,percent
 2019-10-31,australia,mortgage_outstanding_fixed,3.9,percent
@@ -419,7 +423,8 @@ date,region,metric,value,unit
 2026-04-30,australia,mortgage_outstanding_fixed,5.5,percent
 2026-05-31,australia,mortgage_outstanding_fixed,5.5,percent
 2026-06-30,australia,mortgage_outstanding_fixed,5.6,percent
-2019-07-31,australia,mortgage_outstanding_variable,3.8,percent
+2026-07-31,australia,mortgage_outstanding_fixed,5.6,percent
+2019-07-31,australia,mortgage_outstanding_variable,3.81,percent
 2019-08-31,australia,mortgage_outstanding_variable,3.8,percent
 2019-09-30,australia,mortgage_outstanding_variable,3.8,percent
 2019-10-31,australia,mortgage_outstanding_variable,3.6,percent
@@ -499,7 +504,8 @@ date,region,metric,value,unit
 2025-12-31,australia,mortgage_outstanding_variable,5.5,percent
 2026-01-31,australia,mortgage_outstanding_variable,5.5,percent
 2026-02-28,australia,mortgage_outstanding_variable,5.8,percent
-2026-03-31,australia,mortgage_outstanding_variable,5.9,percent
+2026-03-31,australia,mortgage_outstanding_variable,6.0,percent
 2026-04-30,australia,mortgage_outstanding_variable,6.0,percent
 2026-05-31,australia,mortgage_outstanding_variable,6.2,percent
 2026-06-30,australia,mortgage_outstanding_variable,6.3,percent
+2026-07-31,australia,mortgage_outstanding_variable,6.2,percent
