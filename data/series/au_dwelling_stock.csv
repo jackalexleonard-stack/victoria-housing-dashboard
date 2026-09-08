@@ -56,8 +56,9 @@ date,region,metric,value,unit
 2025-03-31,australia,dwelling_count,11320700.0,dwellings
 2025-06-30,australia,dwelling_count,11357500.0,dwellings
 2025-09-30,australia,dwelling_count,11398300.0,dwellings
-2025-12-31,australia,dwelling_count,11441000.0,dwellings
-2026-03-31,australia,dwelling_count,11495200.0,dwellings
+2025-12-31,australia,dwelling_count,11442500.0,dwellings
+2026-03-31,australia,dwelling_count,11476700.0,dwellings
+2026-06-30,australia,dwelling_count,11531100.0,dwellings
 2011-09-30,australia,mean_price,490800.0,aud
 2011-12-31,australia,mean_price,486900.0,aud
 2012-03-31,australia,mean_price,488600.0,aud
@@ -115,8 +116,9 @@ date,region,metric,value,unit
 2025-03-31,australia,mean_price,1007800.0,aud
 2025-06-30,australia,mean_price,1029900.0,aud
 2025-09-30,australia,mean_price,1050900.0,aud
-2025-12-31,australia,mean_price,1088800.0,aud
-2026-03-31,australia,mean_price,1111100.0,aud
+2025-12-31,australia,mean_price,1093200.0,aud
+2026-03-31,australia,mean_price,1108600.0,aud
+2026-06-30,australia,mean_price,1100400.0,aud
 2011-09-30,vic,dwelling_count,2265600.0,dwellings
 2011-12-31,vic,dwelling_count,2278300.0,dwellings
 2012-03-31,vic,dwelling_count,2287700.0,dwellings
@@ -174,8 +176,9 @@ date,region,metric,value,unit
 2025-03-31,vic,dwelling_count,2978500.0,dwellings
 2025-06-30,vic,dwelling_count,2989700.0,dwellings
 2025-09-30,vic,dwelling_count,3002000.0,dwellings
-2025-12-31,vic,dwelling_count,3015100.0,dwellings
-2026-03-31,vic,dwelling_count,3031500.0,dwellings
+2025-12-31,vic,dwelling_count,3016100.0,dwellings
+2026-03-31,vic,dwelling_count,3026600.0,dwellings
+2026-06-30,vic,dwelling_count,3043000.0,dwellings
 2011-09-30,vic,mean_price,512600.0,aud
 2011-12-31,vic,mean_price,506600.0,aud
 2012-03-31,vic,mean_price,500000.0,aud
@@ -233,5 +236,6 @@ date,region,metric,value,unit
 2025-03-31,vic,mean_price,910200.0,aud
 2025-06-30,vic,mean_price,918200.0,aud
 2025-09-30,vic,mean_price,926900.0,aud
-2025-12-31,vic,mean_price,949500.0,aud
-2026-03-31,vic,mean_price,947100.0,aud
+2025-12-31,vic,mean_price,952800.0,aud
+2026-03-31,vic,mean_price,938000.0,aud
+2026-06-30,vic,mean_price,918400.0,aud
