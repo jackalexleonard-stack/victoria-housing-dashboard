@@ -4,7 +4,7 @@
   "source_url": "multiple feeds \u2014 see pipeline/sources/news.py",
   "frequency": "daily",
   "status": "ok",
-  "last_fetched": "2026-09-11T07:53:13Z",
+  "last_fetched": "2026-09-12T07:48:32Z",
   "feeds_ok": 11,
   "feeds_failed": 0,
   "item_count": 348,
