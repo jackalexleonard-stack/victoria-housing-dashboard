@@ -283,7 +283,8 @@ date,region,metric,value,unit
 2025-06-30,australia,dwellings_commenced,45450,dwellings
 2025-09-30,australia,dwellings_commenced,51779,dwellings
 2025-12-31,australia,dwellings_commenced,54235,dwellings
-2026-03-31,australia,dwellings_commenced,45154,dwellings
+2026-03-31,australia,dwellings_commenced,45599,dwellings
+2026-06-30,australia,dwellings_commenced,51971,dwellings
 1955-03-31,australia,dwellings_completed,18567,dwellings
 1955-06-30,australia,dwellings_completed,21378,dwellings
 1955-09-30,australia,dwellings_completed,19940,dwellings
@@ -568,7 +569,8 @@ date,region,metric,value,unit
 2025-06-30,australia,dwellings_completed,41020,dwellings
 2025-09-30,australia,dwellings_completed,45557,dwellings
 2025-12-31,australia,dwellings_completed,48169,dwellings
-2026-03-31,australia,dwellings_completed,38182,dwellings
+2026-03-31,australia,dwellings_completed,38658,dwellings
+2026-06-30,australia,dwellings_completed,47495,dwellings
 1955-03-31,australia,dwellings_under_construction,0,dwellings
 1955-06-30,australia,dwellings_under_construction,0,dwellings
 1955-09-30,australia,dwellings_under_construction,0,dwellings
@@ -853,7 +855,8 @@ date,region,metric,value,unit
 2025-06-30,australia,dwellings_under_construction,223760,dwellings
 2025-09-30,australia,dwellings_under_construction,230360,dwellings
 2025-12-31,australia,dwellings_under_construction,236811,dwellings
-2026-03-31,australia,dwellings_under_construction,242874,dwellings
+2026-03-31,australia,dwellings_under_construction,243159,dwellings
+2026-06-30,australia,dwellings_under_construction,247710,dwellings
 1955-03-31,vic,dwellings_commenced,0,dwellings
 1955-06-30,vic,dwellings_commenced,0,dwellings
 1955-09-30,vic,dwellings_commenced,5694,dwellings
@@ -1138,7 +1141,8 @@ date,region,metric,value,unit
 2025-06-30,vic,dwellings_commenced,13831,dwellings
 2025-09-30,vic,dwellings_commenced,14260,dwellings
 2025-12-31,vic,dwellings_commenced,13590,dwellings
-2026-03-31,vic,dwellings_commenced,13429,dwellings
+2026-03-31,vic,dwellings_commenced,13421,dwellings
+2026-06-30,vic,dwellings_commenced,16160,dwellings
 1955-03-31,vic,dwellings_completed,5678,dwellings
 1955-06-30,vic,dwellings_completed,6277,dwellings
 1955-09-30,vic,dwellings_completed,5923,dwellings
@@ -1423,7 +1427,8 @@ date,region,metric,value,unit
 2025-06-30,vic,dwellings_completed,12807,dwellings
 2025-09-30,vic,dwellings_completed,14175,dwellings
 2025-12-31,vic,dwellings_completed,15318,dwellings
-2026-03-31,vic,dwellings_completed,12214,dwellings
+2026-03-31,vic,dwellings_completed,12273,dwellings
+2026-06-30,vic,dwellings_completed,14404,dwellings
 1955-03-31,vic,dwellings_under_construction,0,dwellings
 1955-06-30,vic,dwellings_under_construction,0,dwellings
 1955-09-30,vic,dwellings_under_construction,0,dwellings
@@ -1708,4 +1713,5 @@ date,region,metric,value,unit
 2025-06-30,vic,dwellings_under_construction,61825,dwellings
 2025-09-30,vic,dwellings_under_construction,61941,dwellings
 2025-12-31,vic,dwellings_under_construction,60257,dwellings
-2026-03-31,vic,dwellings_under_construction,61356,dwellings
+2026-03-31,vic,dwellings_under_construction,61288,dwellings
+2026-06-30,vic,dwellings_under_construction,63079,dwellings
