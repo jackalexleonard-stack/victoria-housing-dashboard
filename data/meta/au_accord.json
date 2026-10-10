@@ -4,7 +4,7 @@
   "source_url": "https://data.api.abs.gov.au/rest/data/BUILDING_ACTIVITY/M6+M7+M8.2+AUS.CUR.1.9.100.10.Q",
   "frequency": "quarterly",
   "status": "ok",
-  "last_fetched": "2026-10-09T09:56:26Z",
+  "last_fetched": "2026-10-10T09:20:13Z",
   "error": null,
   "last_data_date": "2026-06-30",
   "last_changed": "2026-10-07T09:41:56Z"
