@@ -4,10 +4,10 @@
   "source_url": "multiple feeds \u2014 see pipeline/sources/news.py",
   "frequency": "daily",
   "status": "ok",
-  "last_fetched": "2026-10-11T09:49:40Z",
-  "feeds_ok": 6,
-  "feeds_failed": 5,
-  "item_count": 436,
-  "last_item_date": "2026-10-11",
-  "error": "The Urban Developer: HTTPError; Cotality: HTTPError; Premier of Victoria: HTTPError; Google News: HTTPError; Google News: HTTPError"
+  "last_fetched": "2026-10-12T10:18:42Z",
+  "feeds_ok": 11,
+  "feeds_failed": 0,
+  "item_count": 446,
+  "last_item_date": "2026-10-12",
+  "error": null
 }
