@@ -4,8 +4,8 @@
   "source_url": "https://fred.stlouisfed.org/",
   "frequency": "daily",
   "status": "ok",
-  "last_fetched": "2026-10-15T07:57:26Z",
+  "last_fetched": "2026-10-16T07:51:31Z",
   "error": null,
-  "last_data_date": "2026-10-13",
-  "last_changed": "2026-10-15T07:57:26Z"
+  "last_data_date": "2026-10-14",
+  "last_changed": "2026-10-16T07:51:31Z"
 }
