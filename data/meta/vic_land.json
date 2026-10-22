@@ -4,7 +4,7 @@
   "source_url": "https://www.land.vic.gov.au/valuations/resources-and-reports/urban-development-program",
   "frequency": "annual",
   "status": "failed",
-  "last_fetched": "2026-10-21T08:17:24Z",
+  "last_fetched": "2026-10-22T08:18:52Z",
   "error": "HTTPError: 400 Client Error:  for url: https://opendata.maps.vic.gov.au/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=open-data-platform%3Agf2022&outputFormat=csv&count=5000&startIndex=0&propertyName=year_titled%2Cdevelopment_status%2Ctotal_lots%2Clga",
   "last_data_date": "2024-12-31",
   "last_changed": "2026-08-03T07:49:13Z"
