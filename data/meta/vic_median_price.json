@@ -4,6 +4,6 @@
   "source_url": "https://reiv.com.au/property-data/median-prices",
   "frequency": "quarterly",
   "status": "failed",
-  "last_fetched": "2026-10-23T08:22:27Z",
+  "last_fetched": "2026-10-24T08:00:57Z",
   "error": "ValueError: no REIV median-price table found on the page"
 }
