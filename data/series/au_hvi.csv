@@ -3,10 +3,12 @@ date,region,metric,value,unit
 2026-07-31,australia,hvi_change_mom,-0.94,percent
 2026-08-31,australia,hvi_change_mom,-1.15,percent
 2026-09-30,australia,hvi_change_mom,-1.26,percent
+2026-10-31,australia,hvi_change_mom,-1.47,percent
 2026-06-30,australia,hvi_change_yoy,6.13,percent
 2026-07-31,australia,hvi_change_yoy,3.9,percent
 2026-08-31,australia,hvi_change_yoy,1.01,percent
 2026-09-30,australia,hvi_change_yoy,-1.89,percent
+2026-10-31,australia,hvi_change_yoy,-4.62,percent
 2025-07-17,australia,hvi_index,210.78,index
 2025-07-18,australia,hvi_index,210.78,index
 2025-07-19,australia,hvi_index,210.81,index
@@ -479,3 +481,4 @@ date,region,metric,value,unit
 2026-10-29,australia,hvi_index,209.3,index
 2026-10-30,australia,hvi_index,209.19,index
 2026-10-31,australia,hvi_index,209.04,index
+2026-11-01,australia,hvi_index,208.94,index

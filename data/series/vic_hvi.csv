@@ -3,10 +3,12 @@ date,region,metric,value,unit
 2026-07-31,melbourne,hvi_change_mom,-1.19,percent
 2026-08-31,melbourne,hvi_change_mom,-1.11,percent
 2026-09-30,melbourne,hvi_change_mom,-0.72,percent
+2026-10-31,melbourne,hvi_change_mom,-0.79,percent
 2026-06-30,melbourne,hvi_change_yoy,-0.89,percent
 2026-07-31,melbourne,hvi_change_yoy,-2.8,percent
 2026-08-31,melbourne,hvi_change_yoy,-4.71,percent
 2026-09-30,melbourne,hvi_change_yoy,-6.22,percent
+2026-10-31,melbourne,hvi_change_yoy,-7.71,percent
 2025-07-17,melbourne,hvi_index,183.4,index
 2025-07-18,melbourne,hvi_index,183.32,index
 2025-07-19,melbourne,hvi_index,183.37,index
@@ -479,3 +481,4 @@ date,region,metric,value,unit
 2026-10-29,melbourne,hvi_index,173.42,index
 2026-10-30,melbourne,hvi_index,173.37,index
 2026-10-31,melbourne,hvi_index,173.31,index
+2026-11-01,melbourne,hvi_index,173.27,index
