@@ -140,6 +140,7 @@ date,region,metric,value,unit
 2026-07-31,global,copper,13543.0,USD/tonne
 2026-08-31,global,copper,14326.0,USD/tonne
 2026-09-30,global,copper,14474.0,USD/tonne
+2026-10-31,global,copper,14508.0,USD/tonne
 2015-01-31,global,iron_ore,68.2,USD/dmtu
 2015-02-28,global,iron_ore,62.8,USD/dmtu
 2015-03-31,global,iron_ore,58.1,USD/dmtu
@@ -281,6 +282,7 @@ date,region,metric,value,unit
 2026-07-31,global,iron_ore,98.2,USD/dmtu
 2026-08-31,global,iron_ore,96.3,USD/dmtu
 2026-09-30,global,iron_ore,97.7,USD/dmtu
+2026-10-31,global,iron_ore,90.8,USD/dmtu
 2015-01-31,global,sawnwood,826.7,USD/m3
 2015-02-28,global,sawnwood,835.2,USD/m3
 2015-03-31,global,sawnwood,816.6,USD/m3
@@ -422,3 +424,4 @@ date,region,metric,value,unit
 2026-07-31,global,sawnwood,728.9,USD/m3
 2026-08-31,global,sawnwood,737.9,USD/m3
 2026-09-30,global,sawnwood,731.3,USD/m3
+2026-10-31,global,sawnwood,724.3,USD/m3
