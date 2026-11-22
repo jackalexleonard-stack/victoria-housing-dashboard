@@ -4,8 +4,8 @@
   "source_url": "https://www.land.vic.gov.au/valuations/resources-and-reports/urban-development-program",
   "frequency": "annual",
   "status": "failed",
-  "last_fetched": "2026-11-21T10:38:55Z",
-  "error": "ValueError: no metro greenfield WFS layer found in the UDP catalogue",
+  "last_fetched": "2026-11-22T10:45:39Z",
+  "error": "HTTPError: 504 Gateway Time-out",
   "last_data_date": "2024-12-31",
   "last_changed": "2026-08-03T07:49:13Z"
 }
