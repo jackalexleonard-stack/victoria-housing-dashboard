@@ -2965,6 +2965,11 @@ date,region,metric,value,unit
 2026-11-10,global,aud_usd,0.685,usd_per_aud
 2026-11-12,global,aud_usd,0.681,usd_per_aud
 2026-11-13,global,aud_usd,0.6775,usd_per_aud
+2026-11-16,global,aud_usd,0.6749,usd_per_aud
+2026-11-17,global,aud_usd,0.6741,usd_per_aud
+2026-11-18,global,aud_usd,0.6714,usd_per_aud
+2026-11-19,global,aud_usd,0.6672,usd_per_aud
+2026-11-20,global,aud_usd,0.6639,usd_per_aud
 2015-01-02,global,brent_crude,55.38,usd_per_barrel
 2015-01-05,global,brent_crude,51.08,usd_per_barrel
 2015-01-06,global,brent_crude,50.12,usd_per_barrel
@@ -8953,3 +8958,4 @@ date,region,metric,value,unit
 2026-11-17,global,us_10y_treasury,5.1,percent
 2026-11-18,global,us_10y_treasury,5.07,percent
 2026-11-19,global,us_10y_treasury,5.04,percent
+2026-11-20,global,us_10y_treasury,4.92,percent
